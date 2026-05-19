@@ -1,0 +1,89 @@
+# LiteLLM Gateway — Dev 2 Handoff
+**PBI-03-BE → PBI-08-FE**
+
+Fill in all values after `validate_litellm_routing.py` passes cleanly.
+Share this document with Dev 2 through a secure channel — it contains a live API key.
+
+---
+
+## Status
+
+- [ ] `validate_litellm_routing.py` passed with 0 failures
+- [ ] Restart validation passed (all tests pass after container restart)
+- [ ] Handoff shared with Dev 2
+
+---
+
+## LiteLLM Endpoint
+
+| Field | Value |
+|---|---|
+| Base URL | `<LITELLM_URL>` |
+| API format | OpenAI-compatible (`/chat/completions`, `/models`) |
+| Auth header | `Authorization: Bearer <API_KEY_FOR_DEV2>` |
+
+---
+
+## API Key for Dev 2
+
+> **Do not give Dev 2 the master key.**
+> Generate a scoped virtual key in LiteLLM for LibreChat to use.
+>
+> ```
+> POST <LITELLM_URL>/key/generate
+> Authorization: Bearer <LITELLM_MASTER_KEY>
+>
+> {
+>   "key_alias": "librechat-nonprod",
+>   "models": ["<MODEL_FLAGSHIP_NAME>", "<MODEL_FAST_NAME>"],
+>   "duration": null
+> }
+> ```
+>
+> Record the generated key below.
+
+| Field | Value |
+|---|---|
+| Virtual key alias | `librechat-nonprod` |
+| Virtual key value | `<GENERATED_VIRTUAL_KEY>` |
+| Permitted models | `<MODEL_FLAGSHIP_NAME>`, `<MODEL_FAST_NAME>` |
+
+---
+
+## Available Models
+
+> NOTE: These names are provisional. Final user-facing names are decided in PBI-04-BE.
+> Coordinate with Dev 2 before finalising — changing model names after LibreChat
+> is configured requires an update on both sides.
+
+| Model alias (send in `"model"` field) | Backed by | Purpose |
+|---|---|---|
+| `<MODEL_FLAGSHIP_NAME>` | `<AZURE_DEPLOYMENT_FLAGSHIP>` | General use, default |
+| `<MODEL_FAST_NAME>` | `<AZURE_DEPLOYMENT_FAST>` | High-volume, low-complexity |
+
+---
+
+## Quick Integration Test for Dev 2
+
+Before wiring LibreChat, Dev 2 can confirm the endpoint is reachable with:
+
+```bash
+curl -s <LITELLM_URL>/chat/completions \
+  -H "Authorization: Bearer <GENERATED_VIRTUAL_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "<MODEL_FLAGSHIP_NAME>",
+    "messages": [{"role": "user", "content": "Say OK"}]
+  }'
+```
+
+Expected: HTTP 200 with a `choices[0].message.content` field.
+
+---
+
+## Notes
+
+- Streaming is confirmed working (SSE, `stream: true`).
+- Requests to models not in the permitted list return a non-200 error.
+- If Dev 2 receives a 401, the virtual key may have expired or been regenerated — contact the gateway track.
+- Model names **will be updated in PBI-04-BE**. Dev 2 should expect a follow-up with final names before go-live.

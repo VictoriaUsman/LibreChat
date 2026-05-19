@@ -6,9 +6,23 @@
 # Deploy with:
 #   az containerapp create --resource-group <RG> --yaml litellm_containerapp.yaml
 #
-# Prerequisites:
+# Prerequisites (PBI-02-BE):
 #   - An Azure Container Apps environment already exists in the target resource group.
 #   - The LITELLM_MASTER_KEY secret value is ready (store in Key Vault for prod).
+#
+# Prerequisites (PBI-03-BE — routing config):
+#   - An Azure Storage Account and File Share exist in the same resource group.
+#   - litellm_routing_config.yaml (filled in from litellm_routing_config.yaml.template)
+#     has been uploaded to the file share at the path: /litellm/config.yaml
+#   - The file share is registered as a storage mount in the Container Apps Environment:
+#       az containerapp env storage set \
+#         --name <ENVIRONMENT_NAME> \
+#         --resource-group <RG> \
+#         --storage-name litellm-config-store \
+#         --azure-file-account-name <STORAGE_ACCOUNT> \
+#         --azure-file-account-key <STORAGE_KEY> \
+#         --azure-file-share-name <FILE_SHARE_NAME> \
+#         --access-mode ReadOnly
 #
 # NOTE: Docker is not used here. Azure Container Apps pulls the image directly
 # from the GitHub Container Registry. No local Docker build or push is needed.
@@ -50,6 +64,14 @@ properties:
           cpu: 0.5
           memory: 1Gi
 
+        # Tell LiteLLM where to find the routing config mounted from Azure Files (PBI-03-BE).
+        # Remove these args if deploying without routing config (PBI-02-BE only).
+        args:
+          - "--config"
+          - "/app/config/litellm_config.yaml"
+          - "--port"
+          - "4000"
+
         env:
           - name: LITELLM_MASTER_KEY
             secretRef: litellm-master-key
@@ -58,10 +80,18 @@ properties:
           - name: LITELLM_ENV
             value: nonprod
 
-        # Health probes — these drive the acceptance criteria for PBI-02-BE.
-        # LiteLLM exposes /health/liveliness (is the process alive?)
-        # and /health/readiness (is the server ready to accept requests?).
-        # Model-level health (/health) is validated in PBI-03-BE after routing is configured.
+        # Routing config volume mount (PBI-03-BE).
+        # The Azure Files share registered as "litellm-config-store" is mounted at /app/config.
+        # LiteLLM reads /app/config/litellm_config.yaml on startup.
+        # Updating the file in Azure Files and restarting the container picks up changes
+        # without a redeployment — this satisfies the "config survives restart" criterion.
+        volumeMounts:
+          - volumeName: litellm-config
+            mountPath: /app/config
+            readOnly: true
+
+        # Health probes — liveliness/readiness are PBI-02-BE.
+        # Model-level health (/health) becomes meaningful after routing is configured (PBI-03-BE).
         probes:
           - type: Liveness
             httpGet:
@@ -78,6 +108,11 @@ properties:
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
+
+    volumes:
+      - name: litellm-config
+        storageType: AzureFile
+        storageName: litellm-config-store   # Must match the storage mount name registered in the environment
 
     scale:
       minReplicas: 1    # Keep at least one replica running at all times
