@@ -7,31 +7,40 @@
 # Replace every <PLACEHOLDER> with real values before deploying.
 # Do NOT commit a filled-in copy of this file to source control.
 #
-# NOTE — Model names (PBI-04-BE):
-#   The model_name values below are provisional placeholders.
-#   Final user-facing names (e.g. "ROMTech AI Standard", "ROMTech AI Fast")
-#   are decided in PBI-04-BE. These names are what LibreChat sends in the
-#   "model" field of every request — changing them after LibreChat is
-#   configured (PBI-08-FE) requires a coordinated update on both sides.
+# ALLOWLIST ENFORCEMENT — IMPORTANT:
+#   The model_list below IS the allowlist. Requests to any model_name not
+#   listed here return a 4xx error.
+#   However, LiteLLM will bypass this allowlist if Azure credentials are set
+#   as top-level container environment variables (AZURE_API_KEY, AZURE_API_BASE).
+#   Callers could then send e.g. "model": "azure/gpt-4o" and reach Azure directly.
+#   To prevent this:
+#     - Do NOT set AZURE_API_KEY or AZURE_API_BASE as container env vars.
+#     - Keep all credentials inside litellm_params entries below.
+#     - Validate with scripts/validate_litellm_allowlist.py.
 #
 # NOTE — API keys in this file:
 #   For Phase 0 non-prod, the Azure OpenAI API key is referenced here directly.
 #   For Phase 1 production, replace with Key Vault references and use
 #   managed identity auth between LiteLLM and Azure OpenAI.
+#
+# NOTE — Default model:
+#   LiteLLM does not enforce a default model — the caller chooses.
+#   The recommended default for LibreChat to present to users is:
+#   "ROMTech AI Standard". Configure this in LibreChat (PBI-08-FE / PBI-09-FE).
 # -----------------------------------------------------------------------
 
 model_list:
 
-  # --- Deployment 1: Flagship (GPT-4-class, general use) ---
-  - model_name: romtech-standard        # PROVISIONAL — finalize in PBI-04-BE
+  # --- Model 1: ROMTech AI Standard (GPT-4-class, general use, recommended default) ---
+  - model_name: "ROMTech AI Standard"
     litellm_params:
       model: azure/<AZURE_OPENAI_DEPLOYMENT_FLAGSHIP>
       api_base: <AZURE_OPENAI_ENDPOINT>
       api_key: <AZURE_OPENAI_API_KEY>
       api_version: "2024-02-01"
 
-  # --- Deployment 2: Fast (GPT-4o-mini-class, high-volume) ---
-  - model_name: romtech-fast            # PROVISIONAL — finalize in PBI-04-BE
+  # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume / low-complexity) ---
+  - model_name: "ROMTech AI Fast"
     litellm_params:
       model: azure/<AZURE_OPENAI_DEPLOYMENT_FAST>
       api_base: <AZURE_OPENAI_ENDPOINT>
