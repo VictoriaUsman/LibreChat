@@ -103,11 +103,11 @@ print()
 
 # --- Test 1: LibreChat health ---
 
-print("1. LibreChat /api/health — container alive")
+print("1. LibreChat /api/user — container alive")
 try:
-    r = requests.get(f"{LIBRECHAT_URL}/api/health", timeout=20)
-    if r.status_code == 200:
-        ok(f"HTTP 200 — {r.text.strip()[:80]}")
+    r = requests.get(f"{LIBRECHAT_URL}/api/user", timeout=20)
+    if r.status_code in (200, 401):
+        ok(f"HTTP {r.status_code} — LibreChat API is alive")
     else:
         fail(f"HTTP {r.status_code}", r.text.strip()[:200])
         print("  Cannot proceed without a running LibreChat instance.")

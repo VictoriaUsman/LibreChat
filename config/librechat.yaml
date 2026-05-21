@@ -1,0 +1,45 @@
+# LibreChat — Validated Phase 0 Configuration
+# -----------------------------------------------------------------------
+# Deploy path: /app/librechat.yaml inside the LibreChat container.
+# Mount via Azure File Share or bake into the container image.
+#
+# Replace <LITELLM_ACA_URL> with the LiteLLM Container App URL
+# (from Dev 1 handoff — format: <app-name>.<id>.<region>.azurecontainerapps.io).
+# LITELLM_VIRTUAL_KEY is injected from the container environment variable —
+# do not hardcode the key value here.
+#
+# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
+# environment variable reference.
+# -----------------------------------------------------------------------
+
+version: "1.2.0"
+cache: true
+
+endpoints:
+  custom:
+    - name: "LiteLLM Gateway"
+      apiKey: "${LITELLM_VIRTUAL_KEY}"
+      baseURL: "https://<LITELLM_ACA_URL>/v1"
+      models:
+        default: ["ROMTech AI Standard"]
+        fetch: true
+      titleConvo: true
+      titleModel: "ROMTech AI Fast"
+      summarize: true
+      streamRate: 15
+
+# Feature governance — validated in Phase 0 (PBI 9130)
+# See Phase_0_Findings_v1_Recommendation.md Section 3 for full ledger.
+interface:
+  endpointsMenu: false
+  modelSelect: true
+  agents: false
+  memories: false
+  bookmarks: false
+  prompts: false
+  parameters: false
+  multiConvo: false
+  skills: false
+
+fileConfig:
+  disabled: true
