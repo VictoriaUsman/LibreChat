@@ -20,6 +20,10 @@ model_list:
       api_base: https://aiswebsitechatbotdev.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
+      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
+      # Using Azure public list price for GPT-4o-mini as temporary proxy
+      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
+      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
 
   # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
@@ -28,6 +32,10 @@ model_list:
       api_base: https://aiswebsitechatbotdev.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
+      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
+      # Using Azure public list price for GPT-4o-mini as temporary proxy
+      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
+      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
 
 
 router_settings:
