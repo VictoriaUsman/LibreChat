@@ -19,12 +19,9 @@ Share this document with Dev 2 through a secure channel — it contains a live A
 
 | Field | Value |
 |---|---|
-| Base URL | `https://litellm-nonprod.<fill-in-after-aca-deploy>.azurecontainerapps.io` |
+| Base URL | `http://localhost:4000/v1` |
 | API format | OpenAI-compatible (`/chat/completions`, `/models`) |
 | Auth header | `Authorization: Bearer sk-nq9PjZi_lKew_CAR2KrXHw` |
-
-> **Note for gateway track:** Fill in the Base URL once LiteLLM is deployed to Azure Container Apps
-> (`litellm-nonprod`). All other values are final.
 
 ---
 
@@ -65,7 +62,7 @@ Configure this in the LibreChat endpoint settings (PBI-09-FE) so it is pre-selec
 Before wiring LibreChat, confirm the endpoint is reachable with:
 
 ```bash
-curl -s https://litellm-nonprod.<fill-in>.azurecontainerapps.io/chat/completions \
+curl -s http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-nq9PjZi_lKew_CAR2KrXHw" \
   -H "Content-Type: application/json" \
   -d '{

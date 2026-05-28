@@ -43,5 +43,4 @@ litellm_settings:
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-  # database_url omitted for Phase 0 — Prisma/PostgreSQL not needed until
-  # spend tracking or persistent API key management is required.
+  database_url: os.environ/DATABASE_URL
