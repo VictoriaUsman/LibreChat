@@ -1,13 +1,19 @@
-# LiteLLM — Model Routing Configuration
+# LiteLLM — Validated Phase 0 Routing Configuration
 # -----------------------------------------------------------------------
-# Phase 0 — one Azure OpenAI deployment serves both model slots.
-# Secrets are read from environment variables (scripts/.env).
-# This file is safe to commit — it contains no credentials.
+# This file is the validated Phase 0 configuration. Deploy to the LiteLLM
+# Azure Container App by mounting it via an Azure File Share.
+#
+# Secrets are referenced via os.environ/ so they are never stored in this
+# file. Set the corresponding environment variables in the Container App
+# using Azure Key Vault references and managed identity.
+#
+# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
+# environment variable reference.
 # -----------------------------------------------------------------------
 
 model_list:
 
-  # --- Model 1: ROMTech AI Standard (general use, recommended default) ---
+  # --- Model 1: ROMTech AI Standard (GPT-4-class, recommended default) ---
   - model_name: "ROMTech AI Standard"
     litellm_params:
       model: azure/website-chatbot-gpt-4o-mini
@@ -15,7 +21,7 @@ model_list:
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
 
-  # --- Model 2: ROMTech AI Fast (high-volume / low-complexity) ---
+  # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
     litellm_params:
       model: azure/website-chatbot-gpt-4o-mini

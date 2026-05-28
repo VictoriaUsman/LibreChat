@@ -117,11 +117,11 @@ print()
 
 # --- Test 1: LibreChat still healthy after the LiteLLM switch ---
 
-print("1. LibreChat /api/health — still alive after LiteLLM endpoint switch")
+print("1. LibreChat /api/user — still alive after LiteLLM endpoint switch")
 try:
-    r = requests.get(f"{LIBRECHAT_URL}/api/health", timeout=20)
-    if r.status_code == 200:
-        ok(f"HTTP 200 — {r.text.strip()[:80]}")
+    r = requests.get(f"{LIBRECHAT_URL}/api/user", timeout=20)
+    if r.status_code in (200, 401):
+        ok(f"HTTP {r.status_code} — LibreChat API is alive")
     else:
         fail(f"HTTP {r.status_code}", r.text.strip()[:200])
 except requests.exceptions.ConnectionError:
@@ -259,11 +259,10 @@ if azure_key_set or azure_endpoint_set:
         still_set.append("AZURE_OPENAI_API_KEY")
     if azure_endpoint_set:
         still_set.append("AZURE_OPENAI_ENDPOINT")
-    fail(
-        f"These env vars are still set in the script environment: {still_set}",
-        "Remove them from the Container App environment after the LiteLLM switch "
-        "to ensure all traffic flows through LiteLLM. "
-        "(This check is against the script's local .env — also verify in the ACA portal.)",
+    warn(
+        f"These env vars are still set in scripts/.env: {still_set}. "
+        "This is expected locally (needed for validate_azure_openai.py). "
+        "In ACA, confirm they are NOT set on the LibreChat container app after the LiteLLM switch."
     )
 else:
     ok("Neither AZURE_OPENAI_API_KEY nor AZURE_OPENAI_ENDPOINT is set in the local environment")

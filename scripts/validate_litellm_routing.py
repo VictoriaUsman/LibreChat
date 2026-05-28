@@ -175,7 +175,11 @@ print()
 print("4. Invalid LiteLLM API key is rejected (not silently accepted)")
 try:
     r = chat(MODEL_FLAGSHIP, headers=INVALID_KEY)
-    if r.status_code == 200:
+    if r.status_code in (401, 403):
+        ok(f"HTTP {r.status_code} returned as expected")
+    elif r.status_code == 400 and "no_db_connection" in r.text:
+        ok("HTTP 400 — request rejected (no DB; full 401 enforcement requires Cosmos DB in v1)")
+    elif r.status_code == 200:
         fail("HTTP 200 — invalid key was accepted, LiteLLM auth is not enforcing")
     elif 400 <= r.status_code < 500:
         ok(f"HTTP {r.status_code} — invalid key rejected (not silently accepted)")
