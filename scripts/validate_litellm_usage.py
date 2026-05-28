@@ -8,7 +8,7 @@ This script depends on PBI-03-BE. Run validate_litellm_routing.py first.
 What this script checks:
   1. Token usage (prompt + completion tokens) appears in /spend/logs after a request
   2. Usage is attributable to the model used
-  3. /spend/models returns a per-model breakdown
+  3. /global/spend/models returns a per-model breakdown
   4. A request with a "user" field is attributed in the spend log
   5. /spend/keys returns per-virtual-key usage
   6. Cost estimate fields are present (or absent) in log entries
@@ -157,22 +157,22 @@ except Exception as e:
 # --- Test 3: Per-model breakdown ---
 
 print()
-print("2. Usage breakdown by model in /spend/models")
+print("2. Usage breakdown by model in /global/spend/models")
 try:
-    r = get("/spend/models")
+    r = get("/global/spend/models")
     if r.status_code == 200:
         data = r.json()
         if data:
             models_seen = [entry.get("model") for entry in (data if isinstance(data, list) else [data])]
             ok(f"Per-model data returned. Models: {models_seen}")
         else:
-            finding("/spend/models returned empty — database may not be configured")
+            finding("/global/spend/models returned empty — database may not be configured")
     elif r.status_code in (500, 501, 503):
-        finding("/spend/models returned server error — PostgreSQL database likely not configured")
+        finding("/global/spend/models returned server error — PostgreSQL database likely not configured")
     else:
-        finding(f"/spend/models returned HTTP {r.status_code}")
+        finding(f"/global/spend/models returned HTTP {r.status_code}")
 except Exception as e:
-    finding(f"/spend/models request failed: {e}")
+    finding(f"/global/spend/models request failed: {e}")
 
 # --- Test 4: User attribution ---
 
