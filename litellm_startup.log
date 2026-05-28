@@ -1,0 +1,23 @@
+[1;33mLiteLLM Proxy: Using default (v1) migration resolver. If your deployment has seen schema thrashing during rolling deploys, try --use_v2_migration_resolver (safer: avoids the diff-and-force recovery that caused the thrash).[0m
+
+LiteLLM Proxy
+
+query-engine 393aa359c9ad4a4bb28630fb5613f9c281cde053
+
+[1;37m#------------------------------------------------------------#[0m
+[1;37m#                                                            #[0m
+[1;37m#              'I don't like how this works...'               #[0m
+[1;37m#        https://github.com/BerriAI/litellm/issues/new        #[0m
+[1;37m#                                                            #[0m
+[1;37m#------------------------------------------------------------#[0m
+
+ Thank you for using LiteLLM! - Krrish & Ishaan
+
+
+
+[1;31mGive Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new[0m
+
+
+[32mLiteLLM: Proxy initialized with Config, Set models:[0m
+[32m    ROMTech AI Standard[0m
+[32m    ROMTech AI Fast[0m

@@ -1,0 +1,47 @@
+# LiteLLM — Model Routing Configuration
+# -----------------------------------------------------------------------
+# Phase 0 — one Azure OpenAI deployment serves both model slots.
+# Secrets are read from environment variables (scripts/.env).
+# This file is safe to commit — it contains no credentials.
+# -----------------------------------------------------------------------
+
+model_list:
+
+  # --- Model 1: ROMTech AI Standard (general use, recommended default) ---
+  - model_name: "ROMTech AI Standard"
+    litellm_params:
+      model: azure/website-chatbot-gpt-4o-mini
+      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-02-01"
+
+  # --- Model 2: ROMTech AI Fast (high-volume / low-complexity) ---
+  - model_name: "ROMTech AI Fast"
+    litellm_params:
+      model: azure/website-chatbot-gpt-4o-mini
+      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-02-01"
+
+
+router_settings:
+  num_retries: 2
+  timeout: 60
+  retry_after: 5
+  model_group_alias:
+    # Block direct access by Azure deployment name. LiteLLM's fallback routing
+    # allows callers to bypass model_name aliases by sending azure/<deployment>
+    # directly. Aliasing these to a non-existent target causes routing to fail
+    # with a 4xx instead of silently reaching Azure.
+    "azure/website-chatbot-gpt-4o-mini": "_blocked_"
+    "website-chatbot-gpt-4o-mini": "_blocked_"
+
+
+litellm_settings:
+  drop_params: true
+
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # database_url omitted for Phase 0 — Prisma/PostgreSQL not needed until
+  # spend tracking or persistent API key management is required.
