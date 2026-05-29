@@ -1,0 +1,60 @@
+# LiteLLM — Validated Phase 0 Routing Configuration
+# -----------------------------------------------------------------------
+# This file is the validated Phase 0 configuration. Deploy to the LiteLLM
+# Azure Container App by mounting it via an Azure File Share.
+#
+# Secrets are referenced via os.environ/ so they are never stored in this
+# file. Set the corresponding environment variables in the Container App
+# using Azure Key Vault references and managed identity.
+#
+# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
+# environment variable reference.
+# -----------------------------------------------------------------------
+
+model_list:
+
+  # --- Model 1: ROMTech AI Standard (GPT-4-class, recommended default) ---
+  - model_name: "ROMTech AI Standard"
+    litellm_params:
+      model: azure/website-chatbot-gpt-4o-mini
+      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-02-01"
+      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
+      # Using Azure public list price for GPT-4o-mini as temporary proxy
+      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
+      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
+
+  # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume tasks) ---
+  - model_name: "ROMTech AI Fast"
+    litellm_params:
+      model: azure/website-chatbot-gpt-4o-mini
+      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-02-01"
+      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
+      # Using Azure public list price for GPT-4o-mini as temporary proxy
+      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
+      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
+
+
+router_settings:
+  num_retries: 2
+  timeout: 60
+  retry_after: 5
+  model_group_alias:
+    # Block direct access by Azure deployment name. LiteLLM's fallback routing
+    # allows callers to bypass model_name aliases by sending azure/<deployment>
+    # directly. Aliasing these to a non-existent target causes routing to fail
+    # with a 4xx instead of silently reaching Azure.
+    "azure/website-chatbot-gpt-4o-mini": "_blocked_"
+    "website-chatbot-gpt-4o-mini": "_blocked_"
+
+
+litellm_settings:
+  drop_params: true
+
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

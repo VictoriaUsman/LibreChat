@@ -1,0 +1,156 @@
+# LibreChat — Azure Container Apps Deployment Spec
+# -----------------------------------------------------------------------
+# Template for deploying LibreChat to Azure Container Apps (non-prod).
+# Replace every <PLACEHOLDER> before deploying.
+#
+# Deploy with:
+#   az containerapp create --resource-group <RG> --yaml librechat_containerapp.yaml
+#
+# Prerequisites (PBI 9125):
+#   - An Azure Container Apps environment already exists in the target resource group.
+#   - An Azure Storage Account and File Share are provisioned.
+#   - The file share is registered as a storage mount in the Container Apps Environment:
+#       az containerapp env storage set \
+#         --name <ENVIRONMENT_NAME> \
+#         --resource-group <RG> \
+#         --storage-name librechat-data-store \
+#         --azure-file-account-name <STORAGE_ACCOUNT> \
+#         --azure-file-account-key <STORAGE_KEY> \
+#         --azure-file-share-name <FILE_SHARE_NAME> \
+#         --access-mode ReadWrite
+#
+# NOTE: Docker is not used here. Azure Container Apps pulls the image directly
+# from the GitHub Container Registry. No local Docker build or push is needed.
+#
+# Image pinning:
+#   Do not use :latest in production — it changes without notice.
+#   Pin to a specific release tag from: https://github.com/danny-avila/LibreChat/releases
+#   Example: ghcr.io/danny-avila/librechat:v0.7.5
+#
+# Volume mount:
+#   LibreChat persists its SQLite database, user sessions, and runtime config
+#   to /app/api/data. This must be mounted to the Azure File Share so data
+#   survives container restarts. The librechat.yaml config file (PBI 9126)
+#   is also placed in this directory.
+# -----------------------------------------------------------------------
+
+location: <AZURE_REGION>           # e.g. eastus
+name: librechat-nonprod
+type: Microsoft.App/containerApps
+
+properties:
+
+  environmentId: /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>/providers/Microsoft.App/managedEnvironments/<ENVIRONMENT_NAME>
+
+  configuration:
+    activeRevisionsMode: Single
+
+    ingress:
+      external: true          # Reachable from outside the VNet (required for browser access)
+      targetPort: 3080        # Port LibreChat binds to inside the container
+      transport: Auto
+      allowInsecure: false
+
+    secrets:
+      - name: jwt-secret
+        value: <JWT_SECRET>
+      - name: jwt-refresh-secret
+        value: <JWT_REFRESH_SECRET>
+      - name: creds-key
+        value: <CREDS_KEY>
+      - name: creds-iv
+        value: <CREDS_IV>
+      # TEMPORARY — Phase 0 direct Azure OpenAI connection. Remove after PBI 9126.
+      - name: azure-openai-api-key
+        value: <AZURE_OPENAI_API_KEY>
+      # LiteLLM virtual key — add after PBI 9126 handoff from Dev 1
+      # - name: litellm-virtual-key
+      #   value: <LITELLM_VIRTUAL_KEY>
+      # Okta OIDC secrets — add for PBI 9129
+      # - name: openid-client-secret
+      #   value: <OPENID_CLIENT_SECRET>
+      # - name: openid-session-secret
+      #   value: <OPENID_SESSION_SECRET>
+
+  template:
+    containers:
+      - name: librechat
+        image: ghcr.io/danny-avila/librechat:v0.7.5   # Pin to a specific release tag
+        resources:
+          cpu: 0.5
+          memory: 1Gi
+
+        env:
+          # Network binding
+          - name: HOST
+            value: "0.0.0.0"
+          - name: PORT
+            value: "3080"
+
+          # Session security
+          - name: JWT_SECRET
+            secretRef: jwt-secret
+          - name: JWT_REFRESH_SECRET
+            secretRef: jwt-refresh-secret
+
+          # Credential encryption
+          - name: CREDS_KEY
+            secretRef: creds-key
+          - name: CREDS_IV
+            secretRef: creds-iv
+
+          # TEMPORARY — Phase 0 direct Azure OpenAI routing. Remove after PBI 9126.
+          - name: AZURE_OPENAI_API_KEY
+            secretRef: azure-openai-api-key
+          - name: AZURE_OPENAI_ENDPOINT
+            value: <AZURE_OPENAI_ENDPOINT>
+
+          # LiteLLM virtual key — uncomment after PBI 9126 handoff from Dev 1
+          # - name: LITELLM_VIRTUAL_KEY
+          #   secretRef: litellm-virtual-key
+
+          # Okta OIDC — uncomment for PBI 9129
+          # - name: OPENID_CLIENT_ID
+          #   value: <OPENID_CLIENT_ID>
+          # - name: OPENID_CLIENT_SECRET
+          #   secretRef: openid-client-secret
+          # - name: OPENID_ISSUER
+          #   value: https://romtech.okta.com/oauth2/default
+          # - name: OPENID_CALLBACK_URL
+          #   value: https://<librechat-aca-url>/api/auth/openid/callback
+          # - name: OPENID_SESSION_SECRET
+          #   secretRef: openid-session-secret
+          # - name: OPENID_BUTTON_TEXT
+          #   value: "Login with ROMTech Okta"
+
+        # Persistent data volume: SQLite DB, session cache, librechat.yaml config
+        volumeMounts:
+          - volumeName: librechat-data
+            mountPath: /app/api/data
+            readOnly: false
+
+        probes:
+          - type: Liveness
+            httpGet:
+              path: /api/health
+              port: 3080
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+
+          - type: Readiness
+            httpGet:
+              path: /api/health
+              port: 3080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+
+    volumes:
+      - name: librechat-data
+        storageType: AzureFile
+        storageName: librechat-data-store   # Must match the storage mount name registered in the environment
+
+    scale:
+      minReplicas: 1
+      maxReplicas: 2    # Non-prod; increase for prod based on observed load
