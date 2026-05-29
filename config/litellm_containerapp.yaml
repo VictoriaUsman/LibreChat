@@ -1,0 +1,119 @@
+# LiteLLM — Azure Container Apps Deployment Spec
+# -----------------------------------------------------------------------
+# Template for deploying LiteLLM to Azure Container Apps (non-prod).
+# Replace every <PLACEHOLDER> before deploying.
+#
+# Deploy with:
+#   az containerapp create --resource-group <RG> --yaml litellm_containerapp.yaml
+#
+# Prerequisites (PBI-02-BE):
+#   - An Azure Container Apps environment already exists in the target resource group.
+#   - The LITELLM_MASTER_KEY secret value is ready (store in Key Vault for prod).
+#
+# Prerequisites (PBI-03-BE — routing config):
+#   - An Azure Storage Account and File Share exist in the same resource group.
+#   - litellm_routing_config.yaml (filled in from litellm_routing_config.yaml.template)
+#     has been uploaded to the file share at the path: /litellm/config.yaml
+#   - The file share is registered as a storage mount in the Container Apps Environment:
+#       az containerapp env storage set \
+#         --name <ENVIRONMENT_NAME> \
+#         --resource-group <RG> \
+#         --storage-name litellm-config-store \
+#         --azure-file-account-name <STORAGE_ACCOUNT> \
+#         --azure-file-account-key <STORAGE_KEY> \
+#         --azure-file-share-name <FILE_SHARE_NAME> \
+#         --access-mode ReadOnly
+#
+# NOTE: Docker is not used here. Azure Container Apps pulls the image directly
+# from the GitHub Container Registry. No local Docker build or push is needed.
+#
+# Image pinning:
+#   Do not use :main-latest in production — it changes without notice.
+#   Pin to a specific release tag from: https://github.com/BerriAI/litellm/releases
+#   Example: ghcr.io/berriai/litellm:main-v1.57.4
+# -----------------------------------------------------------------------
+
+location: <AZURE_REGION>           # e.g. eastus
+name: litellm-nonprod
+type: Microsoft.App/containerApps
+
+properties:
+
+  # The resource ID of the Container Apps managed environment.
+  # Location: Azure Portal > Container Apps Environments > your env > JSON view > id
+  environmentId: /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>/providers/Microsoft.App/managedEnvironments/<ENVIRONMENT_NAME>
+
+  configuration:
+    activeRevisionsMode: Single
+
+    ingress:
+      external: true          # Reachable from outside the VNet (required for LibreChat to call it)
+      targetPort: 4000
+      transport: Auto
+      allowInsecure: false
+
+    secrets:
+      - name: litellm-master-key
+        value: <LITELLM_MASTER_KEY>   # Replace with actual value; use Key Vault reference in prod
+
+  template:
+    containers:
+      - name: litellm
+        image: ghcr.io/berriai/litellm:main-v1.57.4   # Pin to a specific release tag
+        resources:
+          cpu: 0.5
+          memory: 1Gi
+
+        # Tell LiteLLM where to find the routing config mounted from Azure Files (PBI-03-BE).
+        # Remove these args if deploying without routing config (PBI-02-BE only).
+        args:
+          - "--config"
+          - "/app/config/litellm_config.yaml"
+          - "--port"
+          - "4000"
+
+        env:
+          - name: LITELLM_MASTER_KEY
+            secretRef: litellm-master-key
+          - name: PORT
+            value: "4000"
+          - name: LITELLM_ENV
+            value: nonprod
+
+        # Routing config volume mount (PBI-03-BE).
+        # The Azure Files share registered as "litellm-config-store" is mounted at /app/config.
+        # LiteLLM reads /app/config/litellm_config.yaml on startup.
+        # Updating the file in Azure Files and restarting the container picks up changes
+        # without a redeployment — this satisfies the "config survives restart" criterion.
+        volumeMounts:
+          - volumeName: litellm-config
+            mountPath: /app/config
+            readOnly: true
+
+        # Health probes — liveliness/readiness are PBI-02-BE.
+        # Model-level health (/health) becomes meaningful after routing is configured (PBI-03-BE).
+        probes:
+          - type: Liveness
+            httpGet:
+              path: /health/liveliness
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+
+          - type: Readiness
+            httpGet:
+              path: /health/readiness
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+
+    volumes:
+      - name: litellm-config
+        storageType: AzureFile
+        storageName: litellm-config-store   # Must match the storage mount name registered in the environment
+
+    scale:
+      minReplicas: 1    # Keep at least one replica running at all times
+      maxReplicas: 2    # Non-prod; increase for prod based on observed load
