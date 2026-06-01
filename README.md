@@ -95,6 +95,28 @@ python validate_litellm_rate_limits.py
 ```
 Creates a temporary test key with `rpm_limit=1`, confirms a second back-to-back request returns HTTP 429, then deletes the test key.
 
+**Step 7 — Generate department virtual keys (PBI-10-BE)**
+```bash
+python generate_department_keys.py
+```
+Reads all `DEPT_<NAME>_BUDGET` entries from `scripts/.env`, creates one scoped virtual key per department with `max_budget` and `budget_duration: monthly`, and writes the generated key values back to `scripts/.env`. Safe to re-run — departments that already have a key are skipped.
+
+To add or remove a department, edit `scripts/.env`:
+- Add: `DEPT_<NAME>_BUDGET=<monthly USD limit>` and `DEPT_<NAME>_KEY=`
+- Remove: delete the `BUDGET` and `KEY` lines for that department
+
+**Step 8 — Validate department budget enforcement (PBI-10-BE)**
+```bash
+python validate_department_keys.py
+```
+Tests that all department keys are accepted, that a key with an exhausted budget returns HTTP 429, and that per-key spend data is visible in `/spend/keys`. Run after `generate_department_keys.py`.
+
+> **Windows setup note:** After any `pip install --upgrade litellm`, re-run the Prisma patch script:
+> ```bash
+> python scripts/patch_prisma_windows.py
+> ```
+> This restores a Windows-specific fix that prevents the LiteLLM process from crashing immediately on startup due to a signal propagation issue between Python and the Prisma query engine subprocess.
+
 All scripts exit with code `0` on success and `1` on any failure.
 
 # Contribute
