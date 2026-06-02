@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\anser\\\\Documents\\\\Romtech\\\\ChatGptForEmployees\" -Recurse | ForEach-Object { $_.FullName } | Sort-Object)",
+      "PowerShell(Test-Path \"C:\\\\Users\\\\anser\\\\Documents\\\\Romtech\\\\ChatGptForEmployees\\\\frontend\"; Get-ChildItem -Path \"C:\\\\Users\\\\anser\\\\Documents\\\\Romtech\\\\ChatGptForEmployees\\\\frontend\" -Force 2>$null | ForEach-Object { $_.FullName })",
+      "PowerShell($root = \"C:\\\\Users\\\\anser\\\\Documents\\\\Romtech\\\\ChatGptForEmployees\"; Get-ChildItem -Path $root -Force | Select-Object @{N='Name';E={$_.Name}}, @{N='Type';E={if\\($_.PSIsContainer\\){'Directory'}else{'File'}}}, @{N='Size';E={if\\($_.PSIsContainer\\){'-'}else{\"{0:N0}\" -f $_.Length}}} | Format-Table -AutoSize)"
+    ]
+  }
+}

@@ -1,3 +1,9 @@
+# Developer secrets — never commit
+frontend/scripts/.env
+frontend/scripts/.test_conversation_id
+
+# LibreChat repo cloned at frontend/LibreChat — not tracked in this repo
+frontend/LibreChat/
 # Secrets — never commit
 .env
 *.env
@@ -5,5 +11,11 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
 .venv/
 venv/
