@@ -52,6 +52,15 @@ router_settings:
 
 
 litellm_settings:
+  # Usage telemetry callback (PBI-XX-BE).
+  # Fires after every successful request. Logs a usage payload to stdout and,
+  # when TELEMETRY_ENDPOINT_URL is set, POSTs it to the Azure Function (PBI-12-BE).
+  #
+  # IMPORTANT: Start LiteLLM from the project root so the 'callbacks' package
+  # is on the Python path:
+  #   cd <project-root>
+  #   litellm --config config/litellm_routing_config.yaml
+  callbacks: ["callbacks.litellm_usage_callback.proxy_handler_instance"]
   drop_params: true
 
 
