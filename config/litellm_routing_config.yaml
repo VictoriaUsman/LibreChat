@@ -13,29 +13,29 @@
 
 model_list:
 
-  # --- Model 1: ROMTech AI Standard (GPT-4-class, recommended default) ---
+  # --- Model 1: ROMTech AI Standard (recommended default) ---
   - model_name: "ROMTech AI Standard"
     litellm_params:
-      model: azure/website-chatbot-gpt-4o-mini
-      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      model: azure/gpt-5.4-mini
+      api_base: https://dev-lms-foundry.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
-      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
-      # Using Azure public list price for GPT-4o-mini as temporary proxy
-      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
-      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
+      # TODO: confirm per-token rates for gpt-5.4-mini under the ROMTech Azure agreement
+      # Placeholder rates set to 0 until billing admin confirms pricing
+      input_cost_per_token: 0.00000000
+      output_cost_per_token: 0.00000000
 
-  # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume tasks) ---
+  # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
     litellm_params:
-      model: azure/website-chatbot-gpt-4o-mini
-      api_base: https://aiswebsitechatbotdev.services.ai.azure.com
+      model: azure/gpt-5.4-mini
+      api_base: https://dev-lms-foundry.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
-      # TODO: replace with ROMTech Azure agreement rates once confirmed with billing admin
-      # Using Azure public list price for GPT-4o-mini as temporary proxy
-      input_cost_per_token: 0.00000015   # $0.15 / 1M tokens (public list price)
-      output_cost_per_token: 0.00000060  # $0.60 / 1M tokens (public list price)
+      # TODO: confirm per-token rates for gpt-5.4-mini under the ROMTech Azure agreement
+      # Placeholder rates set to 0 until billing admin confirms pricing
+      input_cost_per_token: 0.00000000
+      output_cost_per_token: 0.00000000
 
 
 router_settings:
@@ -47,8 +47,8 @@ router_settings:
     # allows callers to bypass model_name aliases by sending azure/<deployment>
     # directly. Aliasing these to a non-existent target causes routing to fail
     # with a 4xx instead of silently reaching Azure.
-    "azure/website-chatbot-gpt-4o-mini": "_blocked_"
-    "website-chatbot-gpt-4o-mini": "_blocked_"
+    "azure/gpt-5.4-mini": "_blocked_"
+    "gpt-5.4-mini": "_blocked_"
 
 
 litellm_settings:
