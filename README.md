@@ -1,24 +1,35 @@
-# ROMTech Internal AI Chatbot
+# Internal AI Chatbot
 
-Internal, general-purpose AI assistant for ROMTech employees — a ChatGPT-style chat application backed by Azure AI Foundry, controlled by a self-hosted LLM gateway, and authenticated through Okta.
+Internal, general-purpose AI assistant for employees — a ChatGPT-style chat application backed by Azure AI Foundry, controlled by a self-hosted LLM gateway, and authenticated through Okta.
 
 ## Architecture
 
-```
-Employees (Browser)
-  ↓
-Okta SSO (OIDC)
-  ↓
-LibreChat  ←──── MongoDB (conversation history)
-  ↓              Azure Blob (file uploads)
-LiteLLM          pgvector (Phase 3 RAG)
-  ↓
-Azure AI Foundry / Azure OpenAI
-  └─ ROMTech AI Standard  (GPT-4-class)
-  └─ ROMTech AI Fast      (GPT-4o-mini-class)
+```mermaid
+flowchart TD
+    U[Employees - Browser] --> O[Okta SSO - OIDC]
+    O --> LC[LibreChat]
+
+    LC <--> DB[(MongoDB\nConversation History)]
+    LC <--> BLOB[(Azure Blob\nFile Uploads)]
+    LC <-.->|Phase 3| VEC[(pgvector\nRAG Documents)]
+
+    LC --> GW[LiteLLM Gateway\nRouting · Rate Limits · Cost Tracking · DLP]
+
+    GW --> M1[AI Standard\nGPT-4-class]
+    GW --> M2[AI Fast\nGPT-4o-mini-class]
+
+    subgraph Azure Tenant - BAA Eligible
+        LC
+        DB
+        BLOB
+        VEC
+        GW
+        M1
+        M2
+    end
 ```
 
-All components run inside the ROMTech Azure tenant under our existing BAA. No model traffic leaves the Azure backbone.
+All components run inside the company Azure tenant under our existing BAA. No model traffic leaves the Azure backbone.
 
 ## Repository Layout
 
@@ -62,14 +73,14 @@ Run in order:
 
 ```bash
 cd scripts
-python validate_azure_openai.py       # Step 1: Azure endpoint health
-python validate_litellm.py            # Step 2: LiteLLM container health
-python validate_litellm_routing.py    # Step 3: Routing and streaming
-python validate_litellm_allowlist.py  # Step 4: Model allowlist
-python validate_litellm_usage.py      # Step 5: Usage tracking
+python validate_azure_openai.py        # Step 1: Azure endpoint health
+python validate_litellm.py             # Step 2: LiteLLM container health
+python validate_litellm_routing.py     # Step 3: Routing and streaming
+python validate_litellm_allowlist.py   # Step 4: Model allowlist
+python validate_litellm_usage.py       # Step 5: Usage tracking
 python validate_litellm_rate_limits.py # Step 6: Rate limiting
-python generate_department_keys.py    # Step 7: Department virtual keys
-python validate_department_keys.py    # Step 8: Budget enforcement
+python generate_department_keys.py     # Step 7: Department virtual keys
+python validate_department_keys.py     # Step 8: Budget enforcement
 ```
 
 Each script exits `0` on success, `1` on failure.
@@ -79,8 +90,6 @@ Each script exits `0` on success, `1` on failure.
 ## Configuration
 
 ### LibreChat (`LibreChat/.env`)
-
-Key variables:
 
 | Variable | Purpose |
 |---|---|
@@ -110,11 +119,11 @@ Configures the vector store connection (pgvector on PostgreSQL) and embedding mo
 | **Phase 3** | RAG — curated internal document knowledge base (HR policies, IT docs) | Planned |
 | **Phase 4** | Enterprise search across Confluence, SharePoint, Google Drive | Future |
 
-See `ChatGptForEmployees/Erik_recommendation.md` for full architecture rationale and `ChatGptForEmployees/ROMTech_Internal_AI_Chatbot_Phase_0_POC_Plan.md` for Phase 0 acceptance criteria.
+See `ChatGptForEmployees/Erik_recommendation.md` for full architecture rationale and `ChatGptForEmployees/IanTristanCompany_Internal_AI_Chatbot_Phase_0_POC_Plan.md` for Phase 0 acceptance criteria.
 
 ## Security and Compliance
 
-- All services hosted in BAA-eligible Azure regions within the ROMTech tenant.
+- All services hosted in BAA-eligible Azure regions inside the company tenant.
 - Inter-service traffic routed over private endpoints — no data traverses the public internet.
 - Model provider keys stored in Azure Key Vault; LibreChat never holds raw model credentials.
 - Conversation content retention: 90 days default (requires Legal/Compliance sign-off before GA).
@@ -123,7 +132,7 @@ See `ChatGptForEmployees/Erik_recommendation.md` for full architecture rationale
 
 ## Operations
 
-- **Cost visibility:** LiteLLM virtual keys issue per-department; monthly spend is attributable by org unit.
+- **Cost visibility:** LiteLLM virtual keys issued per department; monthly spend is attributable by org unit.
 - **Rate limits:** Per-user daily token soft limits; per-team monthly hard caps; global circuit breaker.
 - **Upgrades:** Validate new LibreChat/LiteLLM versions in staging monthly; promote to production quarterly unless a security fix warrants faster movement.
 - **Support:** IT helpdesk (Tier 1), internal AI team (Tier 2).
