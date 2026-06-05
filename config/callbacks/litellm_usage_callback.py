@@ -78,23 +78,29 @@ class AIUsageCallback(CustomLogger):
         """
         metadata = kwargs.get("metadata") or {}
 
+        # standard_logging_object carries structured data populated by LiteLLM proxy,
+        # including the user-facing model_group alias and team metadata.
+        slo = kwargs.get("standard_logging_object") or {}
+        if hasattr(slo, "__dict__"):
+            slo = slo.__dict__
+        slo_metadata = slo.get("metadata") or {} if isinstance(slo, dict) else {}
+
         # --- Department ---
-        # LiteLLM stores the virtual key's team_id under user_api_key_team_id
-        # in the metadata dict injected by the proxy.
         department = (
-            metadata.get("user_api_key_team_id")
+            slo_metadata.get("user_api_key_team_id")
+            or slo_metadata.get("team_id")
+            or metadata.get("user_api_key_team_id")
             or metadata.get("team_id")
             or "unknown"
         )
 
         # --- Model ---
-        # metadata["model_group"] is the user-facing alias (e.g. "ROMTech AI Standard").
-        # kwargs["model"] may be the resolved Azure deployment name after routing;
-        # prefer the alias so the payload matches what the caller requested.
+        # standard_logging_object.model_group holds the user-facing alias
+        # (e.g. "ROMTech AI Standard"). kwargs["model"] is the resolved
+        # Azure deployment name — use it only as a last resort.
         model = (
-            metadata.get("model_group")
-            or kwargs.get("model", "unknown")
-        )
+            slo.get("model_group") if isinstance(slo, dict) else None
+        ) or kwargs.get("model", "unknown")
 
         # --- Token counts ---
         usage = getattr(response_obj, "usage", None)
