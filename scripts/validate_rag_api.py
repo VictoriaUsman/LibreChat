@@ -53,6 +53,11 @@ except ImportError:
     print("ERROR: psycopg2-binary not installed. Run: pip install -r requirements.txt")
     sys.exit(1)
 
+try:
+    import jwt as pyjwt
+except ImportError:
+    pyjwt = None
+
 # --- Configuration ---
 
 RAG_API_URL = os.environ.get("RAG_API_URL", "").rstrip("/")
@@ -67,6 +72,7 @@ RAG_DB_PORT = os.environ.get("RAG_DB_PORT", "5432")
 RAG_DB_NAME = os.environ.get("RAG_DB_NAME", "librechat_rag")
 RAG_DB_USER = os.environ.get("RAG_DB_USER", "librechat_rag")
 RAG_DB_PASSWORD = os.environ.get("RAG_DB_PASSWORD", "")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
 
 required = {
     "RAG_API_URL": RAG_API_URL,
@@ -111,6 +117,18 @@ def fail(label, detail=""):
 def warn(label):
     warnings.append(label)
     print(f"  WARN  {label}")
+
+
+def make_jwt_header():
+    if not JWT_SECRET or pyjwt is None:
+        return {}
+    import time
+    token = pyjwt.encode(
+        {"sub": "validation-user", "iat": int(time.time()), "exp": int(time.time()) + 3600},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def db_connect():
@@ -233,13 +251,12 @@ else:
     try:
         test_file = io.BytesIO(TEST_CONTENT.encode("utf-8"))
         r = requests.post(
-            f"{RAG_API_URL}/api/v1/add",
+            f"{RAG_API_URL}/embed",
+            headers=make_jwt_header(),
             files={"file": ("validation_test.txt", test_file, "text/plain")},
             data={
-                "user_id": "validation-user",
-                "conversationId": "validation-conv-001",
                 "file_id": "validation-file-001",
-                "filename": "validation_test.txt",
+                "entity_id": "validation-user",
             },
             timeout=TIMEOUT,
         )
