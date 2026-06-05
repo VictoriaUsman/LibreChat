@@ -96,7 +96,7 @@ print()
 
 print("1. Callback class is importable and instantiates")
 try:
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config"))
     from callbacks.litellm_usage_callback import AIUsageCallback, proxy_handler_instance
     cb = AIUsageCallback()
     ok("AIUsageCallback imported and instantiated from callbacks/litellm_usage_callback.py")
