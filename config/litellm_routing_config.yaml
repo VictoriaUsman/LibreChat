@@ -20,6 +20,11 @@ model_list:
       api_base: https://dev-lms-foundry.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
+      # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).
+      # drop_params can't catch it because base_model (gpt-4o-mini, below) reports
+      # max_tokens as supported. Strip it at the gateway so clients that still send
+      # max_tokens (e.g. LibreChat title generation) don't get a 400 from Azure.
+      additional_drop_params: ["max_tokens"]
       # base_model tells LiteLLM which pricing table to use for cost tracking.
       # gpt-4o-mini is used as a proxy until billing admin confirms ROMTech Azure rates.
       # TODO: replace base_model and per-token rates once ROMTech Azure agreement rates confirmed
@@ -34,6 +39,9 @@ model_list:
       api_base: https://dev-lms-foundry.services.ai.azure.com
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
+      # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).
+      # Strip it at the gateway so clients sending max_tokens don't get a 400 from Azure.
+      additional_drop_params: ["max_tokens"]
       # base_model tells LiteLLM which pricing table to use for cost tracking.
       # gpt-4o-mini is used as a proxy until billing admin confirms ROMTech Azure rates.
       # TODO: replace base_model and per-token rates once ROMTech Azure agreement rates confirmed

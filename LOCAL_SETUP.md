@@ -1,5 +1,10 @@
 # Local Development Setup Guide — PBI 9565
 
+> ⚠️ **Superseded by [RUN_LOCAL.md](RUN_LOCAL.md)** for an actually-verified, end-to-end bring-up
+> (including RAG/pgvector, the Postgres/Prisma steps, and local-vs-prod notes). This document
+> predates several fixes and assumes LibreChat is pre-cloned and that a prebuilt Windows pgvector
+> exists (it doesn't). Use RUN_LOCAL.md; keep this only for the PBI-9565 acceptance-criteria history.
+
 > **Goal:** Get the full local stack (LiteLLM → LibreChat → MongoDB) running on a fresh Windows machine from scratch.
 >
 > **All commands run from the repo root** (`ChatGptForEmployees\`) unless a step says otherwise.

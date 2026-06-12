@@ -57,7 +57,7 @@ modelSpecs:
       label: "ROMTech AI Standard"
       default: true
       preset:
-        endpoint: "custom"
+        endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
@@ -84,7 +84,7 @@ modelSpecs:
     - name: "romtech-ai-fast"
       label: "ROMTech AI Fast"
       preset:
-        endpoint: "custom"
+        endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.

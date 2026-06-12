@@ -2,8 +2,11 @@
 frontend/scripts/.env
 frontend/scripts/.test_conversation_id
 
-# LibreChat repo cloned at frontend/LibreChat — not tracked in this repo
+# Cloned upstream repos checked out locally — not tracked in this repo.
+# (Older layout used a frontend/ prefix; current layout is repo-root.)
 frontend/LibreChat/
+LibreChat/
+rag_api/
 # Secrets — never commit
 .env
 *.env
@@ -13,6 +16,11 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+
+# Local-only planning / notes / reference (per-developer) — not committed
+V1_REVIEW.md
+erik-chat-convo.md
+ROMTech_AI_Employee_Assistant_v1_PBIs.md
 
 # OS
 .DS_Store

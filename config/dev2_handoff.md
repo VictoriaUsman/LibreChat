@@ -26,7 +26,7 @@ Share this document with Dev 2 through a secure channel — it contains a live A
 | LiteLLM gateway | `http://localhost:4000` | Start: `python scripts/start_litellm.py` |
 | RAG API | `http://localhost:8000` | Start: `python main.py` from rag_api dir |
 | LibreChat | `http://localhost:3080` | Start: `npm run backend` from LibreChat dir |
-| PostgreSQL | `localhost:5433` | Windows service |
+| PostgreSQL | `localhost:5432` | Windows service |
 | MongoDB | `localhost:27017` | Windows service |
 
 ---
