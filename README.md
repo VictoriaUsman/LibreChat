@@ -51,6 +51,14 @@ All components run inside the company Azure tenant under our existing BAA. No mo
 
 ### Local Development (Docker)
 
+This repo uses git submodules. A plain `git clone` leaves `LibreChat/`, `rag_api/`, `pgvector/`, and `ChatGptForEmployees/` empty. Pull the actual code first:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then start the app:
+
 ```bash
 cd LibreChat
 cp .env.example .env
@@ -59,6 +67,8 @@ docker compose up
 ```
 
 The app starts at `http://localhost:3080`.
+
+> **Secrets are not in the repo.** You must fill in the `.env` file manually. Contact the project owner for the Azure OpenAI endpoint, keys, and any other credentials needed for your environment.
 
 ### Phase 0 Validation Scripts
 
