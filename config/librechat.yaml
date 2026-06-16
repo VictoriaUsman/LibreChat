@@ -42,4 +42,11 @@ interface:
   skills: false
 
 fileConfig:
-  disabled: true
+  disabled: false
+  endpoints:
+    custom:
+      fileLimit: 3
+      fileSizeLimit: 5
+      supportedMimeTypes:
+        - "text/plain"
+        - "application/pdf"
