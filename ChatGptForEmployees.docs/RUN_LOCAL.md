@@ -71,16 +71,17 @@ problem because each image has exactly one.
 ## 2. One-time: clone the upstream apps
 
 LibreChat and the RAG API are **not** part of this repo (they're gitignored). Clone them into the
-repo root:
+`ChatGptForEmployees/` umbrella directory (alongside `scripts/` and `config/`):
 
 ```powershell
-# from <REPO_ROOT>
+# from <REPO_ROOT>\ChatGptForEmployees
 git clone --depth 1 --branch v0.8.6-rc1 https://github.com/danny-avila/LibreChat.git LibreChat
 git clone --depth 1                      https://github.com/danny-avila/rag_api.git    rag_api
 ```
 
-> `LibreChat/` and `rag_api/` are in `.gitignore` — they are local checkouts and must never be
-> committed. (An older `frontend/LibreChat/` gitlink was removed during this bring-up.)
+> `ChatGptForEmployees/LibreChat/` and `ChatGptForEmployees/rag_api/` are in `.gitignore` — they are
+> local checkouts and must never be committed. (Older layouts kept these at the repo root / under a
+> `frontend/` prefix; the current layout is under the `ChatGptForEmployees/` umbrella.)
 
 🟦 **PROD:** these are built as container images in CI from pinned tags, not cloned onto a dev box.
 
@@ -104,7 +105,7 @@ Key values to set:
 - `LITELLM_VIRTUAL_KEY=` — **start with the master key**; replace with a scoped key after the DB is up (§5c)
 - `LITELLM_URL=http://localhost:4000` — **no `/v1`** (the backend validation/health scripts append paths themselves; LibreChat's gateway URL is set separately in `librechat.yaml`)
 - `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` — see §3c
-- `CONFIG_PATH=<REPO_ROOT>\config\librechat.yaml` (absolute)
+- `CONFIG_PATH=<REPO_ROOT>\ChatGptForEmployees\config\librechat.yaml` (absolute)
 - `DATABASE_URL=postgresql://litellm:litellm_phase0@localhost:<PGPORT>/litellm` (after §5)
 - `RAG_API_URL=http://localhost:8000`
 
@@ -235,7 +236,7 @@ python scripts/setup_pgvector.py             # creates librechat_rag DB/role + C
 
 Start order matters: **LiteLLM → RAG API → LibreChat**.
 
-**Terminal 1 — LiteLLM (`:4000`)** — from `<REPO_ROOT>`:
+**Terminal 1 — LiteLLM (`:4000`)** — from `<REPO_ROOT>\ChatGptForEmployees`:
 ```powershell
 $env:PYTHONUTF8 = "1"        # REQUIRED on Windows: LiteLLM's startup banner crashes the cp1252 console otherwise
 $env:PYTHONPATH = "config"   # REQUIRED: lets LiteLLM import the telemetry callback (config/callbacks/…)
@@ -244,13 +245,13 @@ python scripts/start_litellm.py
 
 **Terminal 2 — RAG API (`:8000`)**:
 ```powershell
-cd <REPO_ROOT>\rag_api
+cd <REPO_ROOT>\ChatGptForEmployees\rag_api
 .\.venv\Scripts\python.exe main.py
 ```
 
 **Terminal 3 — LibreChat (`:3080`)**:
 ```powershell
-cd <REPO_ROOT>\LibreChat
+cd <REPO_ROOT>\ChatGptForEmployees\LibreChat
 npm run backend
 ```
 
