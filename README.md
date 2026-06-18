@@ -14,7 +14,19 @@ Azure AI Foundry / Azure OpenAI (model layer)
 
 The goal of Phase 0 is to prove the core architecture before committing to a full v1 build. This repo holds the planning documents, deployment configuration templates, and validation scripts produced during that effort. It is not a production application — it is the foundation and evidence base for v1 planning.
 
-For full context on scope, goals, and build order see `ROMTech_Internal_AI_Chatbot_Phase_0_POC_Plan.md` and `Erik_recommendation.md`.
+## Repository layout
+
+Application code and ops folders follow the standard layout:
+
+| Path | Contents |
+|---|---|
+| `ChatGptForEmployees/` | Application & ops code — `config/`, `scripts/`, `run_litellm.py`, and the gitignored upstream clones (`LibreChat/`, `rag_api/`) |
+| `ChatGptForEmployees.bicep/` | Infrastructure-as-code (Bicep) — *to be added* |
+| `ChatGptForEmployees.grate/` | grate database migrations — *to be added* |
+| `ChatGptForEmployees.pipelines/` | Azure DevOps pipeline YAML — *to be added* |
+| `ChatGptForEmployees.docs/` | Documentation |
+
+For full context on scope, goals, and build order see `ChatGptForEmployees.docs/ROMTech_Internal_AI_Chatbot_Phase_0_POC_Plan.md` and `ChatGptForEmployees.docs/Erik_recommendation.md`.
 
 # Getting Started
 
@@ -23,7 +35,7 @@ For full context on scope, goals, and build order see `ROMTech_Internal_AI_Chatb
 Clone this repository and install the Python dependencies for the validation scripts:
 
 ```bash
-pip install -r scripts/requirements.txt
+pip install -r ChatGptForEmployees/scripts/requirements.txt
 ```
 
 ### 2. Software dependencies
@@ -38,14 +50,14 @@ pip install -r scripts/requirements.txt
 
 ### 3. Configuration
 
-Each script reads its configuration from a `.env` file in the `scripts/` directory. Templates for all required values are in `config/`:
+Each script reads its configuration from a `.env` file in the `ChatGptForEmployees/scripts/` directory. Templates for all required values are in `ChatGptForEmployees/config/`:
 
 | Template | Purpose |
 |---|---|
-| `config/azure_openai.env.template` | Azure OpenAI endpoint, API key, deployment names |
-| `config/litellm.env.template` | LiteLLM container URL and master key |
+| `ChatGptForEmployees/config/azure_openai.env.template` | Azure OpenAI endpoint, API key, deployment names |
+| `ChatGptForEmployees/config/litellm.env.template` | LiteLLM container URL and master key |
 
-Copy the relevant templates to `scripts/.env` and fill in the values before running any script. Do not commit a filled-in `.env` file — it is gitignored.
+Copy the relevant templates to `ChatGptForEmployees/scripts/.env` and fill in the values before running any script. Do not commit a filled-in `.env` file — it is gitignored.
 
 ### 4. API references
 
@@ -60,7 +72,7 @@ Run the validation scripts in order. Each script depends on the one before it.
 
 **Step 1 — Validate Azure OpenAI endpoint (PBI-01-BE)**
 ```bash
-cd scripts
+cd ChatGptForEmployees/scripts
 python validate_azure_openai.py
 ```
 Tests: direct chat completion, streaming, invalid-key 401 — for both model deployments.
@@ -69,7 +81,7 @@ Tests: direct chat completion, streaming, invalid-key 401 — for both model dep
 ```bash
 python validate_litellm.py
 ```
-Tests: liveliness, readiness, auth enforcement. Run after deploying `config/litellm_containerapp.yaml`.
+Tests: liveliness, readiness, auth enforcement. Run after deploying `ChatGptForEmployees/config/litellm_containerapp.yaml`.
 
 **Step 3 — Validate LiteLLM routing and streaming (PBI-03-BE)**
 ```bash
@@ -87,7 +99,7 @@ Tests: `ROMTech AI Standard` and `ROMTech AI Fast` route correctly; raw deployme
 ```bash
 python validate_litellm_usage.py
 ```
-Checks token usage visibility, per-model and per-key attribution, and cost fields. Outputs findings for `config/usage_tracking_assessment.md.template`.
+Checks token usage visibility, per-model and per-key attribution, and cost fields. Outputs findings for `ChatGptForEmployees/config/usage_tracking_assessment.md.template`.
 
 **Step 6 — Validate rate limiting (PBI-06-BE)**
 ```bash
@@ -99,9 +111,9 @@ Creates a temporary test key with `rpm_limit=1`, confirms a second back-to-back 
 ```bash
 python generate_department_keys.py
 ```
-Reads all `DEPT_<NAME>_BUDGET` entries from `scripts/.env`, creates one scoped virtual key per department with `max_budget` and `budget_duration: monthly`, and writes the generated key values back to `scripts/.env`. Safe to re-run — departments that already have a key are skipped.
+Reads all `DEPT_<NAME>_BUDGET` entries from `ChatGptForEmployees/scripts/.env`, creates one scoped virtual key per department with `max_budget` and `budget_duration: monthly`, and writes the generated key values back to `ChatGptForEmployees/scripts/.env`. Safe to re-run — departments that already have a key are skipped.
 
-To add or remove a department, edit `scripts/.env`:
+To add or remove a department, edit `ChatGptForEmployees/scripts/.env`:
 - Add: `DEPT_<NAME>_BUDGET=<monthly USD limit>` and `DEPT_<NAME>_KEY=`
 - Remove: delete the `BUDGET` and `KEY` lines for that department
 
@@ -113,7 +125,7 @@ Tests that all department keys are accepted, that a key with an exhausted budget
 
 > **Windows setup note:** After any `pip install --upgrade litellm`, re-run the Prisma patch script:
 > ```bash
-> python scripts/patch_prisma_windows.py
+> python ChatGptForEmployees/scripts/patch_prisma_windows.py
 > ```
 > This restores a Windows-specific fix that prevents the LiteLLM process from crashing immediately on startup due to a signal propagation issue between Python and the Prisma query engine subprocess.
 
@@ -125,11 +137,11 @@ This repository is internal to the ROMTech AI project team. To contribute:
 
 1. Pick up a PBI from the active sprint backlog.
 2. Create a feature branch named `pbi-<id>/<short-description>`.
-3. Add or update the relevant script in `scripts/` and configuration template in `config/`.
+3. Add or update the relevant script in `ChatGptForEmployees/scripts/` and configuration template in `ChatGptForEmployees/config/`.
 4. Confirm all existing validation scripts still pass before opening a pull request.
 5. Update this README if your change adds a new script or configuration step.
 
-For questions about scope or architecture, refer to `ROMTech_Internal_AI_Chatbot_Phase_0_POC_Plan.md` or contact the gateway track lead.
+For questions about scope or architecture, refer to `ChatGptForEmployees.docs/ROMTech_Internal_AI_Chatbot_Phase_0_POC_Plan.md` or contact the gateway track lead.
 
 If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
 - [ASP.NET Core](https://github.com/aspnet/Home)

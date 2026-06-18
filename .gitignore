@@ -1,12 +1,12 @@
 # Developer secrets — never commit
-frontend/scripts/.env
-frontend/scripts/.test_conversation_id
+ChatGptForEmployees/scripts/.env
+ChatGptForEmployees/scripts/.test_conversation_id
 
-# Cloned upstream repos checked out locally — not tracked in this repo.
-# (Older layout used a frontend/ prefix; current layout is repo-root.)
-frontend/LibreChat/
-LibreChat/
-rag_api/
+# Cloned upstream repos checked out locally under the umbrella — not tracked in this repo.
+# (Older layout kept these at repo root / under a frontend/ prefix; current layout is under <PROJECT>/.)
+ChatGptForEmployees/LibreChat/
+ChatGptForEmployees/rag_api/
+
 # Secrets — never commit
 .env
 *.env
@@ -18,9 +18,9 @@ __pycache__/
 .pytest_cache/
 
 # Local-only planning / notes / reference (per-developer) — not committed
-V1_REVIEW.md
-erik-chat-convo.md
-ROMTech_AI_Employee_Assistant_v1_PBIs.md
+ChatGptForEmployees.docs/V1_REVIEW.md
+ChatGptForEmployees.docs/erik-chat-convo.md
+ChatGptForEmployees.docs/ROMTech_AI_Employee_Assistant_v1_PBIs.md
 
 # OS
 .DS_Store

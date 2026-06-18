@@ -209,7 +209,7 @@ LITELLM_ENV=local
 
 ## Step 8 — Update config/librechat.yaml for local dev
 
-Open [config/librechat.yaml](config/librechat.yaml). The `baseURL` currently contains the ACA placeholder:
+Open [config/librechat.yaml](../ChatGptForEmployees/config/librechat.yaml). The `baseURL` currently contains the ACA placeholder:
 
 ```yaml
 baseURL: "http://localhost:4000/v1"
