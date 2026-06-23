@@ -2,7 +2,7 @@ using 'main.bicep'
 
 param environmentName = 'Test'
 param rgName = 'rg-test-shared'
-param location = 'eastus'
+param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
