@@ -43,6 +43,16 @@ resource pgvectorExtension 'Microsoft.DBforPostgreSQL/flexibleServers/configurat
   }
 }
 
+resource liteLlmDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
+  parent: postgresServer
+  name: 'litellm'
+}
+
+resource ragApiDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
+  parent: postgresServer
+  name: 'librechat_rag'
+}
+
 resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {
   parent: postgresServer
   name: 'AllowAzureServices'
