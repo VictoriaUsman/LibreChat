@@ -54,14 +54,9 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'COLLECTION_NAME', value: 'librechat' }
             { name: 'CHUNK_SIZE', value: '1500' }
             { name: 'CHUNK_OVERLAP', value: '100' }
-            { name: 'DB_HOST', value: '' }
-            { name: 'DB_PORT', value: '5432' }
-            { name: 'POSTGRES_DB', value: 'librechat_rag' }
-            { name: 'POSTGRES_USER', value: '' }
             { name: 'RAG_AZURE_OPENAI_API_KEY', secretRef: 'azure-openai-api-key' }
             { name: 'DATABASE_URL', secretRef: 'postgres-url' }
             { name: 'RAG_API_JWT_SECRET', secretRef: 'rag-api-jwt-secret' }
-            { name: 'POSTGRES_PASSWORD', secretRef: 'rag-api-jwt-secret' }
           ]
           probes: [
             {
