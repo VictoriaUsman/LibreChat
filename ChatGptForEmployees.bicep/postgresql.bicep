@@ -65,6 +65,8 @@ resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallR
 output hostname string = postgresServer.properties.fullyQualifiedDomainName
 output adminUser string = adminUser
 @secure()
+output adminPassword string = adminPassword
+@secure()
 output liteLlmConnectionString string = 'postgresql://${adminUser}:${adminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/litellm?sslmode=require'
 @secure()
 output ragApiConnectionString string = 'postgresql://${adminUser}:${adminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/librechat_rag?sslmode=require'

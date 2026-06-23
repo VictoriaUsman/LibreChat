@@ -130,6 +130,9 @@ module ragApi 'ragApi.bicep' = {
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
     embeddingsDeploymentName: aiFoundry.outputs.embeddingsDeploymentName
     databaseUrl: postgresql.outputs.ragApiConnectionString
+    postgresHost: postgresql.outputs.hostname
+    postgresUser: postgresql.outputs.adminUser
+    postgresPassword: postgresql.outputs.adminPassword
     ragApiJwtSecret: ragApiJwtSecret
   }
 }
