@@ -17,7 +17,7 @@ model_list:
   - model_name: "ROMTech AI Standard"
     litellm_params:
       model: azure/gpt-5.4-mini
-      api_base: https://dev-lms-foundry.services.ai.azure.com
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
       # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).
@@ -36,7 +36,7 @@ model_list:
   - model_name: "ROMTech AI Fast"
     litellm_params:
       model: azure/gpt-5.4-mini
-      api_base: https://dev-lms-foundry.services.ai.azure.com
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-02-01"
       # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).

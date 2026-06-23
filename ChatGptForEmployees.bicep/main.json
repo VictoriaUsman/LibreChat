@@ -1,0 +1,1759 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "9448571827957644726"
+    }
+  },
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "defaultValue": "ChatGptForEmployees"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "subId": {
+      "type": "string",
+      "defaultValue": "e64069c2-4b14-4c32-a1f0-3493457f0eff"
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "Dev",
+      "allowedValues": [
+        "Dev",
+        "Test",
+        "Prod"
+      ]
+    },
+    "rgName": {
+      "type": "string",
+      "defaultValue": "rg-dev-shared",
+      "allowedValues": [
+        "rg-dev-shared",
+        "rg-test-shared",
+        "rg-prod-shared"
+      ]
+    },
+    "liteLlmImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/berriai/litellm:main-v1.57.4"
+    },
+    "libreChatImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/danny-avila/librechat:v0.7.5"
+    },
+    "ragApiImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/danny-avila/rag_api:main"
+    },
+    "flagshipModelName": {
+      "type": "string",
+      "defaultValue": "gpt-4o"
+    },
+    "fastModelName": {
+      "type": "string",
+      "defaultValue": "gpt-4o-mini"
+    },
+    "embeddingsModelName": {
+      "type": "string",
+      "defaultValue": "text-embedding-3-small"
+    },
+    "postgresAdminUser": {
+      "type": "string",
+      "defaultValue": "cgfeadmin"
+    },
+    "postgresAdminPassword": {
+      "type": "securestring"
+    },
+    "liteLlmMasterKey": {
+      "type": "securestring"
+    },
+    "jwtSecret": {
+      "type": "securestring"
+    },
+    "jwtRefreshSecret": {
+      "type": "securestring"
+    },
+    "credsKey": {
+      "type": "securestring"
+    },
+    "credsIv": {
+      "type": "securestring"
+    },
+    "liteLlmVirtualKey": {
+      "type": "securestring"
+    },
+    "openIdClientId": {
+      "type": "securestring"
+    },
+    "openIdClientSecret": {
+      "type": "securestring"
+    },
+    "openIdSessionSecret": {
+      "type": "securestring"
+    },
+    "ragApiJwtSecret": {
+      "type": "securestring"
+    },
+    "mongoConnectionString": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "workspaceName": "[format('cdb-workspace-{0}', toLower(parameters('environmentName')))]",
+    "minReplicas": "[if(equals(parameters('environmentName'), 'Prod'), 1, 0)]"
+  },
+  "resources": {
+    "applicationInsights": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "applicationInsights",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "appName": {
+            "value": "[parameters('appName')]"
+          },
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "rgName": {
+            "value": "[parameters('rgName')]"
+          },
+          "subId": {
+            "value": "[parameters('subId')]"
+          },
+          "workspaceName": {
+            "value": "[variables('workspaceName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "2565005694744197736"
+            }
+          },
+          "parameters": {
+            "appName": {
+              "type": "string",
+              "defaultValue": "ChatGptForEmployees"
+            },
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "rgName": {
+              "type": "string",
+              "defaultValue": "rg-dev-shared"
+            },
+            "subId": {
+              "type": "string",
+              "defaultValue": "e64069c2-4b14-4c32-a1f0-3493457f0eff"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "workspaceName": {
+              "type": "string",
+              "defaultValue": "cdb-workspace-Dev"
+            }
+          },
+          "variables": {
+            "appEnvName": "[format('{0}{1}', parameters('appName'), parameters('envName'))]",
+            "workspaceId": "[format('/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.OperationalInsights/workspaces/{2}', parameters('subId'), parameters('rgName'), parameters('workspaceName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[format('appi{0}', variables('appEnvName'))]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "Flow_Type": "Redfield",
+                "Request_Source": "WebTools16.0",
+                "RetentionInDays": 90,
+                "WorkspaceResourceId": "[variables('workspaceId')]",
+                "IngestionMode": "LogAnalytics",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              }
+            }
+          ],
+          "outputs": {
+            "appiConnString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('appi{0}', variables('appEnvName'))), '2020-02-02').ConnectionString]"
+            },
+            "appiInstKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('appi{0}', variables('appEnvName'))), '2020-02-02').InstrumentationKey]"
+            },
+            "appiResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', format('appi{0}', variables('appEnvName')))]"
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "1291204435805132329"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            }
+          },
+          "variables": {
+            "storageAccountName": "[format('stcgfe{0}', toLower(parameters('envName')))]",
+            "liteLlmShareName": "litellm-config",
+            "libreChatShareName": "librechat-data"
+          },
+          "resources": {
+            "storageAccount": {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[variables('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            "fileService": {
+              "type": "Microsoft.Storage/storageAccounts/fileServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "storageAccount"
+              ]
+            },
+            "liteLlmShare": {
+              "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('liteLlmShareName'))]",
+              "properties": {
+                "shareQuota": 1,
+                "enabledProtocols": "SMB"
+              },
+              "dependsOn": [
+                "fileService"
+              ]
+            },
+            "libreChatShare": {
+              "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('libreChatShareName'))]",
+              "properties": {
+                "shareQuota": 5,
+                "enabledProtocols": "SMB"
+              },
+              "dependsOn": [
+                "fileService"
+              ]
+            }
+          },
+          "outputs": {
+            "storageAccountName": {
+              "type": "string",
+              "value": "[variables('storageAccountName')]"
+            },
+            "storageAccountKey": {
+              "type": "securestring",
+              "value": "[listKeys('storageAccount', '2023-05-01').keys[0].value]"
+            },
+            "liteLlmShareName": {
+              "type": "string",
+              "value": "[variables('liteLlmShareName')]"
+            },
+            "libreChatShareName": {
+              "type": "string",
+              "value": "[variables('libreChatShareName')]"
+            }
+          }
+        }
+      }
+    },
+    "containerAppsEnvironment": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "containerAppsEnvironment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "logAnalyticsWorkspaceName": {
+            "value": "[variables('workspaceName')]"
+          },
+          "logAnalyticsResourceGroup": {
+            "value": "[parameters('rgName')]"
+          },
+          "storageAccountName": {
+            "value": "[reference('storage').outputs.storageAccountName.value]"
+          },
+          "storageAccountKey": {
+            "value": "[listOutputsWithSecureValues('storage', '2025-04-01').storageAccountKey]"
+          },
+          "liteLlmShareName": {
+            "value": "[reference('storage').outputs.liteLlmShareName.value]"
+          },
+          "libreChatShareName": {
+            "value": "[reference('storage').outputs.libreChatShareName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "10269022705324111251"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string"
+            },
+            "logAnalyticsResourceGroup": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            },
+            "storageAccountKey": {
+              "type": "securestring"
+            },
+            "liteLlmShareName": {
+              "type": "string"
+            },
+            "libreChatShareName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('cae-cgfe-{0}', toLower(parameters('envName')))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('logAnalyticsResourceGroup')), 'Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').customerId]",
+                    "sharedKey": "[listKeys(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('logAnalyticsResourceGroup')), 'Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').primarySharedKey]"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments/storages",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', format('cae-cgfe-{0}', toLower(parameters('envName'))), 'litellm-config-store')]",
+              "properties": {
+                "azureFile": {
+                  "accountName": "[parameters('storageAccountName')]",
+                  "accountKey": "[parameters('storageAccountKey')]",
+                  "shareName": "[parameters('liteLlmShareName')]",
+                  "accessMode": "ReadOnly"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('cae-cgfe-{0}', toLower(parameters('envName'))))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments/storages",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}/{1}', format('cae-cgfe-{0}', toLower(parameters('envName'))), 'librechat-data-store')]",
+              "properties": {
+                "azureFile": {
+                  "accountName": "[parameters('storageAccountName')]",
+                  "accountKey": "[parameters('storageAccountKey')]",
+                  "shareName": "[parameters('libreChatShareName')]",
+                  "accessMode": "ReadWrite"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('cae-cgfe-{0}', toLower(parameters('envName'))))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "environmentId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments', format('cae-cgfe-{0}', toLower(parameters('envName'))))]"
+            },
+            "defaultDomain": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/managedEnvironments', format('cae-cgfe-{0}', toLower(parameters('envName')))), '2024-03-01').defaultDomain]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "aiFoundry": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "aiFoundry",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "appName": {
+            "value": "[parameters('appName')]"
+          },
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "flagshipModelName": {
+            "value": "[parameters('flagshipModelName')]"
+          },
+          "fastModelName": {
+            "value": "[parameters('fastModelName')]"
+          },
+          "embeddingsModelName": {
+            "value": "[parameters('embeddingsModelName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "8595349161671315366"
+            }
+          },
+          "parameters": {
+            "appName": {
+              "type": "string",
+              "defaultValue": "ChatGptForEmployees"
+            },
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "flagshipModelName": {
+              "type": "string",
+              "defaultValue": "gpt-4o"
+            },
+            "fastModelName": {
+              "type": "string",
+              "defaultValue": "gpt-4o-mini"
+            },
+            "embeddingsModelName": {
+              "type": "string",
+              "defaultValue": "text-embedding-3-small"
+            },
+            "flagshipCapacity": {
+              "type": "int",
+              "defaultValue": 30
+            },
+            "fastCapacity": {
+              "type": "int",
+              "defaultValue": 100
+            },
+            "embeddingsCapacity": {
+              "type": "int",
+              "defaultValue": 120
+            }
+          },
+          "variables": {
+            "accountName": "[format('ais{0}{1}', toLower(parameters('appName')), toLower(parameters('envName')))]"
+          },
+          "resources": {
+            "aiFoundryAccount": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[variables('accountName')]",
+              "location": "[parameters('location')]",
+              "kind": "AIServices",
+              "sku": {
+                "name": "S0"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publicNetworkAccess": "Enabled",
+                "customSubDomainName": "[variables('accountName')]",
+                "allowProjectManagement": true,
+                "networkAcls": {
+                  "defaultAction": "Allow",
+                  "ipRules": [],
+                  "virtualNetworkRules": []
+                }
+              }
+            },
+            "flagshipDeployment": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', variables('accountName'), 'romtech-standard')]",
+              "sku": {
+                "name": "GlobalStandard",
+                "capacity": "[parameters('flagshipCapacity')]"
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "[parameters('flagshipModelName')]"
+                }
+              },
+              "dependsOn": [
+                "aiFoundryAccount"
+              ]
+            },
+            "fastDeployment": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', variables('accountName'), 'romtech-fast')]",
+              "sku": {
+                "name": "GlobalStandard",
+                "capacity": "[parameters('fastCapacity')]"
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "[parameters('fastModelName')]"
+                }
+              },
+              "dependsOn": [
+                "aiFoundryAccount",
+                "flagshipDeployment"
+              ]
+            },
+            "embeddingsDeployment": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', variables('accountName'), 'romtech-embeddings')]",
+              "sku": {
+                "name": "GlobalStandard",
+                "capacity": "[parameters('embeddingsCapacity')]"
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "[parameters('embeddingsModelName')]"
+                }
+              },
+              "dependsOn": [
+                "aiFoundryAccount",
+                "fastDeployment"
+              ]
+            },
+            "aiFoundryProject": {
+              "type": "Microsoft.CognitiveServices/accounts/projects",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', variables('accountName'), 'proj-default')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "description": "Default project",
+                "displayName": "proj-default"
+              },
+              "dependsOn": [
+                "aiFoundryAccount"
+              ]
+            }
+          },
+          "outputs": {
+            "endpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.services.ai.azure.com', variables('accountName'))]"
+            },
+            "apiKey": {
+              "type": "securestring",
+              "value": "[listKeys('aiFoundryAccount', '2025-04-01-preview').key1]"
+            },
+            "flagshipDeploymentName": {
+              "type": "string",
+              "value": "romtech-standard"
+            },
+            "fastDeploymentName": {
+              "type": "string",
+              "value": "romtech-fast"
+            },
+            "embeddingsDeploymentName": {
+              "type": "string",
+              "value": "romtech-embeddings"
+            }
+          }
+        }
+      }
+    },
+    "postgresql": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "postgresql",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "adminUser": {
+            "value": "[parameters('postgresAdminUser')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('postgresAdminPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "4469004917299436266"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "adminUser": {
+              "type": "string",
+              "defaultValue": "cgfeadmin"
+            },
+            "adminPassword": {
+              "type": "securestring"
+            }
+          },
+          "variables": {
+            "serverName": "[format('psql-cgfe-{0}', toLower(parameters('envName')))]"
+          },
+          "resources": {
+            "postgresServer": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2024-08-01",
+              "name": "[variables('serverName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[if(equals(parameters('envName'), 'Prod'), 'Standard_B2ms', 'Standard_B1ms')]",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "administratorLogin": "[parameters('adminUser')]",
+                "administratorLoginPassword": "[parameters('adminPassword')]",
+                "version": "16",
+                "storage": {
+                  "storageSizeGB": 32
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "highAvailability": {
+                  "mode": "Disabled"
+                },
+                "authConfig": {
+                  "activeDirectoryAuth": "Disabled",
+                  "passwordAuth": "Enabled"
+                }
+              }
+            },
+            "pgvectorExtension": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/configurations",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', variables('serverName'), 'azure.extensions')]",
+              "properties": {
+                "value": "vector",
+                "source": "user-override"
+              },
+              "dependsOn": [
+                "postgresServer"
+              ]
+            },
+            "allowAzureServices": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', variables('serverName'), 'AllowAzureServices')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "postgresServer"
+              ]
+            }
+          },
+          "outputs": {
+            "hostname": {
+              "type": "string",
+              "value": "[reference('postgresServer').fullyQualifiedDomainName]"
+            },
+            "adminUser": {
+              "type": "string",
+              "value": "[parameters('adminUser')]"
+            },
+            "liteLlmConnectionString": {
+              "type": "securestring",
+              "value": "[format('postgresql://{0}:{1}@{2}:5432/litellm?sslmode=require', parameters('adminUser'), parameters('adminPassword'), reference('postgresServer').fullyQualifiedDomainName)]"
+            },
+            "ragApiConnectionString": {
+              "type": "securestring",
+              "value": "[format('postgresql://{0}:{1}@{2}:5432/librechat_rag?sslmode=require', parameters('adminUser'), parameters('adminPassword'), reference('postgresServer').fullyQualifiedDomainName)]"
+            }
+          }
+        }
+      }
+    },
+    "liteLlm": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "liteLlm",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentId": {
+            "value": "[reference('containerAppsEnvironment').outputs.environmentId.value]"
+          },
+          "liteLlmImage": {
+            "value": "[parameters('liteLlmImage')]"
+          },
+          "minReplicas": {
+            "value": "[variables('minReplicas')]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('applicationInsights').outputs.appiConnString.value]"
+          },
+          "azureOpenAiEndpoint": {
+            "value": "[reference('aiFoundry').outputs.endpoint.value]"
+          },
+          "azureOpenAiApiKey": {
+            "value": "[listOutputsWithSecureValues('aiFoundry', '2025-04-01').apiKey]"
+          },
+          "liteLlmMasterKey": {
+            "value": "[parameters('liteLlmMasterKey')]"
+          },
+          "databaseUrl": {
+            "value": "[listOutputsWithSecureValues('postgresql', '2025-04-01').liteLlmConnectionString]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "18241157421129512610"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "environmentId": {
+              "type": "string"
+            },
+            "liteLlmImage": {
+              "type": "string"
+            },
+            "minReplicas": {
+              "type": "int",
+              "defaultValue": 0
+            },
+            "appInsightsConnectionString": {
+              "type": "string"
+            },
+            "azureOpenAiEndpoint": {
+              "type": "string"
+            },
+            "azureOpenAiApiKey": {
+              "type": "securestring"
+            },
+            "liteLlmMasterKey": {
+              "type": "securestring"
+            },
+            "databaseUrl": {
+              "type": "securestring"
+            }
+          },
+          "variables": {
+            "appName": "[format('ca-litellm-{0}', toLower(parameters('envName')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[variables('appName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('environmentId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": false,
+                    "targetPort": 4000,
+                    "transport": "Auto",
+                    "allowInsecure": false
+                  },
+                  "secrets": [
+                    {
+                      "name": "litellm-master-key",
+                      "value": "[parameters('liteLlmMasterKey')]"
+                    },
+                    {
+                      "name": "database-url",
+                      "value": "[parameters('databaseUrl')]"
+                    },
+                    {
+                      "name": "azure-openai-api-key",
+                      "value": "[parameters('azureOpenAiApiKey')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "litellm",
+                      "image": "[parameters('liteLlmImage')]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      },
+                      "args": [
+                        "--config",
+                        "/app/config/litellm_routing_config.yaml",
+                        "--port",
+                        "4000"
+                      ],
+                      "env": [
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        },
+                        {
+                          "name": "PORT",
+                          "value": "4000"
+                        },
+                        {
+                          "name": "LITELLM_ENV",
+                          "value": "[toLower(parameters('envName'))]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_ENDPOINT",
+                          "value": "[parameters('azureOpenAiEndpoint')]"
+                        },
+                        {
+                          "name": "LITELLM_MASTER_KEY",
+                          "secretRef": "litellm-master-key"
+                        },
+                        {
+                          "name": "DATABASE_URL",
+                          "secretRef": "database-url"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_API_KEY",
+                          "secretRef": "azure-openai-api-key"
+                        }
+                      ],
+                      "volumeMounts": [
+                        {
+                          "volumeName": "litellm-config",
+                          "mountPath": "/app/config"
+                        }
+                      ],
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/health/liveliness",
+                            "port": 4000
+                          },
+                          "initialDelaySeconds": 15,
+                          "periodSeconds": 30,
+                          "failureThreshold": 3
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/health/readiness",
+                            "port": 4000
+                          },
+                          "initialDelaySeconds": 15,
+                          "periodSeconds": 10,
+                          "failureThreshold": 3
+                        }
+                      ]
+                    }
+                  ],
+                  "volumes": [
+                    {
+                      "name": "litellm-config",
+                      "storageType": "AzureFile",
+                      "storageName": "litellm-config-store"
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplicas')]",
+                    "maxReplicas": 2
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+            },
+            "appName": {
+              "type": "string",
+              "value": "[variables('appName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "aiFoundry",
+        "applicationInsights",
+        "containerAppsEnvironment",
+        "postgresql"
+      ]
+    },
+    "ragApi": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "ragApi",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentId": {
+            "value": "[reference('containerAppsEnvironment').outputs.environmentId.value]"
+          },
+          "ragApiImage": {
+            "value": "[parameters('ragApiImage')]"
+          },
+          "minReplicas": {
+            "value": "[variables('minReplicas')]"
+          },
+          "azureOpenAiEndpoint": {
+            "value": "[reference('aiFoundry').outputs.endpoint.value]"
+          },
+          "azureOpenAiApiKey": {
+            "value": "[listOutputsWithSecureValues('aiFoundry', '2025-04-01').apiKey]"
+          },
+          "embeddingsDeploymentName": {
+            "value": "[reference('aiFoundry').outputs.embeddingsDeploymentName.value]"
+          },
+          "databaseUrl": {
+            "value": "[listOutputsWithSecureValues('postgresql', '2025-04-01').ragApiConnectionString]"
+          },
+          "ragApiJwtSecret": {
+            "value": "[parameters('ragApiJwtSecret')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "5793985747623596229"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "environmentId": {
+              "type": "string"
+            },
+            "ragApiImage": {
+              "type": "string"
+            },
+            "minReplicas": {
+              "type": "int",
+              "defaultValue": 0
+            },
+            "azureOpenAiEndpoint": {
+              "type": "string"
+            },
+            "azureOpenAiApiKey": {
+              "type": "securestring"
+            },
+            "embeddingsDeploymentName": {
+              "type": "string"
+            },
+            "databaseUrl": {
+              "type": "securestring"
+            },
+            "ragApiJwtSecret": {
+              "type": "securestring"
+            }
+          },
+          "variables": {
+            "appName": "[format('ca-ragapi-{0}', toLower(parameters('envName')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[variables('appName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('environmentId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": false,
+                    "targetPort": 8000,
+                    "transport": "Auto",
+                    "allowInsecure": false
+                  },
+                  "secrets": [
+                    {
+                      "name": "azure-openai-api-key",
+                      "value": "[parameters('azureOpenAiApiKey')]"
+                    },
+                    {
+                      "name": "postgres-url",
+                      "value": "[parameters('databaseUrl')]"
+                    },
+                    {
+                      "name": "rag-api-jwt-secret",
+                      "value": "[parameters('ragApiJwtSecret')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "rag-api",
+                      "image": "[parameters('ragApiImage')]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "HOST",
+                          "value": "0.0.0.0"
+                        },
+                        {
+                          "name": "PORT",
+                          "value": "8000"
+                        },
+                        {
+                          "name": "LOG_LEVEL",
+                          "value": "INFO"
+                        },
+                        {
+                          "name": "EMBEDDINGS_PROVIDER",
+                          "value": "azure"
+                        },
+                        {
+                          "name": "RAG_AZURE_OPENAI_ENDPOINT",
+                          "value": "[parameters('azureOpenAiEndpoint')]"
+                        },
+                        {
+                          "name": "RAG_AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT",
+                          "value": "[parameters('embeddingsDeploymentName')]"
+                        },
+                        {
+                          "name": "RAG_AZURE_OPENAI_API_VERSION",
+                          "value": "2024-02-01"
+                        },
+                        {
+                          "name": "COLLECTION_NAME",
+                          "value": "librechat"
+                        },
+                        {
+                          "name": "CHUNK_SIZE",
+                          "value": "1500"
+                        },
+                        {
+                          "name": "CHUNK_OVERLAP",
+                          "value": "100"
+                        },
+                        {
+                          "name": "DB_HOST",
+                          "value": ""
+                        },
+                        {
+                          "name": "DB_PORT",
+                          "value": "5432"
+                        },
+                        {
+                          "name": "POSTGRES_DB",
+                          "value": "librechat_rag"
+                        },
+                        {
+                          "name": "POSTGRES_USER",
+                          "value": ""
+                        },
+                        {
+                          "name": "RAG_AZURE_OPENAI_API_KEY",
+                          "secretRef": "azure-openai-api-key"
+                        },
+                        {
+                          "name": "DATABASE_URL",
+                          "secretRef": "postgres-url"
+                        },
+                        {
+                          "name": "RAG_API_JWT_SECRET",
+                          "secretRef": "rag-api-jwt-secret"
+                        },
+                        {
+                          "name": "POSTGRES_PASSWORD",
+                          "secretRef": "rag-api-jwt-secret"
+                        }
+                      ],
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": 8000
+                          },
+                          "initialDelaySeconds": 20,
+                          "periodSeconds": 30,
+                          "failureThreshold": 3
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": 8000
+                          },
+                          "initialDelaySeconds": 20,
+                          "periodSeconds": 10,
+                          "failureThreshold": 3
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplicas')]",
+                    "maxReplicas": 2
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+            },
+            "appName": {
+              "type": "string",
+              "value": "[variables('appName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "aiFoundry",
+        "containerAppsEnvironment",
+        "postgresql"
+      ]
+    },
+    "libreChat": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "libreChat",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentId": {
+            "value": "[reference('containerAppsEnvironment').outputs.environmentId.value]"
+          },
+          "libreChatImage": {
+            "value": "[parameters('libreChatImage')]"
+          },
+          "minReplicas": {
+            "value": "[variables('minReplicas')]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('applicationInsights').outputs.appiConnString.value]"
+          },
+          "liteLlmInternalUrl": {
+            "value": "[reference('liteLlm').outputs.fqdn.value]"
+          },
+          "ragApiInternalUrl": {
+            "value": "[reference('ragApi').outputs.fqdn.value]"
+          },
+          "mongoConnectionString": {
+            "value": "[parameters('mongoConnectionString')]"
+          },
+          "jwtSecret": {
+            "value": "[parameters('jwtSecret')]"
+          },
+          "jwtRefreshSecret": {
+            "value": "[parameters('jwtRefreshSecret')]"
+          },
+          "credsKey": {
+            "value": "[parameters('credsKey')]"
+          },
+          "credsIv": {
+            "value": "[parameters('credsIv')]"
+          },
+          "liteLlmVirtualKey": {
+            "value": "[parameters('liteLlmVirtualKey')]"
+          },
+          "openIdClientId": {
+            "value": "[parameters('openIdClientId')]"
+          },
+          "openIdClientSecret": {
+            "value": "[parameters('openIdClientSecret')]"
+          },
+          "openIdSessionSecret": {
+            "value": "[parameters('openIdSessionSecret')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "3538015728866311329"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            },
+            "environmentId": {
+              "type": "string"
+            },
+            "libreChatImage": {
+              "type": "string"
+            },
+            "minReplicas": {
+              "type": "int",
+              "defaultValue": 0
+            },
+            "appInsightsConnectionString": {
+              "type": "string"
+            },
+            "liteLlmInternalUrl": {
+              "type": "string"
+            },
+            "ragApiInternalUrl": {
+              "type": "string"
+            },
+            "mongoConnectionString": {
+              "type": "securestring"
+            },
+            "jwtSecret": {
+              "type": "securestring"
+            },
+            "jwtRefreshSecret": {
+              "type": "securestring"
+            },
+            "credsKey": {
+              "type": "securestring"
+            },
+            "credsIv": {
+              "type": "securestring"
+            },
+            "liteLlmVirtualKey": {
+              "type": "securestring"
+            },
+            "openIdClientId": {
+              "type": "securestring"
+            },
+            "openIdClientSecret": {
+              "type": "securestring"
+            },
+            "openIdSessionSecret": {
+              "type": "securestring"
+            }
+          },
+          "variables": {
+            "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[variables('appName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('environmentId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 3080,
+                    "transport": "Auto",
+                    "allowInsecure": false
+                  },
+                  "secrets": [
+                    {
+                      "name": "mongo-uri",
+                      "value": "[parameters('mongoConnectionString')]"
+                    },
+                    {
+                      "name": "jwt-secret",
+                      "value": "[parameters('jwtSecret')]"
+                    },
+                    {
+                      "name": "jwt-refresh-secret",
+                      "value": "[parameters('jwtRefreshSecret')]"
+                    },
+                    {
+                      "name": "creds-key",
+                      "value": "[parameters('credsKey')]"
+                    },
+                    {
+                      "name": "creds-iv",
+                      "value": "[parameters('credsIv')]"
+                    },
+                    {
+                      "name": "litellm-virtual-key",
+                      "value": "[parameters('liteLlmVirtualKey')]"
+                    },
+                    {
+                      "name": "openid-client-id",
+                      "value": "[parameters('openIdClientId')]"
+                    },
+                    {
+                      "name": "openid-client-secret",
+                      "value": "[parameters('openIdClientSecret')]"
+                    },
+                    {
+                      "name": "openid-session-secret",
+                      "value": "[parameters('openIdSessionSecret')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "librechat",
+                      "image": "[parameters('libreChatImage')]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        },
+                        {
+                          "name": "HOST",
+                          "value": "0.0.0.0"
+                        },
+                        {
+                          "name": "PORT",
+                          "value": "3080"
+                        },
+                        {
+                          "name": "NODE_ENV",
+                          "value": "production"
+                        },
+                        {
+                          "name": "ALLOW_REGISTRATION",
+                          "value": "false"
+                        },
+                        {
+                          "name": "ALLOW_SOCIAL_LOGIN",
+                          "value": "true"
+                        },
+                        {
+                          "name": "LITELLM_URL",
+                          "value": "[format('http://{0}', parameters('liteLlmInternalUrl'))]"
+                        },
+                        {
+                          "name": "RAG_API_URL",
+                          "value": "[format('http://{0}', parameters('ragApiInternalUrl'))]"
+                        },
+                        {
+                          "name": "OPENID_ISSUER",
+                          "value": "https://romtech.okta.com/oauth2/default"
+                        },
+                        {
+                          "name": "OPENID_SCOPE",
+                          "value": "openid profile email"
+                        },
+                        {
+                          "name": "OPENID_BUTTON_TEXT",
+                          "value": "Login with ROMTech Okta"
+                        },
+                        {
+                          "name": "OPENID_CALLBACK_URL",
+                          "value": "/oauth/openid/callback"
+                        },
+                        {
+                          "name": "MONGO_URI",
+                          "secretRef": "mongo-uri"
+                        },
+                        {
+                          "name": "JWT_SECRET",
+                          "secretRef": "jwt-secret"
+                        },
+                        {
+                          "name": "JWT_REFRESH_SECRET",
+                          "secretRef": "jwt-refresh-secret"
+                        },
+                        {
+                          "name": "CREDS_KEY",
+                          "secretRef": "creds-key"
+                        },
+                        {
+                          "name": "CREDS_IV",
+                          "secretRef": "creds-iv"
+                        },
+                        {
+                          "name": "LITELLM_VIRTUAL_KEY",
+                          "secretRef": "litellm-virtual-key"
+                        },
+                        {
+                          "name": "OPENID_CLIENT_ID",
+                          "secretRef": "openid-client-id"
+                        },
+                        {
+                          "name": "OPENID_CLIENT_SECRET",
+                          "secretRef": "openid-client-secret"
+                        },
+                        {
+                          "name": "OPENID_SESSION_SECRET",
+                          "secretRef": "openid-session-secret"
+                        }
+                      ],
+                      "volumeMounts": [
+                        {
+                          "volumeName": "librechat-data",
+                          "mountPath": "/app/api/data"
+                        }
+                      ],
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/api/health",
+                            "port": 3080
+                          },
+                          "initialDelaySeconds": 20,
+                          "periodSeconds": 30,
+                          "failureThreshold": 3
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/api/health",
+                            "port": 3080
+                          },
+                          "initialDelaySeconds": 20,
+                          "periodSeconds": 10,
+                          "failureThreshold": 3
+                        }
+                      ]
+                    }
+                  ],
+                  "volumes": [
+                    {
+                      "name": "librechat-data",
+                      "storageType": "AzureFile",
+                      "storageName": "librechat-data-store"
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplicas')]",
+                    "maxReplicas": 2
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+            },
+            "appName": {
+              "type": "string",
+              "value": "[variables('appName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "applicationInsights",
+        "containerAppsEnvironment",
+        "liteLlm",
+        "ragApi"
+      ]
+    },
+    "keyvault": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyvault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "liteLlmPrincipalId": {
+            "value": "[reference('liteLlm').outputs.principalId.value]"
+          },
+          "libreChatPrincipalId": {
+            "value": "[reference('libreChat').outputs.principalId.value]"
+          },
+          "ragApiPrincipalId": {
+            "value": "[reference('ragApi').outputs.principalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "12568877786429995403"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "liteLlmPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "libreChatPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "ragApiPrincipalId": {
+              "type": "string",
+              "defaultValue": ""
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', format('kv-romtech-{0}', toLower(parameters('environmentName'))))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', format('kv-romtech-{0}', toLower(parameters('environmentName')))), parameters('liteLlmPrincipalId'), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+                "principalId": "[parameters('liteLlmPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', format('kv-romtech-{0}', toLower(parameters('environmentName'))))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', format('kv-romtech-{0}', toLower(parameters('environmentName')))), parameters('libreChatPrincipalId'), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+                "principalId": "[parameters('libreChatPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', format('kv-romtech-{0}', toLower(parameters('environmentName'))))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', format('kv-romtech-{0}', toLower(parameters('environmentName')))), parameters('ragApiPrincipalId'), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+                "principalId": "[parameters('ragApiPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "libreChat",
+        "liteLlm",
+        "ragApi"
+      ]
+    }
+  },
+  "outputs": {
+    "libreChatUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference('libreChat').outputs.fqdn.value)]"
+    },
+    "liteLlmInternalUrl": {
+      "type": "string",
+      "value": "[reference('liteLlm').outputs.fqdn.value]"
+    },
+    "ragApiInternalUrl": {
+      "type": "string",
+      "value": "[reference('ragApi').outputs.fqdn.value]"
+    }
+  }
+}

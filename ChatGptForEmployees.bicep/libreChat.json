@@ -1,0 +1,113 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "9144537726051271720"
+    }
+  },
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "defaultValue": "ChatGptForEmployees"
+    },
+    "envName": {
+      "type": "string",
+      "defaultValue": "Dev"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "appServicePlanId": {
+      "type": "string"
+    },
+    "libreChatImage": {
+      "type": "string"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "appInsightsInstrumentationKey": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "liteLlmUrl": {
+      "type": "string",
+      "defaultValue": ""
+    }
+  },
+  "variables": {
+    "appNameEnv": "[format('{0}LibreChat{1}', parameters('appName'), parameters('envName'))]",
+    "kvName": "[format('kv-romtech-{0}', toLower(parameters('envName')))]",
+    "keyVaultDns": "[environment().suffixes.keyvaultDns]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('appNameEnv')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux,container",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[parameters('appServicePlanId')]",
+        "reserved": true,
+        "httpsOnly": true,
+        "keyVaultReferenceIdentity": "SystemAssigned",
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}', parameters('libreChatImage'))]",
+          "acrUseManagedIdentityCreds": true,
+          "alwaysOn": true,
+          "http20Enabled": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2023-12-01",
+      "name": "[format('{0}/{1}', variables('appNameEnv'), 'appsettings')]",
+      "properties": {
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[parameters('appInsightsConnectionString')]",
+        "APPINSIGHTS_INSTRUMENTATIONKEY": "[parameters('appInsightsInstrumentationKey')]",
+        "WEBSITES_PORT": "3080",
+        "PORT": "3080",
+        "NODE_ENV": "production",
+        "ENDPOINTS": "custom",
+        "ALLOW_REGISTRATION": "false",
+        "ALLOW_SOCIAL_LOGIN": "true",
+        "OPENID_ISSUER": "https://romtech.okta.com/oauth2/default",
+        "OPENID_BUTTON_TEXT": "Login with ROMTech Okta",
+        "OPENID_CALLBACK_URL": "[format('https://{0}/api/auth/openid/callback', reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01').defaultHostName)]",
+        "LITELLM_URL": "[format('{0}/v1', parameters('liteLlmUrl'))]",
+        "MONGO_URI": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-MongoUri/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "JWT_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-JwtSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "JWT_REFRESH_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-JwtRefreshSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "CREDS_KEY": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-CredsKey/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "CREDS_IV": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-CredsIv/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "LITELLM_VIRTUAL_KEY": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-LiteLLMVirtualKey/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "OPENID_CLIENT_ID": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdClientId/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "OPENID_CLIENT_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdClientSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
+        "OPENID_SESSION_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdSessionSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('appNameEnv'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "appUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01').defaultHostName)]"
+    },
+    "systemManagedIdentityId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01', 'full').identity.principalId]"
+    }
+  }
+}
