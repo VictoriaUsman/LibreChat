@@ -4,7 +4,7 @@ param adminUser string = 'cgfeadmin'
 @secure()
 param adminPassword string
 
-var serverName = 'psql-cgfe-${toLower(envName)}'
+var serverName = 'psql-db-cgfe-${toLower(envName)}'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: serverName

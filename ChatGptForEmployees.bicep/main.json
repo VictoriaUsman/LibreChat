@@ -721,7 +721,7 @@
             }
           },
           "variables": {
-            "serverName": "[format('psql-cgfe-{0}', toLower(parameters('envName')))]"
+            "serverName": "[format('psql-db-cgfe-{0}', toLower(parameters('envName')))]"
           },
           "resources": {
             "postgresServer": {
