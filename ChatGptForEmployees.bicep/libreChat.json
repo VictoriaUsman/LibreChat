@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "15391777311338742026"
+      "templateHash": "9734011252620298525"
     }
   },
   "parameters": {
@@ -61,9 +61,6 @@
       "type": "securestring"
     },
     "openIdSessionSecret": {
-      "type": "securestring"
-    },
-    "ragApiJwtSecret": {
       "type": "securestring"
     }
   },
@@ -126,10 +123,6 @@
             {
               "name": "openid-session-secret",
               "value": "[parameters('openIdSessionSecret')]"
-            },
-            {
-              "name": "rag-api-jwt-secret",
-              "value": "[parameters('ragApiJwtSecret')]"
             }
           ]
         },
@@ -230,10 +223,6 @@
                 {
                   "name": "OPENID_SESSION_SECRET",
                   "secretRef": "openid-session-secret"
-                },
-                {
-                  "name": "RAG_API_JWT_SECRET",
-                  "secretRef": "rag-api-jwt-secret"
                 }
               ],
               "volumeMounts": [

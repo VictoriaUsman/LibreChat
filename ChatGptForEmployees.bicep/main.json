@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "11958319105470269639"
+      "templateHash": "9119860047285091872"
     }
   },
   "parameters": {
@@ -96,9 +96,6 @@
       "type": "securestring"
     },
     "openIdSessionSecret": {
-      "type": "securestring"
-    },
-    "ragApiJwtSecret": {
       "type": "securestring"
     }
   },
@@ -1181,8 +1178,8 @@
           "postgresPassword": {
             "value": "[listOutputsWithSecureValues('postgresql', '2025-04-01').adminPassword]"
           },
-          "ragApiJwtSecret": {
-            "value": "[parameters('ragApiJwtSecret')]"
+          "jwtSecret": {
+            "value": "[parameters('jwtSecret')]"
           }
         },
         "template": {
@@ -1192,7 +1189,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "1709792811957711465"
+              "templateHash": "1014414556554216555"
             }
           },
           "parameters": {
@@ -1235,7 +1232,7 @@
             "postgresPassword": {
               "type": "securestring"
             },
-            "ragApiJwtSecret": {
+            "jwtSecret": {
               "type": "securestring"
             }
           },
@@ -1275,8 +1272,8 @@
                       "value": "[parameters('postgresPassword')]"
                     },
                     {
-                      "name": "rag-api-jwt-secret",
-                      "value": "[parameters('ragApiJwtSecret')]"
+                      "name": "jwt-secret",
+                      "value": "[parameters('jwtSecret')]"
                     }
                   ]
                 },
@@ -1360,11 +1357,7 @@
                         },
                         {
                           "name": "JWT_SECRET",
-                          "secretRef": "rag-api-jwt-secret"
-                        },
-                        {
-                          "name": "RAG_API_JWT_SECRET",
-                          "secretRef": "rag-api-jwt-secret"
+                          "secretRef": "jwt-secret"
                         }
                       ],
                       "probes": [
@@ -1481,9 +1474,6 @@
           },
           "openIdSessionSecret": {
             "value": "[parameters('openIdSessionSecret')]"
-          },
-          "ragApiJwtSecret": {
-            "value": "[parameters('ragApiJwtSecret')]"
           }
         },
         "template": {
@@ -1493,7 +1483,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "15391777311338742026"
+              "templateHash": "9734011252620298525"
             }
           },
           "parameters": {
@@ -1549,9 +1539,6 @@
               "type": "securestring"
             },
             "openIdSessionSecret": {
-              "type": "securestring"
-            },
-            "ragApiJwtSecret": {
               "type": "securestring"
             }
           },
@@ -1614,10 +1601,6 @@
                     {
                       "name": "openid-session-secret",
                       "value": "[parameters('openIdSessionSecret')]"
-                    },
-                    {
-                      "name": "rag-api-jwt-secret",
-                      "value": "[parameters('ragApiJwtSecret')]"
                     }
                   ]
                 },
@@ -1718,10 +1701,6 @@
                         {
                           "name": "OPENID_SESSION_SECRET",
                           "secretRef": "openid-session-secret"
-                        },
-                        {
-                          "name": "RAG_API_JWT_SECRET",
-                          "secretRef": "rag-api-jwt-secret"
                         }
                       ],
                       "volumeMounts": [

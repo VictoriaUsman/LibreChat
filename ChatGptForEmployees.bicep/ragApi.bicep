@@ -14,7 +14,7 @@ param postgresUser string
 @secure()
 param postgresPassword string
 @secure()
-param ragApiJwtSecret string
+param jwtSecret string
 
 var appName = 'ca-ragapi-${toLower(envName)}'
 
@@ -36,7 +36,7 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'azure-openai-api-key', value: azureOpenAiApiKey }
         { name: 'postgres-url', value: databaseUrl }
         { name: 'postgres-password', value: postgresPassword }
-        { name: 'rag-api-jwt-secret', value: ragApiJwtSecret }
+        { name: 'jwt-secret', value: jwtSecret }
       ]
     }
     template: {
@@ -66,8 +66,7 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'POSTGRES_DB', value: 'librechat_rag' }
             { name: 'POSTGRES_USER', value: postgresUser }
             { name: 'POSTGRES_PASSWORD', secretRef: 'postgres-password' }
-            { name: 'JWT_SECRET', secretRef: 'rag-api-jwt-secret' }
-            { name: 'RAG_API_JWT_SECRET', secretRef: 'rag-api-jwt-secret' }
+            { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
           ]
           probes: [
             {

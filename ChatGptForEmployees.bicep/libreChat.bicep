@@ -24,8 +24,6 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
-@secure()
-param ragApiJwtSecret string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = envName != 'Prod'
@@ -54,7 +52,6 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-client-id', value: openIdClientId }
         { name: 'openid-client-secret', value: openIdClientSecret }
         { name: 'openid-session-secret', value: openIdSessionSecret }
-        { name: 'rag-api-jwt-secret', value: ragApiJwtSecret }
       ]
     }
     template: {
@@ -89,7 +86,6 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_CLIENT_ID', secretRef: 'openid-client-id' }
             { name: 'OPENID_CLIENT_SECRET', secretRef: 'openid-client-secret' }
             { name: 'OPENID_SESSION_SECRET', secretRef: 'openid-session-secret' }
-            { name: 'RAG_API_JWT_SECRET', secretRef: 'rag-api-jwt-secret' }
           ]
           volumeMounts: [
             {

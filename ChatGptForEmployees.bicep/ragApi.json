@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "1709792811957711465"
+      "templateHash": "1014414556554216555"
     }
   },
   "parameters": {
@@ -48,7 +48,7 @@
     "postgresPassword": {
       "type": "securestring"
     },
-    "ragApiJwtSecret": {
+    "jwtSecret": {
       "type": "securestring"
     }
   },
@@ -88,8 +88,8 @@
               "value": "[parameters('postgresPassword')]"
             },
             {
-              "name": "rag-api-jwt-secret",
-              "value": "[parameters('ragApiJwtSecret')]"
+              "name": "jwt-secret",
+              "value": "[parameters('jwtSecret')]"
             }
           ]
         },
@@ -173,11 +173,7 @@
                 },
                 {
                   "name": "JWT_SECRET",
-                  "secretRef": "rag-api-jwt-secret"
-                },
-                {
-                  "name": "RAG_API_JWT_SECRET",
-                  "secretRef": "rag-api-jwt-secret"
+                  "secretRef": "jwt-secret"
                 }
               ],
               "probes": [

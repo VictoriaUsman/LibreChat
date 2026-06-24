@@ -38,9 +38,6 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
-@secure()
-param ragApiJwtSecret string
-
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 var minReplicas = environmentName == 'Prod' ? 1 : 0
 
@@ -139,7 +136,7 @@ module ragApi 'ragApi.bicep' = {
     postgresHost: postgresql.outputs.hostname
     postgresUser: postgresql.outputs.adminUser
     postgresPassword: postgresql.outputs.adminPassword
-    ragApiJwtSecret: ragApiJwtSecret
+    jwtSecret: jwtSecret
   }
 }
 
@@ -163,7 +160,6 @@ module libreChat 'libreChat.bicep' = {
     openIdClientId: openIdClientId
     openIdClientSecret: openIdClientSecret
     openIdSessionSecret: openIdSessionSecret
-    ragApiJwtSecret: ragApiJwtSecret
   }
 }
 
