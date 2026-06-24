@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "14363190285653631207"
+      "templateHash": "8210426378718356683"
     }
   },
   "parameters": {
@@ -691,7 +691,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "2029705705669232418"
+              "templateHash": "13431341913903478671"
             }
           },
           "parameters": {
@@ -736,12 +736,6 @@
                 ],
                 "apiProperties": {
                   "serverVersion": "4.2"
-                },
-                "backupPolicy": {
-                  "type": "Continuous",
-                  "continuousModeProperties": {
-                    "tier": "Continuous7Days"
-                  }
                 }
               }
             }

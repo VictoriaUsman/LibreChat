@@ -26,12 +26,6 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     apiProperties: {
       serverVersion: '4.2'
     }
-    backupPolicy: {
-      type: 'Continuous'
-      continuousModeProperties: {
-        tier: 'Continuous7Days'
-      }
-    }
   }
 }
 
