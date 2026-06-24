@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "9448571827957644726"
+      "templateHash": "11914010941917419638"
     }
   },
   "parameters": {
@@ -700,7 +700,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "4469004917299436266"
+              "templateHash": "2686418219302178390"
             }
           },
           "parameters": {
@@ -765,6 +765,22 @@
                 "postgresServer"
               ]
             },
+            "liteLlmDb": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', variables('serverName'), 'litellm')]",
+              "dependsOn": [
+                "postgresServer"
+              ]
+            },
+            "ragApiDb": {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', variables('serverName'), 'librechat_rag')]",
+              "dependsOn": [
+                "postgresServer"
+              ]
+            },
             "allowAzureServices": {
               "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
               "apiVersion": "2024-08-01",
@@ -786,6 +802,10 @@
             "adminUser": {
               "type": "string",
               "value": "[parameters('adminUser')]"
+            },
+            "adminPassword": {
+              "type": "securestring",
+              "value": "[parameters('adminPassword')]"
             },
             "liteLlmConnectionString": {
               "type": "securestring",
@@ -1072,6 +1092,15 @@
           "databaseUrl": {
             "value": "[listOutputsWithSecureValues('postgresql', '2025-04-01').ragApiConnectionString]"
           },
+          "postgresHost": {
+            "value": "[reference('postgresql').outputs.hostname.value]"
+          },
+          "postgresUser": {
+            "value": "[reference('postgresql').outputs.adminUser.value]"
+          },
+          "postgresPassword": {
+            "value": "[listOutputsWithSecureValues('postgresql', '2025-04-01').adminPassword]"
+          },
           "ragApiJwtSecret": {
             "value": "[parameters('ragApiJwtSecret')]"
           }
@@ -1083,7 +1112,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "5793985747623596229"
+              "templateHash": "1696812104931491429"
             }
           },
           "parameters": {
@@ -1115,6 +1144,15 @@
               "type": "string"
             },
             "databaseUrl": {
+              "type": "securestring"
+            },
+            "postgresHost": {
+              "type": "string"
+            },
+            "postgresUser": {
+              "type": "string"
+            },
+            "postgresPassword": {
               "type": "securestring"
             },
             "ragApiJwtSecret": {
@@ -1151,6 +1189,10 @@
                     {
                       "name": "postgres-url",
                       "value": "[parameters('databaseUrl')]"
+                    },
+                    {
+                      "name": "postgres-password",
+                      "value": "[parameters('postgresPassword')]"
                     },
                     {
                       "name": "rag-api-jwt-secret",
@@ -1209,8 +1251,16 @@
                           "value": "100"
                         },
                         {
+                          "name": "RAG_AZURE_OPENAI_API_KEY",
+                          "secretRef": "azure-openai-api-key"
+                        },
+                        {
+                          "name": "DATABASE_URL",
+                          "secretRef": "postgres-url"
+                        },
+                        {
                           "name": "DB_HOST",
-                          "value": ""
+                          "value": "[parameters('postgresHost')]"
                         },
                         {
                           "name": "DB_PORT",
@@ -1222,22 +1272,14 @@
                         },
                         {
                           "name": "POSTGRES_USER",
-                          "value": ""
-                        },
-                        {
-                          "name": "RAG_AZURE_OPENAI_API_KEY",
-                          "secretRef": "azure-openai-api-key"
-                        },
-                        {
-                          "name": "DATABASE_URL",
-                          "secretRef": "postgres-url"
-                        },
-                        {
-                          "name": "RAG_API_JWT_SECRET",
-                          "secretRef": "rag-api-jwt-secret"
+                          "value": "[parameters('postgresUser')]"
                         },
                         {
                           "name": "POSTGRES_PASSWORD",
+                          "secretRef": "postgres-password"
+                        },
+                        {
+                          "name": "RAG_API_JWT_SECRET",
                           "secretRef": "rag-api-jwt-secret"
                         }
                       ],

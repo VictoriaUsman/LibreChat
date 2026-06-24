@@ -5,14 +5,10 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "9144537726051271720"
+      "templateHash": "3538015728866311329"
     }
   },
   "parameters": {
-    "appName": {
-      "type": "string",
-      "defaultValue": "ChatGptForEmployees"
-    },
     "envName": {
       "type": "string",
       "defaultValue": "Dev"
@@ -21,93 +17,266 @@
       "type": "string",
       "defaultValue": "eastus"
     },
-    "appServicePlanId": {
+    "environmentId": {
       "type": "string"
     },
     "libreChatImage": {
       "type": "string"
     },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0
+    },
     "appInsightsConnectionString": {
-      "type": "string",
-      "defaultValue": ""
+      "type": "string"
     },
-    "appInsightsInstrumentationKey": {
-      "type": "string",
-      "defaultValue": ""
+    "liteLlmInternalUrl": {
+      "type": "string"
     },
-    "liteLlmUrl": {
-      "type": "string",
-      "defaultValue": ""
+    "ragApiInternalUrl": {
+      "type": "string"
+    },
+    "mongoConnectionString": {
+      "type": "securestring"
+    },
+    "jwtSecret": {
+      "type": "securestring"
+    },
+    "jwtRefreshSecret": {
+      "type": "securestring"
+    },
+    "credsKey": {
+      "type": "securestring"
+    },
+    "credsIv": {
+      "type": "securestring"
+    },
+    "liteLlmVirtualKey": {
+      "type": "securestring"
+    },
+    "openIdClientId": {
+      "type": "securestring"
+    },
+    "openIdClientSecret": {
+      "type": "securestring"
+    },
+    "openIdSessionSecret": {
+      "type": "securestring"
     }
   },
   "variables": {
-    "appNameEnv": "[format('{0}LibreChat{1}', parameters('appName'), parameters('envName'))]",
-    "kvName": "[format('kv-romtech-{0}', toLower(parameters('envName')))]",
-    "keyVaultDns": "[environment().suffixes.keyvaultDns]"
+    "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]"
   },
   "resources": [
     {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2023-12-01",
-      "name": "[variables('appNameEnv')]",
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('appName')]",
       "location": "[parameters('location')]",
-      "kind": "app,linux,container",
       "identity": {
         "type": "SystemAssigned"
       },
       "properties": {
-        "serverFarmId": "[parameters('appServicePlanId')]",
-        "reserved": true,
-        "httpsOnly": true,
-        "keyVaultReferenceIdentity": "SystemAssigned",
-        "siteConfig": {
-          "linuxFxVersion": "[format('DOCKER|{0}', parameters('libreChatImage'))]",
-          "acrUseManagedIdentityCreds": true,
-          "alwaysOn": true,
-          "http20Enabled": true
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 3080,
+            "transport": "Auto",
+            "allowInsecure": false
+          },
+          "secrets": [
+            {
+              "name": "mongo-uri",
+              "value": "[parameters('mongoConnectionString')]"
+            },
+            {
+              "name": "jwt-secret",
+              "value": "[parameters('jwtSecret')]"
+            },
+            {
+              "name": "jwt-refresh-secret",
+              "value": "[parameters('jwtRefreshSecret')]"
+            },
+            {
+              "name": "creds-key",
+              "value": "[parameters('credsKey')]"
+            },
+            {
+              "name": "creds-iv",
+              "value": "[parameters('credsIv')]"
+            },
+            {
+              "name": "litellm-virtual-key",
+              "value": "[parameters('liteLlmVirtualKey')]"
+            },
+            {
+              "name": "openid-client-id",
+              "value": "[parameters('openIdClientId')]"
+            },
+            {
+              "name": "openid-client-secret",
+              "value": "[parameters('openIdClientSecret')]"
+            },
+            {
+              "name": "openid-session-secret",
+              "value": "[parameters('openIdSessionSecret')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "librechat",
+              "image": "[parameters('libreChatImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "value": "[parameters('appInsightsConnectionString')]"
+                },
+                {
+                  "name": "HOST",
+                  "value": "0.0.0.0"
+                },
+                {
+                  "name": "PORT",
+                  "value": "3080"
+                },
+                {
+                  "name": "NODE_ENV",
+                  "value": "production"
+                },
+                {
+                  "name": "ALLOW_REGISTRATION",
+                  "value": "false"
+                },
+                {
+                  "name": "ALLOW_SOCIAL_LOGIN",
+                  "value": "true"
+                },
+                {
+                  "name": "LITELLM_URL",
+                  "value": "[format('http://{0}', parameters('liteLlmInternalUrl'))]"
+                },
+                {
+                  "name": "RAG_API_URL",
+                  "value": "[format('http://{0}', parameters('ragApiInternalUrl'))]"
+                },
+                {
+                  "name": "OPENID_ISSUER",
+                  "value": "https://romtech.okta.com/oauth2/default"
+                },
+                {
+                  "name": "OPENID_SCOPE",
+                  "value": "openid profile email"
+                },
+                {
+                  "name": "OPENID_BUTTON_TEXT",
+                  "value": "Login with ROMTech Okta"
+                },
+                {
+                  "name": "OPENID_CALLBACK_URL",
+                  "value": "/oauth/openid/callback"
+                },
+                {
+                  "name": "MONGO_URI",
+                  "secretRef": "mongo-uri"
+                },
+                {
+                  "name": "JWT_SECRET",
+                  "secretRef": "jwt-secret"
+                },
+                {
+                  "name": "JWT_REFRESH_SECRET",
+                  "secretRef": "jwt-refresh-secret"
+                },
+                {
+                  "name": "CREDS_KEY",
+                  "secretRef": "creds-key"
+                },
+                {
+                  "name": "CREDS_IV",
+                  "secretRef": "creds-iv"
+                },
+                {
+                  "name": "LITELLM_VIRTUAL_KEY",
+                  "secretRef": "litellm-virtual-key"
+                },
+                {
+                  "name": "OPENID_CLIENT_ID",
+                  "secretRef": "openid-client-id"
+                },
+                {
+                  "name": "OPENID_CLIENT_SECRET",
+                  "secretRef": "openid-client-secret"
+                },
+                {
+                  "name": "OPENID_SESSION_SECRET",
+                  "secretRef": "openid-session-secret"
+                }
+              ],
+              "volumeMounts": [
+                {
+                  "volumeName": "librechat-data",
+                  "mountPath": "/app/api/data"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3080
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3080
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "librechat-data",
+              "storageType": "AzureFile",
+              "storageName": "librechat-data-store"
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": 2
+          }
         }
       }
-    },
-    {
-      "type": "Microsoft.Web/sites/config",
-      "apiVersion": "2023-12-01",
-      "name": "[format('{0}/{1}', variables('appNameEnv'), 'appsettings')]",
-      "properties": {
-        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[parameters('appInsightsConnectionString')]",
-        "APPINSIGHTS_INSTRUMENTATIONKEY": "[parameters('appInsightsInstrumentationKey')]",
-        "WEBSITES_PORT": "3080",
-        "PORT": "3080",
-        "NODE_ENV": "production",
-        "ENDPOINTS": "custom",
-        "ALLOW_REGISTRATION": "false",
-        "ALLOW_SOCIAL_LOGIN": "true",
-        "OPENID_ISSUER": "https://romtech.okta.com/oauth2/default",
-        "OPENID_BUTTON_TEXT": "Login with ROMTech Okta",
-        "OPENID_CALLBACK_URL": "[format('https://{0}/api/auth/openid/callback', reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01').defaultHostName)]",
-        "LITELLM_URL": "[format('{0}/v1', parameters('liteLlmUrl'))]",
-        "MONGO_URI": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-MongoUri/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "JWT_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-JwtSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "JWT_REFRESH_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-JwtRefreshSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "CREDS_KEY": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-CredsKey/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "CREDS_IV": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-CredsIv/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "LITELLM_VIRTUAL_KEY": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-LiteLLMVirtualKey/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "OPENID_CLIENT_ID": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdClientId/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "OPENID_CLIENT_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdClientSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]",
-        "OPENID_SESSION_SECRET": "[format('@Microsoft.KeyVault(SecretUri=https://{0}{1}/secrets/{2}-OpenIdSessionSecret/)', variables('kvName'), variables('keyVaultDns'), variables('appNameEnv'))]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('appNameEnv'))]"
-      ]
     }
   ],
   "outputs": {
-    "appUrl": {
+    "fqdn": {
       "type": "string",
-      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01').defaultHostName)]"
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
     },
-    "systemManagedIdentityId": {
+    "principalId": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Web/sites', variables('appNameEnv')), '2023-12-01', 'full').identity.principalId]"
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "appName": {
+      "type": "string",
+      "value": "[variables('appName')]"
     }
   }
 }
