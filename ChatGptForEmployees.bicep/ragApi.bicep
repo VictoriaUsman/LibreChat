@@ -30,7 +30,7 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: false
         targetPort: 8000
         transport: 'Auto'
-        allowInsecure: false
+        allowInsecure: true
       }
       secrets: [
         { name: 'azure-openai-api-key', value: azureOpenAiApiKey }

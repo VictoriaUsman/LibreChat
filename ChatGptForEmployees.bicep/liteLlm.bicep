@@ -26,7 +26,7 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: false
         targetPort: 4000
         transport: 'Auto'
-        allowInsecure: false
+        allowInsecure: true
       }
       secrets: [
         { name: 'litellm-master-key', value: liteLlmMasterKey }
