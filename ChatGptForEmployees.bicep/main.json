@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "18052492872813531294"
+      "templateHash": "5023598619563680629"
     }
   },
   "parameters": {
@@ -67,10 +67,6 @@
     "postgresAdminUser": {
       "type": "string",
       "defaultValue": "cgfeadmin"
-    },
-    "allowRegistration": {
-      "type": "bool",
-      "defaultValue": false
     },
     "postgresAdminPassword": {
       "type": "securestring"
@@ -1446,9 +1442,6 @@
           "minReplicas": {
             "value": "[variables('minReplicas')]"
           },
-          "allowRegistration": {
-            "value": "[parameters('allowRegistration')]"
-          },
           "appInsightsConnectionString": {
             "value": "[reference('applicationInsights').outputs.appiConnString.value]"
           },
@@ -1493,7 +1486,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "4357533616589816445"
+              "templateHash": "9734011252620298525"
             }
           },
           "parameters": {
@@ -1514,10 +1507,6 @@
             "minReplicas": {
               "type": "int",
               "defaultValue": 0
-            },
-            "allowRegistration": {
-              "type": "bool",
-              "defaultValue": false
             },
             "appInsightsConnectionString": {
               "type": "string"
@@ -1557,7 +1546,8 @@
             }
           },
           "variables": {
-            "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]"
+            "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]",
+            "allowRegistration": "[not(equals(parameters('envName'), 'Prod'))]"
           },
           "resources": [
             {
@@ -1645,7 +1635,7 @@
                         },
                         {
                           "name": "ALLOW_REGISTRATION",
-                          "value": "[if(parameters('allowRegistration'), 'true', 'false')]"
+                          "value": "[if(variables('allowRegistration'), 'true', 'false')]"
                         },
                         {
                           "name": "ALLOW_SOCIAL_LOGIN",

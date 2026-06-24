@@ -17,7 +17,6 @@ param fastModelName string = 'gpt-4o-mini'
 param embeddingsModelName string = 'text-embedding-3-small'
 
 param postgresAdminUser string = 'cgfeadmin'
-param allowRegistration bool = false
 @secure()
 param postgresAdminPassword string
 
@@ -152,7 +151,6 @@ module libreChat 'libreChat.bicep' = {
     environmentId: containerAppsEnvironment.outputs.environmentId
     libreChatImage: libreChatImage
     minReplicas: minReplicas
-    allowRegistration: allowRegistration
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     liteLlmInternalUrl: liteLlm.outputs.fqdn
     ragApiInternalUrl: ragApi.outputs.fqdn

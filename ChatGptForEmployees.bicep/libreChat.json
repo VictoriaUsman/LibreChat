@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "4357533616589816445"
+      "templateHash": "9734011252620298525"
     }
   },
   "parameters": {
@@ -26,10 +26,6 @@
     "minReplicas": {
       "type": "int",
       "defaultValue": 0
-    },
-    "allowRegistration": {
-      "type": "bool",
-      "defaultValue": false
     },
     "appInsightsConnectionString": {
       "type": "string"
@@ -69,7 +65,8 @@
     }
   },
   "variables": {
-    "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]"
+    "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]",
+    "allowRegistration": "[not(equals(parameters('envName'), 'Prod'))]"
   },
   "resources": [
     {
@@ -157,7 +154,7 @@
                 },
                 {
                   "name": "ALLOW_REGISTRATION",
-                  "value": "[if(parameters('allowRegistration'), 'true', 'false')]"
+                  "value": "[if(variables('allowRegistration'), 'true', 'false')]"
                 },
                 {
                   "name": "ALLOW_SOCIAL_LOGIN",
