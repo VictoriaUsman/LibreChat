@@ -63,10 +63,10 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CHUNK_OVERLAP', value: '100' }
             { name: 'RAG_AZURE_OPENAI_API_KEY', secretRef: 'azure-openai-api-key' }
             { name: 'DATABASE_URL', secretRef: 'postgres-url' }
-            { name: 'POSTGRES_HOST', value: postgresHost }
-            { name: 'POSTGRES_USER', value: postgresUser }
+            { name: 'DB_HOST', value: postgresHost }
+            { name: 'DB_PORT', value: '5432' }
             { name: 'POSTGRES_DB', value: 'librechat_rag' }
-            { name: 'POSTGRES_PORT', value: '5432' }
+            { name: 'POSTGRES_USER', value: postgresUser }
             { name: 'POSTGRES_PASSWORD', secretRef: 'postgres-password' }
             { name: 'RAG_API_JWT_SECRET', secretRef: 'rag-api-jwt-secret' }
           ]
