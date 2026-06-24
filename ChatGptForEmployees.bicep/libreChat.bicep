@@ -69,6 +69,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'NODE_ENV', value: 'production' }
             { name: 'ALLOW_REGISTRATION', value: 'false' }
             { name: 'ALLOW_SOCIAL_LOGIN', value: 'true' }
+            { name: 'CONFIG_PATH', value: '/app/api/data/librechat.yaml' }
             { name: 'LITELLM_URL', value: 'http://${liteLlmInternalUrl}' }
             { name: 'RAG_API_URL', value: 'http://${ragApiInternalUrl}' }
             { name: 'OPENID_ISSUER', value: 'https://romtech.okta.com/oauth2/default' }

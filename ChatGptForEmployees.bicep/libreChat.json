@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "3538015728866311329"
+      "templateHash": "13133225311124529103"
     }
   },
   "parameters": {
@@ -158,6 +158,10 @@
                 {
                   "name": "ALLOW_SOCIAL_LOGIN",
                   "value": "true"
+                },
+                {
+                  "name": "CONFIG_PATH",
+                  "value": "/app/api/data/librechat.yaml"
                 },
                 {
                   "name": "LITELLM_URL",
