@@ -3,6 +3,7 @@ param location string = 'eastus'
 param environmentId string
 param libreChatImage string
 param minReplicas int = 0
+param allowRegistration bool = false
 param appInsightsConnectionString string
 param liteLlmInternalUrl string
 param ragApiInternalUrl string
@@ -67,7 +68,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'HOST', value: '0.0.0.0' }
             { name: 'PORT', value: '3080' }
             { name: 'NODE_ENV', value: 'production' }
-            { name: 'ALLOW_REGISTRATION', value: 'false' }
+            { name: 'ALLOW_REGISTRATION', value: allowRegistration ? 'true' : 'false' }
             { name: 'ALLOW_SOCIAL_LOGIN', value: 'true' }
             { name: 'CONFIG_PATH', value: '/app/api/data/librechat.yaml' }
             { name: 'LITELLM_URL', value: 'http://${liteLlmInternalUrl}' }

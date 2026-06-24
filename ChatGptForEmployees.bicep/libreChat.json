@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "13133225311124529103"
+      "templateHash": "4357533616589816445"
     }
   },
   "parameters": {
@@ -26,6 +26,10 @@
     "minReplicas": {
       "type": "int",
       "defaultValue": 0
+    },
+    "allowRegistration": {
+      "type": "bool",
+      "defaultValue": false
     },
     "appInsightsConnectionString": {
       "type": "string"
@@ -153,7 +157,7 @@
                 },
                 {
                   "name": "ALLOW_REGISTRATION",
-                  "value": "false"
+                  "value": "[if(parameters('allowRegistration'), 'true', 'false')]"
                 },
                 {
                   "name": "ALLOW_SOCIAL_LOGIN",

@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "5936779970156481948"
+      "templateHash": "18052492872813531294"
     }
   },
   "parameters": {
@@ -67,6 +67,10 @@
     "postgresAdminUser": {
       "type": "string",
       "defaultValue": "cgfeadmin"
+    },
+    "allowRegistration": {
+      "type": "bool",
+      "defaultValue": false
     },
     "postgresAdminPassword": {
       "type": "securestring"
@@ -1442,6 +1446,9 @@
           "minReplicas": {
             "value": "[variables('minReplicas')]"
           },
+          "allowRegistration": {
+            "value": "[parameters('allowRegistration')]"
+          },
           "appInsightsConnectionString": {
             "value": "[reference('applicationInsights').outputs.appiConnString.value]"
           },
@@ -1486,7 +1493,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "13133225311124529103"
+              "templateHash": "4357533616589816445"
             }
           },
           "parameters": {
@@ -1507,6 +1514,10 @@
             "minReplicas": {
               "type": "int",
               "defaultValue": 0
+            },
+            "allowRegistration": {
+              "type": "bool",
+              "defaultValue": false
             },
             "appInsightsConnectionString": {
               "type": "string"
@@ -1634,7 +1645,7 @@
                         },
                         {
                           "name": "ALLOW_REGISTRATION",
-                          "value": "false"
+                          "value": "[if(parameters('allowRegistration'), 'true', 'false')]"
                         },
                         {
                           "name": "ALLOW_SOCIAL_LOGIN",

@@ -14,6 +14,7 @@ param fastModelName = 'gpt-4o-mini'
 param embeddingsModelName = 'text-embedding-3-small'
 
 param postgresAdminUser = 'cgfeadmin'
+param allowRegistration = true
 
 // Secrets from Key Vault
 param postgresAdminPassword    = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-PostgresAdminPassword')
