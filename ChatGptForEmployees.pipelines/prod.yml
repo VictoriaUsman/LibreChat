@@ -62,11 +62,22 @@ stages:
                   --source "$(Build.SourcesDirectory)/ChatGptForEmployees/config/litellm_routing_config.yaml" \
                   --path "litellm_routing_config.yaml"
 
+                LITELLM_FQDN=$(az containerapp show \
+                  --name $(appNameEnvLiteLLM) \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.configuration.ingress.fqdn" \
+                  --output tsv)
+                LITELLM_URL="http://${LITELLM_FQDN}"
+
+                sed "s|\${LITELLM_URL}|${LITELLM_URL}|g" \
+                  "$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml" \
+                  > /tmp/librechat_processed.yaml
+
                 az storage file upload \
                   --account-name $(storageAccountName) \
                   --account-key "$STORAGE_KEY" \
                   --share-name librechat-data \
-                  --source "$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml" \
+                  --source "/tmp/librechat_processed.yaml" \
                   --path "librechat.yaml"
 
   - stage: DeployLiteLLM
