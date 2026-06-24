@@ -44,8 +44,6 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'rag-api'
           image: ragApiImage
-          command: ['/bin/sh', '-c']
-          args: ['rm -f /app/.env && python -m uvicorn main:app --host 0.0.0.0 --port 8000']
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
