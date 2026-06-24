@@ -53,9 +53,9 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'PORT', value: '8000' }
             { name: 'LOG_LEVEL', value: 'INFO' }
             { name: 'EMBEDDINGS_PROVIDER', value: 'azure' }
+            { name: 'EMBEDDINGS_MODEL', value: embeddingsDeploymentName }
             { name: 'RAG_AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
-            { name: 'RAG_AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT', value: embeddingsDeploymentName }
-            { name: 'RAG_AZURE_OPENAI_API_VERSION', value: '2024-02-01' }
+            { name: 'RAG_AZURE_OPENAI_API_VERSION', value: '2024-10-21' }
             { name: 'COLLECTION_NAME', value: 'librechat' }
             { name: 'CHUNK_SIZE', value: '1500' }
             { name: 'CHUNK_OVERLAP', value: '100' }
