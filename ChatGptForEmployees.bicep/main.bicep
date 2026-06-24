@@ -40,8 +40,6 @@ param openIdClientSecret string
 param openIdSessionSecret string
 @secure()
 param ragApiJwtSecret string
-@secure()
-param mongoConnectionString string
 
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 var minReplicas = environmentName == 'Prod' ? 1 : 0
@@ -89,6 +87,14 @@ module aiFoundry 'aiFoundry.bicep' = {
     flagshipModelName: flagshipModelName
     fastModelName: fastModelName
     embeddingsModelName: embeddingsModelName
+  }
+}
+
+module cosmosDb 'cosmosDb.bicep' = {
+  name: 'cosmosDb'
+  params: {
+    envName: environmentName
+    location: location
   }
 }
 
@@ -148,7 +154,7 @@ module libreChat 'libreChat.bicep' = {
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     liteLlmInternalUrl: liteLlm.outputs.fqdn
     ragApiInternalUrl: ragApi.outputs.fqdn
-    mongoConnectionString: mongoConnectionString
+    mongoConnectionString: cosmosDb.outputs.connectionString
     jwtSecret: jwtSecret
     jwtRefreshSecret: jwtRefreshSecret
     credsKey: credsKey

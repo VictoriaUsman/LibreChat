@@ -1,0 +1,41 @@
+param envName string = 'Dev'
+param location string = 'eastus'
+
+var accountName = 'cosmos-cgfe-${toLower(envName)}'
+
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+  name: accountName
+  location: location
+  kind: 'MongoDB'
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    capabilities: [
+      { name: 'EnableMongo' }
+      { name: 'EnableServerless' }
+    ]
+    consistencyPolicy: {
+      defaultConsistencyLevel: 'Session'
+    }
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+        isZoneRedundant: false
+      }
+    ]
+    apiProperties: {
+      serverVersion: '4.2'
+    }
+    backupPolicy: {
+      type: 'Continuous'
+      continuousModeProperties: {
+        tier: 'Continuous7Days'
+      }
+    }
+  }
+}
+
+var primaryKey = cosmosAccount.listKeys().primaryMasterKey
+
+@secure()
+output connectionString string = 'mongodb://${accountName}:${primaryKey}@${accountName}.mongo.cosmos.azure.com:10255/LibreChat?ssl=true&retrywrites=false&maxIdleTimeMS=120000&appName=@${accountName}@'

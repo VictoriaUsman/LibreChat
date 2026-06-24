@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "11914010941917419638"
+      "templateHash": "14363190285653631207"
     }
   },
   "parameters": {
@@ -99,9 +99,6 @@
       "type": "securestring"
     },
     "ragApiJwtSecret": {
-      "type": "securestring"
-    },
-    "mongoConnectionString": {
       "type": "securestring"
     }
   },
@@ -664,6 +661,95 @@
             "embeddingsDeploymentName": {
               "type": "string",
               "value": "romtech-embeddings"
+            }
+          }
+        }
+      }
+    },
+    "cosmosDb": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "cosmosDb",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "envName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "2029705705669232418"
+            }
+          },
+          "parameters": {
+            "envName": {
+              "type": "string",
+              "defaultValue": "Dev"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus"
+            }
+          },
+          "variables": {
+            "accountName": "[format('cosmos-cgfe-{0}', toLower(parameters('envName')))]"
+          },
+          "resources": {
+            "cosmosAccount": {
+              "type": "Microsoft.DocumentDB/databaseAccounts",
+              "apiVersion": "2024-05-15",
+              "name": "[variables('accountName')]",
+              "location": "[parameters('location')]",
+              "kind": "MongoDB",
+              "properties": {
+                "databaseAccountOfferType": "Standard",
+                "capabilities": [
+                  {
+                    "name": "EnableMongo"
+                  },
+                  {
+                    "name": "EnableServerless"
+                  }
+                ],
+                "consistencyPolicy": {
+                  "defaultConsistencyLevel": "Session"
+                },
+                "locations": [
+                  {
+                    "locationName": "[parameters('location')]",
+                    "failoverPriority": 0,
+                    "isZoneRedundant": false
+                  }
+                ],
+                "apiProperties": {
+                  "serverVersion": "4.2"
+                },
+                "backupPolicy": {
+                  "type": "Continuous",
+                  "continuousModeProperties": {
+                    "tier": "Continuous7Days"
+                  }
+                }
+              }
+            }
+          },
+          "outputs": {
+            "connectionString": {
+              "type": "securestring",
+              "value": "[format('mongodb://{0}:{1}@{2}.mongo.cosmos.azure.com:10255/LibreChat?ssl=true&retrywrites=false&maxIdleTimeMS=120000&appName=@{3}@', variables('accountName'), listKeys('cosmosAccount', '2024-05-15').primaryMasterKey, variables('accountName'), variables('accountName'))]"
             }
           }
         }
@@ -1372,7 +1458,7 @@
             "value": "[reference('ragApi').outputs.fqdn.value]"
           },
           "mongoConnectionString": {
-            "value": "[parameters('mongoConnectionString')]"
+            "value": "[listOutputsWithSecureValues('cosmosDb', '2025-04-01').connectionString]"
           },
           "jwtSecret": {
             "value": "[parameters('jwtSecret')]"
@@ -1685,6 +1771,7 @@
       "dependsOn": [
         "applicationInsights",
         "containerAppsEnvironment",
+        "cosmosDb",
         "liteLlm",
         "ragApi"
       ]
