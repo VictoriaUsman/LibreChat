@@ -19,7 +19,7 @@ model_list:
       model: azure/romtech-standard
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
-      api_version: "2024-02-01"
+      api_version: "2024-10-21"
 
   # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
@@ -27,7 +27,7 @@ model_list:
       model: azure/romtech-fast
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
-      api_version: "2024-02-01"
+      api_version: "2024-10-21"
 
 
 router_settings:
