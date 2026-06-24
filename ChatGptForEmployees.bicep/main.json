@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "5023598619563680629"
+      "templateHash": "11958319105470269639"
     }
   },
   "parameters": {
@@ -947,7 +947,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "18241157421129512610"
+              "templateHash": "5904185317800009491"
             }
           },
           "parameters": {
@@ -1005,7 +1005,7 @@
                     "external": false,
                     "targetPort": 4000,
                     "transport": "Auto",
-                    "allowInsecure": false
+                    "allowInsecure": true
                   },
                   "secrets": [
                     {
@@ -1192,7 +1192,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "1696812104931491429"
+              "templateHash": "1709792811957711465"
             }
           },
           "parameters": {
@@ -1259,7 +1259,7 @@
                     "external": false,
                     "targetPort": 8000,
                     "transport": "Auto",
-                    "allowInsecure": false
+                    "allowInsecure": true
                   },
                   "secrets": [
                     {
@@ -1307,16 +1307,16 @@
                           "value": "azure"
                         },
                         {
+                          "name": "EMBEDDINGS_MODEL",
+                          "value": "[parameters('embeddingsDeploymentName')]"
+                        },
+                        {
                           "name": "RAG_AZURE_OPENAI_ENDPOINT",
                           "value": "[parameters('azureOpenAiEndpoint')]"
                         },
                         {
-                          "name": "RAG_AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT",
-                          "value": "[parameters('embeddingsDeploymentName')]"
-                        },
-                        {
                           "name": "RAG_AZURE_OPENAI_API_VERSION",
-                          "value": "2024-02-01"
+                          "value": "2024-10-21"
                         },
                         {
                           "name": "COLLECTION_NAME",
@@ -1357,6 +1357,10 @@
                         {
                           "name": "POSTGRES_PASSWORD",
                           "secretRef": "postgres-password"
+                        },
+                        {
+                          "name": "JWT_SECRET",
+                          "secretRef": "rag-api-jwt-secret"
                         },
                         {
                           "name": "RAG_API_JWT_SECRET",
@@ -1477,6 +1481,9 @@
           },
           "openIdSessionSecret": {
             "value": "[parameters('openIdSessionSecret')]"
+          },
+          "ragApiJwtSecret": {
+            "value": "[parameters('ragApiJwtSecret')]"
           }
         },
         "template": {
@@ -1486,7 +1493,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.38.33.27573",
-              "templateHash": "9734011252620298525"
+              "templateHash": "15391777311338742026"
             }
           },
           "parameters": {
@@ -1542,6 +1549,9 @@
               "type": "securestring"
             },
             "openIdSessionSecret": {
+              "type": "securestring"
+            },
+            "ragApiJwtSecret": {
               "type": "securestring"
             }
           },
@@ -1604,6 +1614,10 @@
                     {
                       "name": "openid-session-secret",
                       "value": "[parameters('openIdSessionSecret')]"
+                    },
+                    {
+                      "name": "rag-api-jwt-secret",
+                      "value": "[parameters('ragApiJwtSecret')]"
                     }
                   ]
                 },
@@ -1704,6 +1718,10 @@
                         {
                           "name": "OPENID_SESSION_SECRET",
                           "secretRef": "openid-session-secret"
+                        },
+                        {
+                          "name": "RAG_API_JWT_SECRET",
+                          "secretRef": "rag-api-jwt-secret"
                         }
                       ],
                       "volumeMounts": [

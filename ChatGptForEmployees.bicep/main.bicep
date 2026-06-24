@@ -163,6 +163,7 @@ module libreChat 'libreChat.bicep' = {
     openIdClientId: openIdClientId
     openIdClientSecret: openIdClientSecret
     openIdSessionSecret: openIdSessionSecret
+    ragApiJwtSecret: ragApiJwtSecret
   }
 }
 

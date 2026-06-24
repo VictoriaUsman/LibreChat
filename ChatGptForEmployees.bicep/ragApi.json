@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "3616066913420302135"
+      "templateHash": "1709792811957711465"
     }
   },
   "parameters": {
@@ -170,6 +170,10 @@
                 {
                   "name": "POSTGRES_PASSWORD",
                   "secretRef": "postgres-password"
+                },
+                {
+                  "name": "JWT_SECRET",
+                  "secretRef": "rag-api-jwt-secret"
                 },
                 {
                   "name": "RAG_API_JWT_SECRET",
