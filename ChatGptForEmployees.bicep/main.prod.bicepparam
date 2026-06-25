@@ -9,8 +9,8 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.7.5'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4o'
-param fastModelName = 'gpt-4o-mini'
+param flagshipModelName = 'gpt-4.1'
+param fastModelName = 'gpt-4.1-mini'
 param embeddingsModelName = 'text-embedding-3-small'
 
 param flagshipCapacity = 50
