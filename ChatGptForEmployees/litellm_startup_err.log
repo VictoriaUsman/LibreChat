@@ -1,0 +1,50 @@
+2026-05-29 02:04:20,678 - litellm_proxy_extras - INFO - Running prisma migrate deploy
+2026-05-29 02:04:26,483 - litellm_proxy_extras - INFO - prisma migrate deploy stdout: Prisma schema loaded from schema.prisma
+Datasource "client": PostgreSQL database "litellm", schema "public" at "localhost:5432"
+
+122 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+
+2026-05-29 02:04:26,488 - litellm_proxy_extras - INFO - prisma migrate deploy completed
+2026-05-29 02:04:26,488 - litellm_proxy_extras - INFO - No pending migrations — skipping post-migration sanity check
+INFO:     Started server process [19724]
+INFO:     Waiting for application startup.
+[92m02:04:31 - LiteLLM Proxy:WARNING[0m: proxy_server.py:840 - Password migration skipped: All connection attempts failed
+[92m02:04:31 - LiteLLM Proxy:ERROR[0m: vantage_endpoints.py:275 - Error checking Vantage status: All connection attempts failed
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+ERROR:    Traceback (most recent call last):
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 123, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\routing.py", line 701, in lifespan
+    await receive()
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\site-packages\uvicorn\lifespan\on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\THISPC\AppData\Local\Programs\Python\Python312\Lib\asyncio\queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000002B269DE5430>

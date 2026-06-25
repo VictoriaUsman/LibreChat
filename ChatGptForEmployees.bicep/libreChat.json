@@ -1,0 +1,287 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "9734011252620298525"
+    }
+  },
+  "parameters": {
+    "envName": {
+      "type": "string",
+      "defaultValue": "Dev"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "environmentId": {
+      "type": "string"
+    },
+    "libreChatImage": {
+      "type": "string"
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "appInsightsConnectionString": {
+      "type": "string"
+    },
+    "liteLlmInternalUrl": {
+      "type": "string"
+    },
+    "ragApiInternalUrl": {
+      "type": "string"
+    },
+    "mongoConnectionString": {
+      "type": "securestring"
+    },
+    "jwtSecret": {
+      "type": "securestring"
+    },
+    "jwtRefreshSecret": {
+      "type": "securestring"
+    },
+    "credsKey": {
+      "type": "securestring"
+    },
+    "credsIv": {
+      "type": "securestring"
+    },
+    "liteLlmVirtualKey": {
+      "type": "securestring"
+    },
+    "openIdClientId": {
+      "type": "securestring"
+    },
+    "openIdClientSecret": {
+      "type": "securestring"
+    },
+    "openIdSessionSecret": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "appName": "[format('ca-librechat-{0}', toLower(parameters('envName')))]",
+    "allowRegistration": "[not(equals(parameters('envName'), 'Prod'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 3080,
+            "transport": "Auto",
+            "allowInsecure": false
+          },
+          "secrets": [
+            {
+              "name": "mongo-uri",
+              "value": "[parameters('mongoConnectionString')]"
+            },
+            {
+              "name": "jwt-secret",
+              "value": "[parameters('jwtSecret')]"
+            },
+            {
+              "name": "jwt-refresh-secret",
+              "value": "[parameters('jwtRefreshSecret')]"
+            },
+            {
+              "name": "creds-key",
+              "value": "[parameters('credsKey')]"
+            },
+            {
+              "name": "creds-iv",
+              "value": "[parameters('credsIv')]"
+            },
+            {
+              "name": "litellm-virtual-key",
+              "value": "[parameters('liteLlmVirtualKey')]"
+            },
+            {
+              "name": "openid-client-id",
+              "value": "[parameters('openIdClientId')]"
+            },
+            {
+              "name": "openid-client-secret",
+              "value": "[parameters('openIdClientSecret')]"
+            },
+            {
+              "name": "openid-session-secret",
+              "value": "[parameters('openIdSessionSecret')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "librechat",
+              "image": "[parameters('libreChatImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "value": "[parameters('appInsightsConnectionString')]"
+                },
+                {
+                  "name": "HOST",
+                  "value": "0.0.0.0"
+                },
+                {
+                  "name": "PORT",
+                  "value": "3080"
+                },
+                {
+                  "name": "NODE_ENV",
+                  "value": "production"
+                },
+                {
+                  "name": "ALLOW_REGISTRATION",
+                  "value": "[if(variables('allowRegistration'), 'true', 'false')]"
+                },
+                {
+                  "name": "ALLOW_SOCIAL_LOGIN",
+                  "value": "true"
+                },
+                {
+                  "name": "CONFIG_PATH",
+                  "value": "/app/api/data/librechat.yaml"
+                },
+                {
+                  "name": "LITELLM_URL",
+                  "value": "[format('http://{0}', parameters('liteLlmInternalUrl'))]"
+                },
+                {
+                  "name": "RAG_API_URL",
+                  "value": "[format('http://{0}', parameters('ragApiInternalUrl'))]"
+                },
+                {
+                  "name": "OPENID_ISSUER",
+                  "value": "https://romtech.okta.com/oauth2/default"
+                },
+                {
+                  "name": "OPENID_SCOPE",
+                  "value": "openid profile email"
+                },
+                {
+                  "name": "OPENID_BUTTON_TEXT",
+                  "value": "Login with ROMTech Okta"
+                },
+                {
+                  "name": "OPENID_CALLBACK_URL",
+                  "value": "/oauth/openid/callback"
+                },
+                {
+                  "name": "MONGO_URI",
+                  "secretRef": "mongo-uri"
+                },
+                {
+                  "name": "JWT_SECRET",
+                  "secretRef": "jwt-secret"
+                },
+                {
+                  "name": "JWT_REFRESH_SECRET",
+                  "secretRef": "jwt-refresh-secret"
+                },
+                {
+                  "name": "CREDS_KEY",
+                  "secretRef": "creds-key"
+                },
+                {
+                  "name": "CREDS_IV",
+                  "secretRef": "creds-iv"
+                },
+                {
+                  "name": "LITELLM_VIRTUAL_KEY",
+                  "secretRef": "litellm-virtual-key"
+                },
+                {
+                  "name": "OPENID_CLIENT_ID",
+                  "secretRef": "openid-client-id"
+                },
+                {
+                  "name": "OPENID_CLIENT_SECRET",
+                  "secretRef": "openid-client-secret"
+                },
+                {
+                  "name": "OPENID_SESSION_SECRET",
+                  "secretRef": "openid-session-secret"
+                }
+              ],
+              "volumeMounts": [
+                {
+                  "volumeName": "librechat-data",
+                  "mountPath": "/app/api/data"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3080
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3080
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "librechat-data",
+              "storageType": "AzureFile",
+              "storageName": "librechat-data-store"
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": 2
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "appName": {
+      "type": "string",
+      "value": "[variables('appName')]"
+    }
+  }
+}

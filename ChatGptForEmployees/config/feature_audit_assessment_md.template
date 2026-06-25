@@ -1,0 +1,202 @@
+# LibreChat Feature Audit — Phase 0 Assessment
+**PBI 9130 | Section 4A and 4H of Phase 0 Plan**
+
+Complete this document after running `scripts/validate_librechat_features.py` and
+reviewing the live LibreChat instance with the recommended `librechat.yaml` applied.
+
+---
+
+## Phase 0 Validation Result
+
+<!-- FINDING: Did validate_librechat_features.py pass? Were all disabled features
+     confirmed hidden in the browser? -->
+
+- [ ] All tests passed — feature configuration confirmed
+- [ ] Tests failed — see findings below
+
+---
+
+## Feature Configuration Applied
+
+The following `librechat.yaml` interface configuration was applied for Phase 0:
+
+```yaml
+interface:
+  modelSelect: true
+  parameters: true
+  presets: true
+  sidePanel: true
+  prompts:
+    use: true
+    create: true
+    share: false
+    public: false
+  endpointsMenu: false
+
+capabilities: []
+```
+
+**Finding — Configuration applied successfully:**
+<!-- FINDING: Was the librechat.yaml placed at /app/api/data/librechat.yaml?
+     Did LibreChat pick it up after restart without errors? -->
+
+---
+
+## Feature Audit Results
+
+For each feature, record its observed state in the live Phase 0 environment.
+
+| Feature | Default State | v1 Recommendation | Config Override | Observed in Phase 0 | Notes |
+|---|---|---|---|---|---|
+| Model selection dropdown | Enabled | Enable for v1 | `modelSelect: true` | <!-- Yes/No/Partial --> | |
+| Generation parameter controls | Enabled | Enable for v1 | `parameters: true` | <!-- Yes/No/Partial --> | |
+| Preset / system prompt templates | Enabled | Enable for v1 | `presets: true` | <!-- Yes/No/Partial --> | |
+| Conversation sidebar | Enabled | Enable for v1 | `sidePanel: true` | <!-- Yes/No/Partial --> | |
+| Public prompt sharing | Enabled | Disable for v1 | `prompts.share: false` + `prompts.public: false` | <!-- Hidden/Still visible --> | |
+| Endpoints menu (raw vendor access) | Enabled | Disable for v1 | `endpointsMenu: false` | <!-- Hidden/Still visible --> | |
+| File upload / document ingestion | Enabled | Disable for v1 | `capabilities: []` | <!-- Hidden/Still visible --> | |
+| Plugin marketplace / web search | Enabled | Disable for v1 | `capabilities: []` | <!-- Hidden/Still visible --> | |
+| Code interpreter runtime | Enabled | Disable for v1 | `capabilities: []` | <!-- Hidden/Still visible --> | |
+| RAG / file index search | Enabled | Disable for v1 | `capabilities: []` | <!-- Hidden/Still visible --> | |
+
+---
+
+## 1. Model Selection
+
+**Expected behavior:** Users see a model picker showing only "ROMTech AI Standard" and
+"ROMTech AI Fast". No raw Azure deployment names (e.g. `gpt-4o`, `azure/gpt-4o`) appear.
+
+**Phase 0 finding:**
+<!-- FINDING: What models appeared in the picker? Did raw Azure names appear?
+     Did "fetch: true" in librechat.yaml correctly pull the list from LiteLLM? -->
+
+**Assessment:**
+- [ ] Correct — only approved models visible
+- [ ] Partial — some unexpected models visible (describe below)
+- [ ] Blocked — model picker not working
+
+---
+
+## 2. Endpoints Menu
+
+**Expected behavior:** The endpoint switcher (allowing users to configure raw OpenAI,
+Anthropic, or other endpoints) should be completely hidden from the UI.
+
+**Phase 0 finding:**
+<!-- FINDING: Was the endpoint menu hidden? Did any path in the UI still expose
+     raw endpoint configuration? -->
+
+**Assessment:**
+- [ ] Endpoints menu fully hidden — users cannot add or switch endpoints
+- [ ] Partially hidden — describe what was still accessible
+- [ ] Not hidden — requires investigation
+
+---
+
+## 3. Capabilities (File Upload, Plugins, Code Interpreter, RAG)
+
+**Expected behavior:** The `capabilities: []` setting should hide all file attachment
+buttons, the plugin marketplace, the code interpreter, and RAG document ingestion.
+
+**Phase 0 finding:**
+<!-- FINDING: Were all capability UI elements hidden? Were there any attachment buttons,
+     plugin icons, or code interpreter options still visible in the chat interface? -->
+
+**Assessment:**
+- [ ] All capabilities hidden as expected
+- [ ] Some capabilities still visible (describe below)
+- [ ] `capabilities: []` did not work as expected — requires investigation
+
+**If any capability was still visible:**
+<!-- Describe which feature was visible and whether it was functional or
+     just a cosmetic residue. Flag if functional as a risk. -->
+
+---
+
+## 4. Prompt Sharing
+
+**Expected behavior:** Users can create and use prompt templates but cannot share them
+with other users or publish them to the tenant.
+
+**Phase 0 finding:**
+<!-- FINDING: Was the share/publish option hidden from the prompts UI?
+     Were there any paths through which a user could still share prompts? -->
+
+**Assessment:**
+- [ ] Share and publish options hidden
+- [ ] Share options still visible (describe below)
+
+---
+
+## 5. Gaps Identified
+
+List any features that could not be controlled through `librechat.yaml` configuration
+alone, or any unexpected behavior found during the audit.
+
+| Feature | Gap Description | Classification | Recommended Action |
+|---|---|---|---|
+| <!-- e.g. Browser caching exposed old endpoint menu --> | | <!-- Config gap / Cosmetic / Risk --> | |
+
+---
+
+## 6. Assessment
+
+<!-- Fill in after completing the table above. Choose one: -->
+
+- [ ] **Feature governance confirmed via config alone — no code changes needed.**
+  All v1 Enable/Disable/Defer decisions can be enforced through `librechat.yaml`.
+
+- [ ] **Feature governance mostly works — minor gaps require follow-up.**
+  Describe gaps and proposed resolution:
+  <!-- e.g. "Plugin marketplace icon still visible but non-functional when capabilities: [] is set.
+  Acceptable cosmetic residue for v1 — flag to Dev 2 to investigate in v1." -->
+
+- [ ] **Feature governance has material gaps — requires investigation before v1.**
+  Describe what must be resolved:
+  <!-- e.g. "endpointsMenu: false does not hide the endpoint config panel in
+  LibreChat version X.Y.Z. Need to confirm fix in next release or disable via
+  alternative mechanism." -->
+
+---
+
+## 7. v1 Configuration File (Final)
+
+The final `librechat.yaml` for v1 deployment, incorporating all Phase 0 findings:
+
+```yaml
+# Target path: /app/api/data/librechat.yaml
+# Final v1 feature configuration — update after PBI 9130 sign-off
+
+version: "1.1.0"
+cache: true
+
+endpoints:
+  custom:
+    - name: "LiteLLM Gateway"
+      apiKey: "${LITELLM_VIRTUAL_KEY}"
+      baseURL: "https://<LITELLM_URL>/v1"
+      models:
+        default: ["ROMTech AI Standard"]
+        fetch: true
+      titleConvo: true
+      titleModel: "ROMTech AI Fast"
+      summarize: true
+      streamRate: 15
+
+interface:
+  modelSelect: true
+  parameters: true
+  presets: true
+  sidePanel: true
+  prompts:
+    use: true
+    create: true
+    share: false
+    public: false
+  endpointsMenu: false
+
+capabilities: []
+```
+
+<!-- FINDING: Were any changes made to the above config based on Phase 0 findings?
+     Document any overrides or additions here. -->

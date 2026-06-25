@@ -1,0 +1,97 @@
+# LiteLLM Gateway — Dev 2 Handoff
+**PBI-03-BE → PBI-08-FE / PBI-09-FE**
+**Updated: PBI-04-BE — model names finalised**
+
+Fill in all values after both `validate_litellm_routing.py` and
+`validate_litellm_allowlist.py` pass cleanly.
+Share this document with Dev 2 through a secure channel — it contains a live API key.
+
+---
+
+## Status
+
+- [ ] `validate_litellm_routing.py` passed with 0 failures
+- [ ] `validate_litellm_allowlist.py` passed with 0 failures
+- [ ] Restart validation passed (all tests pass after container restart)
+- [ ] Handoff shared with Dev 2
+
+---
+
+## LiteLLM Endpoint
+
+| Field | Value |
+|---|---|
+| Base URL | `<LITELLM_URL>` |
+| API format | OpenAI-compatible (`/chat/completions`, `/models`) |
+| Auth header | `Authorization: Bearer <API_KEY_FOR_DEV2>` |
+
+---
+
+## API Key for Dev 2
+
+> **Do not give Dev 2 the master key.**
+> Generate a scoped virtual key in LiteLLM for LibreChat to use.
+>
+> ```
+> POST <LITELLM_URL>/key/generate
+> Authorization: Bearer <LITELLM_MASTER_KEY>
+>
+> {
+>   "key_alias": "librechat-nonprod",
+>   "models": ["ROMTech AI Standard", "ROMTech AI Fast"],
+>   "duration": null
+> }
+> ```
+>
+> Record the generated key below.
+
+| Field | Value |
+|---|---|
+| Virtual key alias | `librechat-nonprod` |
+| Virtual key value | `<GENERATED_VIRTUAL_KEY>` |
+| Permitted models | `ROMTech AI Standard`, `ROMTech AI Fast` |
+
+---
+
+## Available Models (Final — PBI-04-BE)
+
+These names are final. Use them exactly as written in the `"model"` field.
+
+| Model name | Backed by | Purpose | Default? |
+|---|---|---|---|
+| `ROMTech AI Standard` | `<AZURE_DEPLOYMENT_FLAGSHIP>` | General use | Yes — set as default in LibreChat |
+| `ROMTech AI Fast` | `<AZURE_DEPLOYMENT_FAST>` | High-volume, low-complexity | No |
+
+**Recommended default for LibreChat:** `ROMTech AI Standard`
+Configure this in the LibreChat endpoint settings (PBI-09-FE) so it is pre-selected for users.
+
+> **Allowlist is enforced.** Requests to any model name not listed above — including raw
+> Azure deployment names like `gpt-4o` or `azure/gpt-4o` — will return a 4xx error.
+> Dev 2 should not attempt to call any model name other than the two listed.
+
+---
+
+## Quick Integration Test for Dev 2
+
+Before wiring LibreChat, Dev 2 can confirm the endpoint is reachable with:
+
+```bash
+curl -s <LITELLM_URL>/chat/completions \
+  -H "Authorization: Bearer <GENERATED_VIRTUAL_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ROMTech AI Standard",
+    "messages": [{"role": "user", "content": "Say OK"}]
+  }'
+```
+
+Expected: HTTP 200 with a `choices[0].message.content` field.
+
+---
+
+## Notes
+
+- Streaming is confirmed working (SSE, `stream: true`).
+- Requests to models not in the permitted list return a 4xx error — no silent fallback.
+- If Dev 2 receives a 401, the virtual key may have expired or been regenerated — contact the gateway track.
+- Model names are now final. No further naming changes are expected before PBI-08-FE / PBI-09-FE.

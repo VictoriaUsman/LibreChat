@@ -1,0 +1,29 @@
+# Developer secrets — never commit
+ChatGptForEmployees/scripts/.env
+ChatGptForEmployees/scripts/.test_conversation_id
+
+# Cloned upstream repos checked out locally under the umbrella — not tracked in this repo.
+# (Older layout kept these at repo root / under a frontend/ prefix; current layout is under <PROJECT>/.)
+ChatGptForEmployees/LibreChat/
+ChatGptForEmployees/rag_api/
+
+# Secrets — never commit
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local-only planning / notes / reference (per-developer) — not committed
+ChatGptForEmployees.docs/V1_REVIEW.md
+ChatGptForEmployees.docs/erik-chat-convo.md
+ChatGptForEmployees.docs/ROMTech_AI_Employee_Assistant_v1_PBIs.md
+
+# OS
+.DS_Store
+Thumbs.db
+.venv/
+venv/

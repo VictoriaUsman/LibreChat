@@ -1,0 +1,225 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "1014414556554216555"
+    }
+  },
+  "parameters": {
+    "envName": {
+      "type": "string",
+      "defaultValue": "Dev"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "environmentId": {
+      "type": "string"
+    },
+    "ragApiImage": {
+      "type": "string"
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "azureOpenAiEndpoint": {
+      "type": "string"
+    },
+    "azureOpenAiApiKey": {
+      "type": "securestring"
+    },
+    "embeddingsDeploymentName": {
+      "type": "string"
+    },
+    "databaseUrl": {
+      "type": "securestring"
+    },
+    "postgresHost": {
+      "type": "string"
+    },
+    "postgresUser": {
+      "type": "string"
+    },
+    "postgresPassword": {
+      "type": "securestring"
+    },
+    "jwtSecret": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "appName": "[format('ca-ragapi-{0}', toLower(parameters('envName')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 8000,
+            "transport": "Auto",
+            "allowInsecure": true
+          },
+          "secrets": [
+            {
+              "name": "azure-openai-api-key",
+              "value": "[parameters('azureOpenAiApiKey')]"
+            },
+            {
+              "name": "postgres-url",
+              "value": "[parameters('databaseUrl')]"
+            },
+            {
+              "name": "postgres-password",
+              "value": "[parameters('postgresPassword')]"
+            },
+            {
+              "name": "jwt-secret",
+              "value": "[parameters('jwtSecret')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "rag-api",
+              "image": "[parameters('ragApiImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "HOST",
+                  "value": "0.0.0.0"
+                },
+                {
+                  "name": "PORT",
+                  "value": "8000"
+                },
+                {
+                  "name": "LOG_LEVEL",
+                  "value": "INFO"
+                },
+                {
+                  "name": "EMBEDDINGS_PROVIDER",
+                  "value": "azure"
+                },
+                {
+                  "name": "EMBEDDINGS_MODEL",
+                  "value": "[parameters('embeddingsDeploymentName')]"
+                },
+                {
+                  "name": "RAG_AZURE_OPENAI_ENDPOINT",
+                  "value": "[parameters('azureOpenAiEndpoint')]"
+                },
+                {
+                  "name": "RAG_AZURE_OPENAI_API_VERSION",
+                  "value": "2024-10-21"
+                },
+                {
+                  "name": "COLLECTION_NAME",
+                  "value": "librechat"
+                },
+                {
+                  "name": "CHUNK_SIZE",
+                  "value": "1500"
+                },
+                {
+                  "name": "CHUNK_OVERLAP",
+                  "value": "100"
+                },
+                {
+                  "name": "RAG_AZURE_OPENAI_API_KEY",
+                  "secretRef": "azure-openai-api-key"
+                },
+                {
+                  "name": "DATABASE_URL",
+                  "secretRef": "postgres-url"
+                },
+                {
+                  "name": "DB_HOST",
+                  "value": "[parameters('postgresHost')]"
+                },
+                {
+                  "name": "DB_PORT",
+                  "value": "5432"
+                },
+                {
+                  "name": "POSTGRES_DB",
+                  "value": "librechat_rag"
+                },
+                {
+                  "name": "POSTGRES_USER",
+                  "value": "[parameters('postgresUser')]"
+                },
+                {
+                  "name": "POSTGRES_PASSWORD",
+                  "secretRef": "postgres-password"
+                },
+                {
+                  "name": "JWT_SECRET",
+                  "secretRef": "jwt-secret"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8000
+                  },
+                  "initialDelaySeconds": 20,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": 2
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "appName": {
+      "type": "string",
+      "value": "[variables('appName')]"
+    }
+  }
+}

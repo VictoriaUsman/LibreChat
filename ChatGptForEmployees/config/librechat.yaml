@@ -1,0 +1,149 @@
+# LibreChat — Validated Phase 0 Configuration
+# -----------------------------------------------------------------------
+# Deploy path: /app/librechat.yaml inside the LibreChat container.
+# Mount via Azure File Share or bake into the container image.
+#
+# Replace <LITELLM_ACA_URL> with the LiteLLM Container App URL
+# (from Dev 1 handoff — format: <app-name>.<id>.<region>.azurecontainerapps.io).
+# LITELLM_VIRTUAL_KEY is injected from the container environment variable —
+# do not hardcode the key value here.
+#
+# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
+# environment variable reference.
+# -----------------------------------------------------------------------
+
+version: "1.2.0"
+cache: true
+
+endpoints:
+  custom:
+    - name: "LiteLLM Gateway"
+      apiKey: "${LITELLM_VIRTUAL_KEY}"
+      baseURL: "${LITELLM_URL}/v1"
+      models:
+        default: ["ROMTech AI Standard"]
+        fetch: true
+      titleConvo: true
+      titleModel: "ROMTech AI Fast"
+      summarize: true
+      streamRate: 15
+
+# -----------------------------------------------------------------------
+# System prompt — PBI 9575
+# -----------------------------------------------------------------------
+# STATUS: DRAFT — awaiting sign-off from Legal, HR, and Compliance.
+#
+# DO NOT deploy to any user-facing environment (ACA nonprod or prod) until
+# sign-off is documented in the PR that merges this change.
+#
+# Sign-off checklist (record approver name + date in the PR description):
+#   [ ] Legal
+#   [ ] HR
+#   [ ] Compliance
+#
+# Implementation notes:
+#   - promptPrefix is set inside each modelSpec preset so it is applied to
+#     every conversation regardless of which model the user selects.
+#   - interface.parameters: false (below) prevents the prompt from being
+#     visible or editable in the LibreChat UI.
+#   - modelSpecs.enforce: true ensures no conversation can bypass the specs.
+#   - Both model entries carry an identical prompt; update both if the text changes.
+# -----------------------------------------------------------------------
+modelSpecs:
+  enforce: true
+  prioritize: true
+  list:
+    - name: "romtech-ai-standard"
+      label: "ROMTech AI Standard"
+      default: true
+      preset:
+        endpoint: "LiteLLM Gateway"
+        model: "ROMTech AI Standard"
+        promptPrefix: |
+          You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
+
+          You can help with:
+          - Drafting business communications, documents, reports, proposals, and templates
+          - Summarizing documents, meeting transcripts, research papers, and lengthy content
+          - Analysis: interpreting data, structuring problem-solving, and reviewing processes
+          - Research on general business and technical topics
+          - Translation of business content between languages
+          - Writing, reviewing, and explaining code
+
+          For the following topics, contact the appropriate team directly — do not rely on this assistant:
+          - HR matters (benefits, leave, compensation, performance, policies): Contact HR or submit a request through the HR portal.
+          - Legal questions (contracts, compliance, intellectual property, regulatory requirements): Contact the Legal team. Do not rely on this assistant for legal advice.
+          - Security incidents (suspected phishing, unauthorized access, malware, data breach): Report immediately to IT Security. Do not use this tool first.
+          - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
+
+          Important:
+          - Do not enter confidential client data, personal data of colleagues or customers, or trade secrets into this assistant. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
+          - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
+
+    - name: "romtech-ai-fast"
+      label: "ROMTech AI Fast"
+      preset:
+        endpoint: "LiteLLM Gateway"
+        model: "ROMTech AI Fast"
+        promptPrefix: |
+          You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
+
+          You can help with:
+          - Drafting business communications, documents, reports, proposals, and templates
+          - Summarizing documents, meeting transcripts, research papers, and lengthy content
+          - Analysis: interpreting data, structuring problem-solving, and reviewing processes
+          - Research on general business and technical topics
+          - Translation of business content between languages
+          - Writing, reviewing, and explaining code
+
+          For the following topics, contact the appropriate team directly — do not rely on this assistant:
+          - HR matters (benefits, leave, compensation, performance, policies): Contact HR or submit a request through the HR portal.
+          - Legal questions (contracts, compliance, intellectual property, regulatory requirements): Contact the Legal team. Do not rely on this assistant for legal advice.
+          - Security incidents (suspected phishing, unauthorized access, malware, data breach): Report immediately to IT Security. Do not use this tool first.
+          - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
+
+          Important:
+          - Do not enter confidential client data, personal data of colleagues or customers, or trade secrets into this assistant. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
+          - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
+
+# Feature governance — validated in Phase 0 (PBI 9130)
+# See Phase_0_Findings_v1_Recommendation.md Section 3 for full ledger.
+# interface.parameters: false also hides the system prompt from users (PBI 9575).
+interface:
+  endpointsMenu: false
+  modelSelect: true
+  agents: false
+  memories: false
+  bookmarks: false
+  prompts: false
+  parameters: false
+  multiConvo: false
+  skills: false
+
+# File upload — enabled for v1 (PBI 9563)
+# Restricted to approved MIME types and size limits.
+# Local dev: files stored in LibreChat's default uploads directory.
+fileConfig:
+  endpoints:
+    custom:
+      disabled: false
+      fileLimit: 5
+      fileSizeLimit: 10
+      totalSizeLimit: 50
+      supportedMimeTypes:
+        - "text/plain"
+        - "text/csv"
+        - "text/markdown"
+        - "application/pdf"
+        - "image/jpeg"
+        - "image/png"
+        - "image/gif"
+        - "image/webp"
+        - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        - "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        - "application/msword"
+  serverFileSizeLimit: 100
+  avatarSizeLimit: 2

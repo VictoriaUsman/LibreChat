@@ -1,0 +1,172 @@
+# Phase 0 Findings and v1 Recommendation
+**PBI 9131 — Final Phase 0 Output**
+
+**Status:** Complete this document only after all PBI 9125–9130 validations pass
+(or have documented outcomes). This document gates the v1 go/no-go decision.
+
+---
+
+## 1. Architecture Topology
+
+### Component Locations
+
+| Component | Platform | Resource Name | Region |
+|---|---|---|---|
+| LibreChat | Azure Container Apps | `librechat-nonprod` | `<AZURE_REGION>` |
+| LiteLLM gateway | Azure Container Apps | `litellm-nonprod` | `<AZURE_REGION>` |
+| LibreChat storage | Azure Files (SMB) | `<STORAGE_ACCOUNT>` | `<AZURE_REGION>` |
+| LiteLLM config | Azure Files (read-only) | `<STORAGE_ACCOUNT>` | `<AZURE_REGION>` |
+| Model deployments | Azure OpenAI / AI Foundry | `<AI_FOUNDRY_RESOURCE>` | `<AZURE_REGION>` |
+| Authentication | Okta (external) | `romtech.okta.com` | n/a |
+
+### Request Flow
+
+```
+Browser (Okta-authenticated user)
+  │
+  ▼ HTTPS (ACA ingress, port 3080)
+LibreChat — Azure Container App
+  │  reads: /app/api/data/librechat.yaml  (Azure File Share)
+  │  writes: /app/api/data/*.sqlite        (Azure File Share)
+  │
+  ▼ HTTPS (virtual API key, /v1/chat/completions)
+LiteLLM Gateway — Azure Container App
+  │  reads: /app/config/litellm_config.yaml (Azure File Share, read-only)
+  │  enforces: allowlist, rate limits, usage tracking
+  │
+  ▼ HTTPS (Azure OpenAI API key)
+Azure OpenAI / AI Foundry
+  ├── Flagship deployment (ROMTech AI Standard → <DEPLOYMENT_FLAGSHIP>)
+  └── Fast deployment    (ROMTech AI Fast     → <DEPLOYMENT_FAST>)
+```
+
+### Model Configuration Location
+
+Model names, routing targets, and allowlist enforcement are defined in
+`litellm_config.yaml` on the Azure File Share mounted by the LiteLLM container.
+Updating this file and restarting the LiteLLM container changes model availability
+without a container redeployment.
+
+---
+
+## 2. Configuration Reference
+
+### LibreChat Container Environment Variables (ACA)
+
+| Variable | Purpose | PBI |
+|---|---|---|
+| `HOST` | `0.0.0.0` — bind to all interfaces | 9125 |
+| `PORT` | `3080` — must match ACA targetPort | 9125 |
+| `JWT_SECRET` | Session signing key | 9125 |
+| `JWT_REFRESH_SECRET` | Session refresh signing key | 9125 |
+| `CREDS_KEY` | 32-byte hex credential encryption key | 9125 |
+| `CREDS_IV` | 16-byte hex credential encryption IV | 9125 |
+| `LITELLM_VIRTUAL_KEY` | Scoped key issued by Dev 1 for LiteLLM | 9126 |
+| `OPENID_CLIENT_ID` | Okta application client ID | 9129 |
+| `OPENID_CLIENT_SECRET` | Okta application client secret | 9129 |
+| `OPENID_ISSUER` | `https://romtech.okta.com/oauth2/default` | 9129 |
+| `OPENID_CALLBACK_URL` | `https://<librechat-aca-url>/api/auth/openid/callback` | 9129 |
+| `OPENID_SESSION_SECRET` | Cookie signing key | 9129 |
+| `OPENID_BUTTON_TEXT` | `Login with ROMTech Okta` | 9129 |
+
+**Removed after PBI 9126:**
+- `AZURE_OPENAI_API_KEY` — temporary direct connection, replaced by LiteLLM routing
+- `AZURE_OPENAI_ENDPOINT` — same
+
+### librechat.yaml (on Azure File Share at /app/api/data/librechat.yaml)
+
+See `config/librechat_yaml.template` for the full configuration.
+Key settings: LiteLLM gateway endpoint, approved model list, feature governance flags.
+
+### LiteLLM Container Environment Variables (ACA)
+
+See `config/litellm.env.template` and the Dev 1 handoff document.
+
+---
+
+## 3. Feature Governance Ledger
+
+Based on PBI 9130 findings. Each feature marked as final v1 configuration.
+
+| Feature | v1 Decision | Config Mechanism | Validated in Phase 0 |
+|---|---|---|---|
+| Model selection dropdown | Enable | `modelSelect: true` | <!-- Yes/No --> |
+| Generation parameter controls | Enable | `parameters: true` | <!-- Yes/No --> |
+| Preset / system prompt templates | Enable | `presets: true` | <!-- Yes/No --> |
+| Conversation sidebar | Enable | `sidePanel: true` | <!-- Yes/No --> |
+| Public prompt sharing | Disable | `prompts.share: false`, `prompts.public: false` | <!-- Yes/No --> |
+| Endpoints menu (raw vendor access) | Disable | `endpointsMenu: false` | <!-- Yes/No --> |
+| File upload / document ingestion | Disable | `capabilities: []` | <!-- Yes/No --> |
+| Plugin marketplace / web search | Disable | `capabilities: []` | <!-- Yes/No --> |
+| Code interpreter runtime | Disable | `capabilities: []` | <!-- Yes/No --> |
+| RAG / file index search | Disable for v1 | `capabilities: []` | <!-- Yes/No --> |
+
+---
+
+## 4. Gaps and Risks
+
+All Phase 0 issues classified using the four-tier framework:
+- **Acceptable for v1** — Minor gaps that do not violate security or data policy
+- **Fix before v1** — Must be resolved before production deployment
+- **Needs stakeholder decision** — Requires leadership authorization
+- **Blocker** — Critical failure preventing deployment
+
+| Identified Gap or Risk | Classification | Recommended Action |
+|---|---|---|
+| Temporary Azure OpenAI routing (PBI 9125) bypasses LiteLLM tracking | Fix before v1 | Completed in PBI 9126 — verify env vars removed |
+| SQLite database has no HA (single Azure File Share, no replication) | Acceptable for v1 | Acceptable for POC scale; plan PostgreSQL migration for v2 |
+| Okta group assignment requires external admin coordination | Needs stakeholder decision | Formalize cross-department SLA for user provisioning turnaround |
+| Model name aliases depend on Dev 1 PBI-04-BE handoff | Fix before v1 | Completed — confirm final names in dev2_handoff.md |
+| File upload and RAG disabled pending compliance review | Needs stakeholder decision | Define compliance review scope and timeline for a later phase |
+| LiteLLM rate limiting requires PostgreSQL for reliable per-key enforcement | Needs stakeholder decision | Decide whether to provision PostgreSQL before v1 launch |
+| <!-- Add any additional gaps found during Phase 0 --> | | |
+
+---
+
+## 5. Stack Verdict
+
+<!-- Select one after all PBI validations are complete: -->
+
+- [ ] **Proceed to v1 build.**
+  All acceptance criteria met. The LiteLLM + LibreChat + Azure OpenAI stack is
+  validated for the Phase 0 scope. Proceed with v1 PBIs as listed in Section 6.
+
+- [ ] **Proceed to v1 build after listed fixes.**
+  Core functionality validated. The following items from Section 4 must be resolved
+  before the v1 deployment date:
+  <!-- List specific Fix before v1 items from the gaps table -->
+
+- [ ] **Do not proceed with this stack — explore alternatives.**
+  <!-- Describe critical failure and proposed alternative -->
+
+**Rationale:**
+<!-- 2–4 sentences summarizing the basis for the verdict -->
+
+---
+
+## 6. Backlog Handoff Parameters (v1 PBIs)
+
+The following v1 PBIs are derived directly from Phase 0 findings and are ready to
+be pulled into Sprint 1 upon leadership sign-off.
+
+| PBI Title | Derived From | Priority | Notes |
+|---|---|---|---|
+| Provision PostgreSQL for LiteLLM spend tracking and rate limiting | Rate limiting assessment (PBI-06-BE) | High | Required for per-user daily limits and monthly team caps |
+| Configure per-department LiteLLM virtual keys with budget caps | Rate limiting assessment (PBI-06-BE) | High | One key per team/department with `max_budget` and `budget_duration` |
+| Configure LiteLLM budget alert callbacks | Rate limiting assessment (PBI-06-BE) | Medium | Alerts at 75% and 90% of monthly cap |
+| Switch LibreChat to PostgreSQL backend | Persistence findings (PBI 9128) | Medium | Required for HA and horizontal scaling in v1 |
+| Complete Okta pilot group rollout | Okta validation (PBI 9129) | High | Coordinate with Okta admin; define provisioning SLA |
+| Compliance review for file upload and RAG features | Feature audit (PBI 9130) | Medium | Define scope and timeline; unblock in a later phase if approved |
+| Production image pinning and container hardening | Deployment (PBI 9125) | High | Pin to release tags; review container security posture |
+| Azure Monitor integration for operational observability | Usage tracking (PBI-05-BE) | Medium | Forward LiteLLM spend logs to Azure Monitor / Log Analytics |
+
+---
+
+## Approvals
+
+| Role | Name | Sign-off Date |
+|---|---|---|
+| Dev 1 (Backend) | | |
+| Dev 2 (Frontend) | | |
+| Project Lead | | |
+| Architecture Review | Erik | |

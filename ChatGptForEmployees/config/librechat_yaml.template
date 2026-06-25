@@ -1,0 +1,69 @@
+# LibreChat — LiteLLM Endpoint Configuration
+# -----------------------------------------------------------------------
+# Deploy path: /app/api/data/librechat.yaml
+# (Written to the Azure File Share mounted at /app/api/data)
+#
+# This file configures LibreChat to route all model requests through the
+# LiteLLM gateway (PBI 9126). It replaces the temporary direct Azure OpenAI
+# connection used during PBI 9125.
+#
+# Prerequisites:
+#   - PBI 9125 complete: LibreChat container running with /app/api/data mounted
+#   - PBI-03-BE / PBI-04-BE complete: Dev 1 has provided LITELLM_URL and virtual key
+#   - LITELLM_VIRTUAL_KEY is set as a container environment variable
+#   - AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT have been REMOVED from the
+#     container environment (to ensure all traffic flows through LiteLLM)
+#
+# After updating this file:
+#   1. Place it at /app/api/data/librechat.yaml on the Azure File Share
+#   2. Restart the LibreChat container to pick up the change:
+#        az containerapp revision restart --name librechat-nonprod --resource-group <RG>
+#   3. Run scripts/validate_librechat_litellm.py to confirm routing
+#
+# Replace every <PLACEHOLDER> with real values before deploying.
+# -----------------------------------------------------------------------
+
+version: "1.1.0"
+cache: true
+
+endpoints:
+  custom:
+    - name: "LiteLLM Gateway"
+
+      # LITELLM_VIRTUAL_KEY is injected from the container environment variable
+      # Do NOT hardcode the key value here — it is a secret
+      apiKey: "${LITELLM_VIRTUAL_KEY}"
+
+      # Base URL of the LiteLLM Container App (from Dev 1 PBI-03-BE handoff)
+      # Must include /v1 — this is the OpenAI-compatible path prefix
+      baseURL: "https://<LITELLM_URL>/v1"
+
+      models:
+        # Default model shown to users when they open a new conversation
+        # Must match the exact friendly name from Dev 1 (PBI-04-BE)
+        default: ["ROMTech AI Standard"]
+
+        # Fetch the full model list from LiteLLM on startup
+        # This populates the model picker with all allowed models
+        fetch: true
+
+      # Automatically generate a conversation title from the first message
+      titleConvo: true
+
+      # Model to use for title generation (use the fast model to save cost)
+      titleModel: "ROMTech AI Fast"
+
+      # Summarise long conversation histories to stay within context window
+      summarize: true
+
+      # Token streaming rate — 15ms between chunks balances responsiveness and CPU
+      streamRate: 15
+
+# Feature governance — controls which LibreChat UI features are enabled
+# Full configuration is applied in PBI 9130. This is a minimal safe default.
+interface:
+  # Lock the endpoint menu so users cannot switch to non-LiteLLM endpoints
+  endpointsMenu: false
+
+  # Keep model selection visible (users choose between allowed models)
+  modelSelect: true

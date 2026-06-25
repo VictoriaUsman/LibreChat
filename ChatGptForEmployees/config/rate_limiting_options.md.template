@@ -1,0 +1,173 @@
+# LiteLLM Rate Limiting and Budget Controls — Phase 0 Assessment
+**PBI-06-BE | Section 4C.7 and Phase 0 Plan Section 3**
+
+Complete this document after running `scripts/validate_litellm_rate_limits.py`.
+
+---
+
+## Phase 0 Validation Result
+
+<!-- FINDING: Did validate_litellm_rate_limits.py pass? -->
+
+- [ ] All tests passed — rate limiting enforcement confirmed
+- [ ] Tests failed — see findings below
+
+**Test key configuration used:** `rpm_limit=1` (1 request per minute), scoped to
+`ROMTech AI Standard`, auto-expires 1h, deleted after test.
+
+**Finding:**
+<!-- FINDING: Copy the test output summary here. Did the second request return 429?
+What did the error body look like? Was the key deleted cleanly? -->
+
+---
+
+## Available Rate Limiting and Budget Control Options
+
+### Option A — Per-Virtual-Key RPM / TPM Limits
+
+Set at key generation time via `/key/generate` or `/key/update`.
+
+```json
+{
+  "rpm_limit": 100,
+  "tpm_limit": 50000
+}
+```
+
+- `rpm_limit` — maximum requests per minute for this key
+- `tpm_limit` — maximum tokens per minute for this key
+- Enforced per rolling minute window
+- Returns HTTP 429 when exceeded
+- **Requires:** PostgreSQL (`DATABASE_URL`) for reliable enforcement across replicas
+
+### Option B — Per-Virtual-Key Budget Cap
+
+Set at key generation time. Enforced cumulatively over the `budget_duration` window.
+
+```json
+{
+  "max_budget": 50.00,
+  "budget_duration": "monthly"
+}
+```
+
+- `max_budget` — maximum USD spend (uses LiteLLM's built-in pricing table)
+- `budget_duration` — `"daily"`, `"weekly"`, or `"monthly"` — resets the counter
+- Returns HTTP 429 (or 400 depending on LiteLLM version) when budget is exhausted
+- Budget alerts at configurable thresholds via LiteLLM callbacks
+- **Requires:** PostgreSQL for cumulative spend tracking across restarts
+
+### Option C — Global Rate Limits (Config File)
+
+Set in `litellm_routing_config.yaml` under `litellm_settings`. Applies to all traffic.
+
+```yaml
+litellm_settings:
+  rpm_limit: 500
+  tpm_limit: 1000000
+```
+
+- Useful as a global circuit breaker — catches runaway scripts regardless of key
+- No database required; enforced in-memory per replica
+- Does not give per-user or per-team attribution — use alongside per-key limits
+
+### Option D — Per-Model TPM / RPM Limits (Config File)
+
+Set in the `model_list` entry. Caps usage of a specific model regardless of which key calls it.
+
+```yaml
+model_list:
+  - model_name: "ROMTech AI Standard"
+    litellm_params:
+      ...
+    model_info:
+      rpm: 200
+      tpm: 100000
+```
+
+- Useful if the underlying Azure OpenAI deployment has a provisioned throughput limit
+- Prevents one model from consuming all available quota
+- No database required
+
+---
+
+## What Requires a Database
+
+The following controls require PostgreSQL (`DATABASE_URL`) to work reliably:
+
+| Control | Works Without DB | Works With DB |
+|---|---|---|
+| Global in-memory RPM/TPM | Yes (single replica) | Yes (all replicas) |
+| Per-key RPM/TPM enforcement | Partial (single replica only) | Yes |
+| Per-key budget cap | No | Yes |
+| Budget reset on schedule | No | Yes |
+| Budget alerts / callbacks | No | Yes |
+| `/spend/keys` API | No | Yes |
+
+**Phase 0 finding:**
+<!-- FINDING: Did /key/generate work without a database? Did rpm_limit enforcement work in-memory? -->
+
+---
+
+## Erik's Architecture Requirements (from recommendation doc)
+
+From Section 6.2 of Erik's architecture recommendation, v1 must support:
+
+- Per-user soft daily token limits (prevent runaway scripts)
+- Per-team monthly hard caps with alerting at 75% and 90%
+- Global circuit breaker (disable service if 24-hour spend exceeds threshold)
+
+Mapping to LiteLLM options:
+
+| Requirement | LiteLLM Mechanism | Database Required |
+|---|---|---|
+| Per-user soft daily token limit | Per-key `tpm_limit` + `max_budget` / `budget_duration: "daily"` | Yes |
+| Per-team monthly hard cap | Per-team key `max_budget` + `budget_duration: "monthly"` | Yes |
+| Alert at 75% / 90% of budget | LiteLLM budget alert callbacks | Yes |
+| Global circuit breaker | Global `rpm_limit` in config + alerting | Partial |
+
+---
+
+## V1 Recommendation
+
+<!-- Fill in after Phase 0 findings. Choose one: -->
+
+- [ ] **Proceed with LiteLLM's built-in controls — add PostgreSQL for v1.**
+  Issue one virtual key per team/department with a `max_budget` and
+  `budget_duration: "monthly"`. Set a global `rpm_limit` as a circuit breaker.
+  Wire up LiteLLM's budget alert callbacks to send notifications (email or Slack)
+  at 75% and 90% thresholds.
+
+- [ ] **LiteLLM controls are sufficient for Phase 0 but need supplementing for v1.**
+  Describe what is missing:
+  <!-- e.g., "Alert webhooks need custom integration; LiteLLM's built-in callbacks
+  don't reach our alerting stack without a connector." -->
+
+- [ ] **Rate limiting enforcement was not confirmed in Phase 0.**
+  Describe what happened and what needs to be resolved before v1:
+  <!-- e.g., "rpm_limit requires DATABASE_URL; Phase 0 did not include a database.
+  Must validate with database before v1 sign-off." -->
+
+---
+
+## Recommended V1 Configuration (if proceeding)
+
+```json
+// Per-department key — issue one per team at v1 launch
+{
+  "key_alias": "team-<department>",
+  "models": ["ROMTech AI Standard", "ROMTech AI Fast"],
+  "max_budget": 200.00,
+  "budget_duration": "monthly",
+  "rpm_limit": 60,
+  "tpm_limit": 100000,
+  "metadata": { "department": "<department>", "cost_centre": "<code>" }
+}
+```
+
+```yaml
+# Global circuit breaker — add to litellm_routing_config.yaml
+litellm_settings:
+  rpm_limit: 1000       # Adjust based on pilot usage data
+  tpm_limit: 5000000    # Adjust based on pilot usage data
+```

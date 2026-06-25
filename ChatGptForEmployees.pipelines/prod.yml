@@ -1,0 +1,155 @@
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: ROMTech/PipelineTemplates
+
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+name: ROMTechSolutions_$(Build.DefinitionName)_$(Build.SourceBranch)_$(Date:yyyyMMdd).$(Rev:r)
+
+variables:
+  - template: templates/insert-variables-prod.yml
+  - template: insert-variables-dynamic.yml@templates
+
+stages:
+  - template: insert-stage-variables-confirm.yml@templates
+
+  - template: insert-stage-bicep-whatif.yml@templates
+    parameters:
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+
+  - template: insert-stage-bicep-create.yml@templates
+    parameters:
+      appNameEnv: $(appName)
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      envName: $(envName)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+
+  - stage: UploadConfigs
+    displayName: 'Upload Config Files to Azure Files'
+    dependsOn: BicepCreate
+    jobs:
+      - job: UploadConfigs
+        displayName: 'Upload litellm and librechat config'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Upload config files to Azure File Shares'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                STORAGE_KEY=$(az storage account keys list \
+                  --account-name $(storageAccountName) \
+                  --resource-group $(resourceGroup) \
+                  --query "[0].value" \
+                  --output tsv)
+
+                az storage file upload \
+                  --account-name $(storageAccountName) \
+                  --account-key "$STORAGE_KEY" \
+                  --share-name litellm-config \
+                  --source "$(Build.SourcesDirectory)/ChatGptForEmployees/config/litellm_routing_config.yaml" \
+                  --path "litellm_routing_config.yaml"
+
+                LITELLM_FQDN=$(az containerapp show \
+                  --name $(appNameEnvLiteLLM) \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.configuration.ingress.fqdn" \
+                  --output tsv)
+                LITELLM_URL="http://${LITELLM_FQDN}"
+
+                sed "s|\${LITELLM_URL}|${LITELLM_URL}|g" \
+                  "$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml" \
+                  > /tmp/librechat_processed.yaml
+
+                az storage file upload \
+                  --account-name $(storageAccountName) \
+                  --account-key "$STORAGE_KEY" \
+                  --share-name librechat-data \
+                  --source "/tmp/librechat_processed.yaml" \
+                  --path "librechat.yaml"
+
+  - stage: DeployLiteLLM
+    displayName: 'Deploy LiteLLM'
+    dependsOn: UploadConfigs
+    jobs:
+      - job: RestartLiteLLM
+        displayName: 'Restart LiteLLM Container App'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Restart LiteLLM Container App'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                REVISION=$(az containerapp show \
+                  --name $(appNameEnvLiteLLM) \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.latestRevisionName" \
+                  --output tsv)
+                az containerapp revision restart \
+                  --name $(appNameEnvLiteLLM) \
+                  --resource-group $(resourceGroup) \
+                  --revision "$REVISION"
+
+  - stage: DeployRagApi
+    displayName: 'Deploy RAG API'
+    dependsOn: UploadConfigs
+    jobs:
+      - job: RestartRagApi
+        displayName: 'Restart RAG API Container App'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Restart RAG API Container App'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                REVISION=$(az containerapp show \
+                  --name $(appNameEnvRagApi) \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.latestRevisionName" \
+                  --output tsv)
+                az containerapp revision restart \
+                  --name $(appNameEnvRagApi) \
+                  --resource-group $(resourceGroup) \
+                  --revision "$REVISION"
+
+  - stage: DeployLibreChat
+    displayName: 'Deploy LibreChat'
+    dependsOn:
+      - DeployLiteLLM
+      - DeployRagApi
+    jobs:
+      - job: RestartLibreChat
+        displayName: 'Restart LibreChat Container App'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Restart LibreChat Container App'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                REVISION=$(az containerapp show \
+                  --name $(appNameEnvLibreChat) \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.latestRevisionName" \
+                  --output tsv)
+                az containerapp revision restart \
+                  --name $(appNameEnvLibreChat) \
+                  --resource-group $(resourceGroup) \
+                  --revision "$REVISION"
