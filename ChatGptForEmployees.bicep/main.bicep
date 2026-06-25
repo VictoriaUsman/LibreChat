@@ -43,7 +43,7 @@ param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
-var minReplicas = environmentName == 'Prod' ? 1 : 0
+var minReplicas = 1
 
 module applicationInsights 'applicationInsights.bicep' = {
   name: 'applicationInsights'
