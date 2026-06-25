@@ -1,0 +1,23 @@
+variables:
+- name: appName
+  value: ChatGptForEmployees
+- name: appNameEnvLiteLLM
+  value: ca-litellm-prod
+- name: appNameEnvLibreChat
+  value: ca-librechat-prod
+- name: appNameEnvRagApi
+  value: ca-ragapi-prod
+- name: storageAccountName
+  value: stcgfeprod
+- name: bicepFolderName
+  value: bicep
+- name: envTitleCase
+  value: Prod
+- name: grateFolderName
+  value: grate
+- name: resourceGroup
+  value: rg-prod-shared
+- name: serviceConnection
+  value: ChatGptForEmployeesProdSC
+- name: subscriptionId
+  value: e64069c2-4b14-4c32-a1f0-3493457f0eff

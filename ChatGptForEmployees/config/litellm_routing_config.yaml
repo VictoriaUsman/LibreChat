@@ -16,63 +16,25 @@ model_list:
   # --- Model 1: ROMTech AI Standard (recommended default) ---
   - model_name: "ROMTech AI Standard"
     litellm_params:
-      model: azure/gpt-5.4-mini
-      api_base: https://dev-lms-foundry.services.ai.azure.com
+      model: azure/romtech-standard
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
-      api_version: "2024-02-01"
-      # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).
-      # drop_params can't catch it because base_model (gpt-4o-mini, below) reports
-      # max_tokens as supported. Strip it at the gateway so clients that still send
-      # max_tokens (e.g. LibreChat title generation) don't get a 400 from Azure.
-      additional_drop_params: ["max_tokens"]
-      # base_model tells LiteLLM which pricing table to use for cost tracking.
-      # gpt-4o-mini is used as a proxy until billing admin confirms ROMTech Azure rates.
-      # TODO: replace base_model and per-token rates once ROMTech Azure agreement rates confirmed
-      base_model: azure/gpt-4o-mini
-      input_cost_per_token: 0.00000015
-      output_cost_per_token: 0.00000060
+      api_version: "2024-10-21"
 
   # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
     litellm_params:
-      model: azure/gpt-5.4-mini
-      api_base: https://dev-lms-foundry.services.ai.azure.com
+      model: azure/romtech-fast
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
-      api_version: "2024-02-01"
-      # gpt-5.4-mini rejects `max_tokens` (requires `max_completion_tokens`).
-      # Strip it at the gateway so clients sending max_tokens don't get a 400 from Azure.
-      additional_drop_params: ["max_tokens"]
-      # base_model tells LiteLLM which pricing table to use for cost tracking.
-      # gpt-4o-mini is used as a proxy until billing admin confirms ROMTech Azure rates.
-      # TODO: replace base_model and per-token rates once ROMTech Azure agreement rates confirmed
-      base_model: azure/gpt-4o-mini
-      input_cost_per_token: 0.00000015
-      output_cost_per_token: 0.00000060
+      api_version: "2024-10-21"
 
 
 router_settings:
   num_retries: 2
   timeout: 60
   retry_after: 5
-  model_group_alias:
-    # Block direct access by Azure deployment name. LiteLLM's fallback routing
-    # allows callers to bypass model_name aliases by sending azure/<deployment>
-    # directly. Aliasing these to a non-existent target causes routing to fail
-    # with a 4xx instead of silently reaching Azure.
-    "azure/gpt-5.4-mini": "_blocked_"
-    "gpt-5.4-mini": "_blocked_"
-
-
 litellm_settings:
-  # Usage telemetry callback (PBI-XX-BE).
-  # Fires after every successful request. Logs a usage payload to stdout and,
-  # when TELEMETRY_ENDPOINT_URL is set, POSTs it to the Azure Function (PBI-12-BE).
-  #
-  # IMPORTANT: Start LiteLLM from the project root so the 'callbacks' package
-  # is on the Python path:
-  #   cd <project-root>
-  #   litellm --config config/litellm_routing_config.yaml
-  callbacks: ["callbacks.litellm_usage_callback.proxy_handler_instance"]
   drop_params: true
 
 

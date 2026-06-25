@@ -19,7 +19,7 @@ endpoints:
   custom:
     - name: "LiteLLM Gateway"
       apiKey: "${LITELLM_VIRTUAL_KEY}"
-      baseURL: "http://localhost:4000/v1"
+      baseURL: "${LITELLM_URL}/v1"
       models:
         default: ["ROMTech AI Standard"]
         fetch: true
