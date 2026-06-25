@@ -13,8 +13,11 @@ param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.7.5'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
 param flagshipModelName string = 'gpt-4o'
+param flagshipModelVersion string = '2024-08-06'
 param fastModelName string = 'gpt-4o-mini'
+param fastModelVersion string = '2024-07-18'
 param embeddingsModelName string = 'text-embedding-3-small'
+param embeddingsModelVersion string = '1'
 
 param flagshipCapacity int = 10
 param fastCapacity int = 20
@@ -86,8 +89,11 @@ module aiFoundry 'aiFoundry.bicep' = {
     envName: environmentName
     location: location
     flagshipModelName: flagshipModelName
+    flagshipModelVersion: flagshipModelVersion
     fastModelName: fastModelName
+    fastModelVersion: fastModelVersion
     embeddingsModelName: embeddingsModelName
+    embeddingsModelVersion: embeddingsModelVersion
     flagshipCapacity: flagshipCapacity
     fastCapacity: fastCapacity
     embeddingsCapacity: embeddingsCapacity
