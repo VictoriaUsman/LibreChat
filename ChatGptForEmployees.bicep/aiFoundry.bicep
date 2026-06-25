@@ -1,9 +1,12 @@
 param appName string = 'ChatGptForEmployees'
 param envName string = 'Dev'
 param location string = 'eastus'
-param flagshipModelName string = 'gpt-4o'
-param fastModelName string = 'gpt-4o-mini'
+param flagshipModelName string = 'gpt-4.1'
+param flagshipModelVersion string = '2025-04-14'
+param fastModelName string = 'gpt-4.1-mini'
+param fastModelVersion string = '2025-04-14'
 param embeddingsModelName string = 'text-embedding-3-small'
+param embeddingsModelVersion string = '1'
 param flagshipCapacity int = 30
 param fastCapacity int = 100
 param embeddingsCapacity int = 120
@@ -39,6 +42,7 @@ resource flagshipDeployment 'Microsoft.CognitiveServices/accounts/deployments@20
     model: {
       format: 'OpenAI'
       name: flagshipModelName
+      version: flagshipModelVersion
     }
   }
 }
@@ -55,6 +59,7 @@ resource fastDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-0
     model: {
       format: 'OpenAI'
       name: fastModelName
+      version: fastModelVersion
     }
   }
 }
@@ -71,6 +76,7 @@ resource embeddingsDeployment 'Microsoft.CognitiveServices/accounts/deployments@
     model: {
       format: 'OpenAI'
       name: embeddingsModelName
+      version: embeddingsModelVersion
     }
   }
 }
