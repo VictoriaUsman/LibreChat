@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.33.27573",
-      "templateHash": "9119860047285091872"
+      "templateHash": "6603973063798190039"
     }
   },
   "parameters": {
@@ -63,6 +63,18 @@
     "embeddingsModelName": {
       "type": "string",
       "defaultValue": "text-embedding-3-small"
+    },
+    "flagshipCapacity": {
+      "type": "int",
+      "defaultValue": 10
+    },
+    "fastCapacity": {
+      "type": "int",
+      "defaultValue": 20
+    },
+    "embeddingsCapacity": {
+      "type": "int",
+      "defaultValue": 20
     },
     "postgresAdminUser": {
       "type": "string",
@@ -487,6 +499,15 @@
           },
           "embeddingsModelName": {
             "value": "[parameters('embeddingsModelName')]"
+          },
+          "flagshipCapacity": {
+            "value": "[parameters('flagshipCapacity')]"
+          },
+          "fastCapacity": {
+            "value": "[parameters('fastCapacity')]"
+          },
+          "embeddingsCapacity": {
+            "value": "[parameters('embeddingsCapacity')]"
           }
         },
         "template": {

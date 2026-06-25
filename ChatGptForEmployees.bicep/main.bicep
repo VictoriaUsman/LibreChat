@@ -16,6 +16,10 @@ param flagshipModelName string = 'gpt-4o'
 param fastModelName string = 'gpt-4o-mini'
 param embeddingsModelName string = 'text-embedding-3-small'
 
+param flagshipCapacity int = 10
+param fastCapacity int = 20
+param embeddingsCapacity int = 20
+
 param postgresAdminUser string = 'cgfeadmin'
 @secure()
 param postgresAdminPassword string
@@ -84,6 +88,9 @@ module aiFoundry 'aiFoundry.bicep' = {
     flagshipModelName: flagshipModelName
     fastModelName: fastModelName
     embeddingsModelName: embeddingsModelName
+    flagshipCapacity: flagshipCapacity
+    fastCapacity: fastCapacity
+    embeddingsCapacity: embeddingsCapacity
   }
 }
 

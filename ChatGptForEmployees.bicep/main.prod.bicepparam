@@ -13,6 +13,10 @@ param flagshipModelName = 'gpt-4o'
 param fastModelName = 'gpt-4o-mini'
 param embeddingsModelName = 'text-embedding-3-small'
 
+param flagshipCapacity = 50
+param fastCapacity = 100
+param embeddingsCapacity = 50
+
 param postgresAdminUser = 'cgfeadmin'
 
 // Secrets from Key Vault
