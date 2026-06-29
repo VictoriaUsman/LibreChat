@@ -77,6 +77,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'RAG_API_URL', value: 'http://${ragApiInternalUrl}' }
             { name: 'DOMAIN_CLIENT', value: libreChatUrl }
             { name: 'DOMAIN_SERVER', value: libreChatUrl }
+            { name: 'OPENID_ENABLED', value: 'true' }
             { name: 'OPENID_ISSUER', value: 'https://romtech.okta.com/oauth2/default' }
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
