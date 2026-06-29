@@ -1,6 +1,7 @@
 param envName string = 'Dev'
 param location string = 'eastus'
 param environmentId string
+param defaultDomain string
 param libreChatImage string
 param minReplicas int = 0
 param appInsightsConnectionString string
@@ -27,6 +28,7 @@ param openIdSessionSecret string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
+var libreChatUrl = 'https://${appName}.${defaultDomain}'
 
 resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
@@ -73,6 +75,8 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CONFIG_PATH', value: '/app/api/data/librechat.yaml' }
             { name: 'LITELLM_URL', value: 'http://${liteLlmInternalUrl}' }
             { name: 'RAG_API_URL', value: 'http://${ragApiInternalUrl}' }
+            { name: 'DOMAIN_CLIENT', value: libreChatUrl }
+            { name: 'DOMAIN_SERVER', value: libreChatUrl }
             { name: 'OPENID_ISSUER', value: 'https://romtech.okta.com/oauth2/default' }
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
