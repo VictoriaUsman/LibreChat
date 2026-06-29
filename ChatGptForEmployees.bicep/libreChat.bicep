@@ -26,7 +26,7 @@ param openIdClientSecret string
 param openIdSessionSecret string
 
 var appName = 'ca-librechat-${toLower(envName)}'
-var allowRegistration = envName != 'Prod'
+var allowRegistration = false
 
 resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
