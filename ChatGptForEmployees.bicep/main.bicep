@@ -159,6 +159,7 @@ module libreChat 'libreChat.bicep' = {
     envName: environmentName
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
+    defaultDomain: containerAppsEnvironment.outputs.defaultDomain
     libreChatImage: libreChatImage
     minReplicas: minReplicas
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
