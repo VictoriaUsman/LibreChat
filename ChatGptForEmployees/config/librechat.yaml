@@ -15,6 +15,15 @@
 version: "1.2.0"
 cache: true
 
+# PBI 10952 — restrict registration and login to @romtech.com email addresses.
+# LibreChat checks the domain of every email at sign-up and social/OIDC login.
+# Non-romtech.com addresses are rejected with a clear UI message before any
+# session is created. Enforcement on the Okta OIDC path is tracked separately
+# once the Okta tile is live.
+registration:
+  allowedDomains:
+    - "romtech.com"
+
 endpoints:
   custom:
     - name: "LiteLLM Gateway"
