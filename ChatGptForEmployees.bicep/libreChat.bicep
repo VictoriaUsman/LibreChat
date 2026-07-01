@@ -43,6 +43,9 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3080
         transport: 'Auto'
         allowInsecure: false
+        stickySessions: {
+          affinity: 'sticky'
+        }
       }
       secrets: [
         { name: 'mongo-uri', value: mongoConnectionString }
