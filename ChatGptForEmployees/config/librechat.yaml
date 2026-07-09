@@ -68,6 +68,14 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
+        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-4.1 (2025-04-14),
+        # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
+        # token map does not recognize the branded name and silently falls back to
+        # a 4095-token default, dropping earlier turns without warning (PBI: Fix
+        # Silent Conversation-History Truncation). Set explicitly, capped below the
+        # real window to reserve headroom for the model's max output (32,768 tokens)
+        # plus prompt/tool overhead.
+        maxContextTokens: 1000000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -95,6 +103,12 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
+        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
+        # which shares the gpt-4.1 family's 1,047,576-token context window (see
+        # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
+        # same fix. Capped below the real window to reserve headroom for the
+        # model's max output (32,768 tokens) plus prompt/tool overhead.
+        maxContextTokens: 1000000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
