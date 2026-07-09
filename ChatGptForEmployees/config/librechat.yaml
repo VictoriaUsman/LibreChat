@@ -164,6 +164,22 @@ interface:
   parameters: false
   multiConvo: false
   skills: false
+  # -----------------------------------------------------------------------
+  # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
+  # -----------------------------------------------------------------------
+  # STATUS: DRAFT — awaiting sign-off from Comms/Legal, same as the system
+  # prompt above. DO NOT deploy to any user-facing environment until sign-off
+  # is documented in the PR that merges this change.
+  #   [ ] Comms
+  #   [ ] Legal
+  customWelcome: "Welcome to ROMTech AI. Conversations may be reviewed under ROMTech's Acceptable Use Policy — avoid entering confidential client data, personal data, or trade secrets."
+  # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
+  # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
+  # Policy is currently an internal draft doc, not a published page — see
+  # ChatGptForEmployees.docs/acceptable_use_policy.md). Add
+  # interface.privacyPolicy.externalUrl / interface.termsOfService.externalUrl
+  # once Legal publishes a hosted URL; until then this omission is the
+  # documented sign-off decision for this AC.
 
 # File upload — enabled for v1 (PBI 9563)
 # Restricted to approved MIME types and size limits.

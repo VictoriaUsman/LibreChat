@@ -85,6 +85,10 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
             { name: 'OPENID_CALLBACK_URL', value: '/oauth/openid/callback' }
+            // DRAFT branding text — PBI: Apply ROMTech Branding. Awaiting
+            // Comms/Legal sign-off (see config/librechat.yaml customWelcome
+            // comment); do not deploy to a user-facing environment first.
+            { name: 'CUSTOM_FOOTER', value: 'ROMTech AI — Internal Use Only' }
             { name: 'MONGO_URI', secretRef: 'mongo-uri' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
             { name: 'JWT_REFRESH_SECRET', secretRef: 'jwt-refresh-secret' }
