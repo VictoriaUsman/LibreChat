@@ -1,0 +1,187 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "5904185317800009491"
+    }
+  },
+  "parameters": {
+    "envName": {
+      "type": "string",
+      "defaultValue": "Dev"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "environmentId": {
+      "type": "string"
+    },
+    "liteLlmImage": {
+      "type": "string"
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "appInsightsConnectionString": {
+      "type": "string"
+    },
+    "azureOpenAiEndpoint": {
+      "type": "string"
+    },
+    "azureOpenAiApiKey": {
+      "type": "securestring"
+    },
+    "liteLlmMasterKey": {
+      "type": "securestring"
+    },
+    "databaseUrl": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "appName": "[format('ca-litellm-{0}', toLower(parameters('envName')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 4000,
+            "transport": "Auto",
+            "allowInsecure": true
+          },
+          "secrets": [
+            {
+              "name": "litellm-master-key",
+              "value": "[parameters('liteLlmMasterKey')]"
+            },
+            {
+              "name": "database-url",
+              "value": "[parameters('databaseUrl')]"
+            },
+            {
+              "name": "azure-openai-api-key",
+              "value": "[parameters('azureOpenAiApiKey')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "litellm",
+              "image": "[parameters('liteLlmImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "args": [
+                "--config",
+                "/app/config/litellm_routing_config.yaml",
+                "--port",
+                "4000"
+              ],
+              "env": [
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "value": "[parameters('appInsightsConnectionString')]"
+                },
+                {
+                  "name": "PORT",
+                  "value": "4000"
+                },
+                {
+                  "name": "LITELLM_ENV",
+                  "value": "[toLower(parameters('envName'))]"
+                },
+                {
+                  "name": "AZURE_OPENAI_ENDPOINT",
+                  "value": "[parameters('azureOpenAiEndpoint')]"
+                },
+                {
+                  "name": "LITELLM_MASTER_KEY",
+                  "secretRef": "litellm-master-key"
+                },
+                {
+                  "name": "DATABASE_URL",
+                  "secretRef": "database-url"
+                },
+                {
+                  "name": "AZURE_OPENAI_API_KEY",
+                  "secretRef": "azure-openai-api-key"
+                }
+              ],
+              "volumeMounts": [
+                {
+                  "volumeName": "litellm-config",
+                  "mountPath": "/app/config"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health/liveliness",
+                    "port": 4000
+                  },
+                  "initialDelaySeconds": 15,
+                  "periodSeconds": 30,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health/readiness",
+                    "port": 4000
+                  },
+                  "initialDelaySeconds": 15,
+                  "periodSeconds": 10,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "litellm-config",
+              "storageType": "AzureFile",
+              "storageName": "litellm-config-store"
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": 2
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "appName": {
+      "type": "string",
+      "value": "[variables('appName')]"
+    }
+  }
+}

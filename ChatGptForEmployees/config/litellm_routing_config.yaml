@@ -1,0 +1,43 @@
+# LiteLLM — Validated Phase 0 Routing Configuration
+# -----------------------------------------------------------------------
+# This file is the validated Phase 0 configuration. Deploy to the LiteLLM
+# Azure Container App by mounting it via an Azure File Share.
+#
+# Secrets are referenced via os.environ/ so they are never stored in this
+# file. Set the corresponding environment variables in the Container App
+# using Azure Key Vault references and managed identity.
+#
+# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
+# environment variable reference.
+# -----------------------------------------------------------------------
+
+model_list:
+
+  # --- Model 1: ROMTech AI Standard (recommended default) ---
+  - model_name: "ROMTech AI Standard"
+    litellm_params:
+      model: azure/romtech-standard
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+
+  # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
+  - model_name: "ROMTech AI Fast"
+    litellm_params:
+      model: azure/romtech-fast
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+
+
+router_settings:
+  num_retries: 2
+  timeout: 60
+  retry_after: 5
+litellm_settings:
+  drop_params: true
+
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

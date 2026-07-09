@@ -1,0 +1,108 @@
+# =============================================================================
+# LibreChat Environment Template  —  PBI 9561
+# =============================================================================
+# Copy this file to scripts/.env and fill in every value.
+# scripts/.env is gitignored (*.env pattern) — never commit it.
+#
+# Generate secrets on Windows PowerShell:
+#   -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
+#
+# Or with openssl (Git Bash / WSL):
+#   openssl rand -hex 32   → 64-char hex  (JWT_SECRET, JWT_REFRESH_SECRET, CREDS_KEY)
+#   openssl rand -hex 16   → 32-char hex  (CREDS_IV)
+#
+# NOTE — Phase 0 vs Production auth:
+#   Phase 0 uses API keys and secrets set directly in the Container App.
+#   Production will use managed identities and Key Vault references.
+#
+# NOTE — Storage dependency:
+#   The Azure File Share mount (PBI 9125) must be configured in the Container
+#   Apps environment BEFORE deploying this container. Without it, LibreChat
+#   will start but no conversations or config files will persist across restarts.
+# =============================================================================
+
+
+# ── MongoDB ───────────────────────────────────────────────────────────────────
+# Local dev:  mongodb://localhost:27017/LibreChat
+# Azure:      replace with the Azure Cosmos DB for MongoDB connection string.
+MONGO_URI=mongodb://localhost:27017/LibreChat
+
+
+# ── Security secrets  (MUST be unique — never use placeholder or default) ─────
+# Each must be a freshly generated random value, not copied from documentation.
+# Generate with: openssl rand -hex 32  (for JWT_SECRET, JWT_REFRESH_SECRET, CREDS_KEY)
+# Generate with: openssl rand -hex 16  (for CREDS_IV)
+JWT_SECRET=
+JWT_REFRESH_SECRET=
+
+# CREDS_KEY must be exactly 32 bytes of hex (64 hex chars)
+# CREDS_IV  must be exactly 16 bytes of hex (32 hex chars)
+CREDS_KEY=
+CREDS_IV=
+
+
+# ── Registration / auth ───────────────────────────────────────────────────────
+ALLOW_REGISTRATION=false
+ALLOW_SOCIAL_LOGIN=true
+
+
+# ── Model endpoint visibility ─────────────────────────────────────────────────
+# "custom" means only the endpoints defined in librechat.yaml are shown.
+# This ensures users see only ROMTech AI Standard and ROMTech AI Fast.
+ENDPOINTS=custom
+
+
+# ── LiteLLM gateway ───────────────────────────────────────────────────────────
+# Obtain LITELLM_URL and LITELLM_VIRTUAL_KEY from Dev 1 (PBI-01-BE handoff).
+# Do NOT use the LiteLLM master key here — use a scoped virtual key.
+# Local dev:  http://localhost:4000/v1
+# ACA:        https://<litellm-app-name>.<id>.<region>.azurecontainerapps.io/v1
+LITELLM_URL=
+LITELLM_VIRTUAL_KEY=
+
+
+# ── TEMPORARY — Phase 0 only, direct Azure OpenAI connection ─────────────────
+# These are used during PBI 9125 / local dev validation only.
+# REMOVE BOTH once librechat.yaml is switched to LiteLLM for PBI 9126.
+# Find in: Azure Portal > Azure AI Foundry resource > Keys and Endpoint.
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_ENDPOINT=
+
+
+# ── Okta OIDC — required for PBI 9129 ────────────────────────────────────────
+# Provided by the Okta admin when they register the LibreChat application.
+# Leave blank until PBI 9129 — Okta access is not yet provisioned.
+# IMPORTANT: Full Okta login requires HTTPS and an ACA deployment.
+#            These variables must be present (even if empty) so the app starts.
+OPENID_CLIENT_ID=
+OPENID_CLIENT_SECRET=
+OPENID_ISSUER=https://romtech.okta.com/oauth2/default
+OPENID_CALLBACK_URL=https://<librechat-aca-url>/api/auth/openid/callback
+OPENID_SESSION_SECRET=
+OPENID_BUTTON_TEXT=Login with ROMTech Okta
+
+
+# ── LibreChat config file location ───────────────────────────────────────────
+# Absolute path to config\librechat.yaml in this repo.
+# Use your actual Windows path — no forward slashes.
+# Example: C:\Users\you\Documents\Romtech\ChatGptForEmployees\config\librechat.yaml
+CONFIG_PATH=
+
+
+# ── Node environment ─────────────────────────────────────────────────────────
+# Use "development" locally. ACA deployments use "production".
+NODE_ENV=development
+HOST=localhost
+PORT=3080
+
+
+# ── Validation / test variables ───────────────────────────────────────────────
+# LIBRECHAT_URL: local dev = http://localhost:3080
+#                ACA        = https://<app-name>.<unique-id>.<region>.azurecontainerapps.io
+LIBRECHAT_URL=http://localhost:3080
+
+# Test user — create once after starting LibreChat:
+#   cd LibreChat && npm run create-user
+# Then fill in the credentials you chose.
+LIBRECHAT_TEST_USER_EMAIL=
+LIBRECHAT_TEST_USER_PASSWORD=

@@ -9,23 +9,34 @@ What this script does:
   4. Enables the pgvector extension (CREATE EXTENSION IF NOT EXISTS vector)
   5. Grants the role full access to its database and public schema
 
-Prerequisites — pgvector must be installed on the PostgreSQL server first:
+Prerequisites — the pgvector extension must be installed on the PostgreSQL
+server first (this script only runs CREATE EXTENSION; it cannot install the binary).
 
-  Windows:
-    1. Find your PostgreSQL version:
-         psql --version
-    2. Download the matching release from:
-         https://github.com/pgvector/pgvector/releases
-         File: pgvector-pg<VERSION>-windows-x86_64.zip
-         (e.g. pgvector-pg16-windows-x86_64.zip for PostgreSQL 16)
-    3. Unzip and copy the three file types to their PostgreSQL directories:
-         vector.dll      -> C:\\Program Files\\PostgreSQL\\<version>\\lib\\
-         vector.control  -> C:\\Program Files\\PostgreSQL\\<version>\\share\\extension\\
-         vector--*.sql   -> C:\\Program Files\\PostgreSQL\\<version>\\share\\extension\\
-    4. Restart the PostgreSQL Windows service:
-         services.msc -> postgresql-x64-<version> -> Restart
+  NOTE: pgvector ships SOURCE ONLY. There is no official prebuilt
+  "pgvector-pg<NN>-windows-x86_64.zip" on the releases page — those URLs 404.
+  On Windows you must compile it. (In production this is a non-issue: Azure
+  Database for PostgreSQL offers pgvector as a managed extension — just add
+  'vector' to azure.extensions and run CREATE EXTENSION.)
 
-  PostgreSQL is already running locally from PBI-09-BE.
+  Windows build-from-source:
+    1. Install "Build Tools for Visual Studio 2022" with the
+       "Desktop development with C++" workload.
+    2. Clone a pinned release (outside this repo — it's a throwaway build dir):
+         git clone --depth 1 --branch v0.8.1 https://github.com/pgvector/pgvector.git
+    3. In an "x64 Native Tools Command Prompt for VS 2022" (or after calling
+       vcvars64.bat), compile against your PG headers:
+         set "PGROOT=C:\\Program Files\\PostgreSQL\\<NN>"
+         cd <clone>
+         nmake /F Makefile.win
+    4. Install (needs ADMIN — writes into Program Files) then restart the service:
+         nmake /F Makefile.win install
+         #   ... or copy manually:
+         #   vector.dll     -> C:\\Program Files\\PostgreSQL\\<NN>\\lib\\
+         #   vector.control -> C:\\Program Files\\PostgreSQL\\<NN>\\share\\extension\\
+         #   sql\\vector--*.sql -> C:\\Program Files\\PostgreSQL\\<NN>\\share\\extension\\
+         Restart-Service postgresql-x64-<NN>      # elevated
+
+  See RUN_LOCAL.md §6 for the full walkthrough.
 
 Usage:
   pip install -r requirements.txt
