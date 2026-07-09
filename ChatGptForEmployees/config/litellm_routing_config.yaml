@@ -16,16 +16,19 @@ model_list:
   # --- Model 1: ROMTech AI Standard (recommended default) ---
   - model_name: "ROMTech AI Standard"
     litellm_params:
-      model: azure/gpt-5.4-mini
+      model: azure/romtech-standard
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"
+      # gpt-4.1 rejects `max_tokens` on some API versions in favor of
+      # `max_completion_tokens`; drop it so LiteLLM doesn't forward a
+      # param the deployment may reject (see RUN_LOCAL.md gotchas).
       additional_drop_params: ["max_tokens"]
 
   # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
   - model_name: "ROMTech AI Fast"
     litellm_params:
-      model: azure/gpt-5.4-mini
+      model: azure/romtech-fast
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"

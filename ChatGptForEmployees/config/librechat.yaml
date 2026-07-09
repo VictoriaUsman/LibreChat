@@ -15,6 +15,21 @@
 version: "1.2.0"
 cache: true
 
+# PBI: Verify or Disable Conversation Summarization on the Custom Endpoint.
+# The per-endpoint `summarize`/`summaryModel` keys below (LiteLLM Gateway) are
+# dead in this LibreChat version — the custom-endpoint schema silently strips
+# them, so `summarize: true` never did anything. The real mechanism is a
+# separate "self-summarize" feature that is ON BY DEFAULT whenever this
+# `summarization` block is absent: on context overflow it asks the
+# conversation's OWN model (no dedicated summary model) to summarize dropped
+# turns, and on failure falls back to a content-free metadata stub instead of
+# real prior content — a plausible cause of the reported "you never asked
+# that" bug (the model sees a stub, not a summary). Disabled here in favor of
+# deterministic oldest-first truncation, since PBI-01-FE's maxContextTokens
+# fix makes overflow rare and the failure mode is worse than plain truncation.
+summarization:
+  enabled: false
+
 # PBI 10952 — restrict registration and login to @romtech.com email addresses.
 # LibreChat checks the domain of every email at sign-up and social/OIDC login.
 # Non-romtech.com addresses are rejected with a clear UI message before any
@@ -34,7 +49,9 @@ endpoints:
         fetch: true
       titleConvo: true
       titleModel: "ROMTech AI Fast"
-      summarize: true
+      # `summarize`/`summaryModel` are not valid custom-endpoint keys in this
+      # LibreChat version (silently stripped) — see `summarization:` above,
+      # which is the actual on/off switch for this endpoint's context handling.
       streamRate: 15
 
 # -----------------------------------------------------------------------
