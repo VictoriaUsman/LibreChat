@@ -153,7 +153,10 @@ modelSpecs:
 # interface.parameters: false also hides the system prompt from users (PBI 9575).
 interface:
   endpointsMenu: false
-  modelSelect: true
+  # false: the header model dropdown was a second, redundant control alongside
+  # the enforced modelSpecs buttons (Standard/Fast) for the same choice. Also
+  # hides the API-key gear icon. PBI: Remove Redundant Model Selector.
+  modelSelect: false
   agents: false
   memories: false
   bookmarks: false
