@@ -19,7 +19,15 @@ param fastModelVersion string = '2025-04-14'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-param flagshipCapacity int = 10
+// capacity = throughput (tokens-per-minute rate limit), NOT context window or
+// output length — that's maxContextTokens in config/librechat.yaml (PBI-01-FE).
+// GlobalStandard capacity units are ~1,000 TPM each for gpt-4.1 in eastus2 at
+// time of writing; confirm the exact unit in the target region before relying
+// on this for capacity planning, as Azure's per-unit TPM can vary by model/region.
+// flagshipCapacity=100 (~100K TPM) supports realistic concurrent load testing
+// without hitting artificial 429s (see PBI: Increase Azure OpenAI TPM Capacity
+// for Realistic Testing). Raising capacity has a direct cost impact — see PR.
+param flagshipCapacity int = 100
 param fastCapacity int = 20
 param embeddingsCapacity int = 20
 

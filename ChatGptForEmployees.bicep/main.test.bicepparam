@@ -13,7 +13,11 @@ param flagshipModelName = 'gpt-4.1'
 param fastModelName = 'gpt-4.1-mini'
 param embeddingsModelName = 'text-embedding-3-small'
 
-param flagshipCapacity = 20
+// Raised to >=100K TPM for realistic load testing (was 20 = ~20K TPM, which
+// produced artificial 429s under concurrent test load). Confirm quota is
+// available in this region BEFORE deploying — see PBI: Increase Azure OpenAI
+// TPM Capacity for Realistic Testing.
+param flagshipCapacity = 100
 param fastCapacity = 40
 param embeddingsCapacity = 20
 
