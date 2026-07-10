@@ -15,6 +15,33 @@
 version: "1.2.0"
 cache: true
 
+# PBI: Harden Nightly Orphaned-File Cleanup — file storage strategy.
+# Store uploaded files in Azure Blob rather than the default `local`/file-share
+# strategy, so each File record gets source: 'azure_blob'. The nightly cleanup
+# job (scripts/cleanup_orphaned_files.py) reclaims orphaned file BYTES via that
+# blob source, and storage.bicep provides the soft-delete + versioning recovery
+# window. Connection + container come from the AZURE_STORAGE_* env vars in
+# ChatGptForEmployees.bicep/libreChat.bicep, where AZURE_STORAGE_PUBLIC_ACCESS
+# is forced false so PHI files are never publicly readable (LibreChat defaults
+# it to true). VERIFY on first deploy that uploads land in Blob with
+# source=azure_blob (deploy-time verification is tracked in the team working notes).
+fileStrategy: "azure_blob"
+
+# PBI: Verify or Disable Conversation Summarization on the Custom Endpoint.
+# The per-endpoint `summarize`/`summaryModel` keys below (LiteLLM Gateway) are
+# dead in this LibreChat version — the custom-endpoint schema silently strips
+# them, so `summarize: true` never did anything. The real mechanism is a
+# separate "self-summarize" feature that is ON BY DEFAULT whenever this
+# `summarization` block is absent: on context overflow it asks the
+# conversation's OWN model (no dedicated summary model) to summarize dropped
+# turns, and on failure falls back to a content-free metadata stub instead of
+# real prior content — a plausible cause of the reported "you never asked
+# that" bug (the model sees a stub, not a summary). Disabled here in favor of
+# deterministic oldest-first truncation, since PBI-01-FE's maxContextTokens
+# fix makes overflow rare and the failure mode is worse than plain truncation.
+summarization:
+  enabled: false
+
 # PBI 10952 — restrict registration and login to @romtech.com email addresses.
 # LibreChat checks the domain of every email at sign-up and social/OIDC login.
 # Non-romtech.com addresses are rejected with a clear UI message before any
@@ -34,7 +61,9 @@ endpoints:
         fetch: true
       titleConvo: true
       titleModel: "ROMTech AI Fast"
-      summarize: true
+      # `summarize`/`summaryModel` are not valid custom-endpoint keys in this
+      # LibreChat version (silently stripped) — see `summarization:` above,
+      # which is the actual on/off switch for this endpoint's context handling.
       streamRate: 15
 
 # -----------------------------------------------------------------------
@@ -68,6 +97,20 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
+        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-4.1 (2025-04-14),
+        # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
+        # token map does not recognize the branded name and silently falls back to
+        # a 4095-token default, dropping earlier turns without warning (PBI: Fix
+        # Silent Conversation-History Truncation). Set explicitly to fix that bug,
+        # but capped at 128000 rather than the full 1,047,576-token window (PBI:
+        # Address Remaining Review Follow-ups from feat/phase0implementation) --
+        # Azure OpenAI bills per input token, and re-sending up to 1M tokens on
+        # every turn as a chat grows is a large, mostly-unnecessary cost driver.
+        # 128k tokens (~450-500k characters) comfortably retains dozens of turns
+        # of typical internal chat/document-review use, so real conversations
+        # keep their earliest turns well before hitting this cap; only unusually
+        # long sessions truncate, which is the deliberate cost/recall trade-off.
+        maxContextTokens: 128000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -95,6 +138,12 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
+        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
+        # which shares the gpt-4.1 family's 1,047,576-token context window (see
+        # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
+        # same fix, and the same 128000 cost/recall cap -- see the rationale on
+        # the Standard preset above.
+        maxContextTokens: 128000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -122,7 +171,10 @@ modelSpecs:
 # interface.parameters: false also hides the system prompt from users (PBI 9575).
 interface:
   endpointsMenu: false
-  modelSelect: true
+  # false: the header model dropdown was a second, redundant control alongside
+  # the enforced modelSpecs buttons (Standard/Fast) for the same choice. Also
+  # hides the API-key gear icon. PBI: Remove Redundant Model Selector.
+  modelSelect: false
   agents: false
   memories: false
   bookmarks: false
@@ -130,6 +182,22 @@ interface:
   parameters: false
   multiConvo: false
   skills: false
+  # -----------------------------------------------------------------------
+  # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
+  # -----------------------------------------------------------------------
+  # STATUS: DRAFT — awaiting sign-off from Comms/Legal, same as the system
+  # prompt above. DO NOT deploy to any user-facing environment until sign-off
+  # is documented in the PR that merges this change.
+  #   [ ] Comms
+  #   [ ] Legal
+  customWelcome: "Welcome to ROMTech AI. Conversations may be reviewed under ROMTech's Acceptable Use Policy — avoid entering confidential client data, personal data, or trade secrets."
+  # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
+  # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
+  # Policy is currently an internal draft doc, not a published page — see
+  # ChatGptForEmployees.docs/acceptable_use_policy.md). Add
+  # interface.privacyPolicy.externalUrl / interface.termsOfService.externalUrl
+  # once Legal publishes a hosted URL; until then this omission is the
+  # documented sign-off decision for this AC.
 
 # File upload — enabled for v1 (PBI 9563)
 # Restricted to approved MIME types and size limits.

@@ -25,6 +25,9 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+@secure()
+param storageConnectionString string
+param blobContainerName string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
@@ -57,6 +60,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-client-id', value: openIdClientId }
         { name: 'openid-client-secret', value: openIdClientSecret }
         { name: 'openid-session-secret', value: openIdSessionSecret }
+        { name: 'azure-storage-connection-string', value: storageConnectionString }
       ]
     }
     template: {
@@ -85,6 +89,10 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
             { name: 'OPENID_CALLBACK_URL', value: '/oauth/openid/callback' }
+            // DRAFT branding text — PBI: Apply ROMTech Branding. Awaiting
+            // Comms/Legal sign-off (see config/librechat.yaml customWelcome
+            // comment); do not deploy to a user-facing environment first.
+            { name: 'CUSTOM_FOOTER', value: 'ROMTech AI — Internal Use Only' }
             { name: 'MONGO_URI', secretRef: 'mongo-uri' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
             { name: 'JWT_REFRESH_SECRET', secretRef: 'jwt-refresh-secret' }
@@ -94,6 +102,12 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_CLIENT_ID', secretRef: 'openid-client-id' }
             { name: 'OPENID_CLIENT_SECRET', secretRef: 'openid-client-secret' }
             { name: 'OPENID_SESSION_SECRET', secretRef: 'openid-session-secret' }
+            // Azure Blob file storage (fileStrategy: azure_blob in librechat.yaml).
+            // PUBLIC_ACCESS forced false so PHI files are never publicly readable
+            // (LibreChat defaults it to true). Container + soft-delete: storage.bicep.
+            { name: 'AZURE_STORAGE_CONNECTION_STRING', secretRef: 'azure-storage-connection-string' }
+            { name: 'AZURE_CONTAINER_NAME', value: blobContainerName }
+            { name: 'AZURE_STORAGE_PUBLIC_ACCESS', value: 'false' }
           ]
           volumeMounts: [
             {

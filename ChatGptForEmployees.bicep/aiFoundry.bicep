@@ -7,7 +7,10 @@ param fastModelName string = 'gpt-4.1-mini'
 param fastModelVersion string = '2025-04-14'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
-param flagshipCapacity int = 30
+// Defaults here are only used if a caller omits the param — main.bicep is the
+// effective entry point and always passes its own value explicitly. Kept in
+// sync with main.bicep's default to avoid two different-looking defaults.
+param flagshipCapacity int = 100
 param fastCapacity int = 100
 param embeddingsCapacity int = 120
 

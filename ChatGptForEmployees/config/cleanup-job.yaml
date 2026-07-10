@@ -1,0 +1,73 @@
+# ACA Scheduled Job — nightly orphaned file cleanup (PBI-21-BE Option A)
+#
+# Deploy with:
+#   az containerapp job create \
+#     --name librechat-cleanup-job \
+#     --resource-group <rg> \
+#     --environment <aca-env> \
+#     --trigger-type Schedule \
+#     --cron-expression "0 2 * * *" \
+#     --replica-timeout 300 \
+#     --replica-retry-limit 1 \
+#     --replica-completion-count 1 \
+#     --parallelism 1 \
+#     --image <registry>/librechat-cleanup:latest \
+#     --cpu 0.25 \
+#     --memory 0.5Gi \
+#     --secrets \
+#         mongo-uri=<MONGO_URI> \
+#         azure-conn-str=<AZURE_STORAGE_CONNECTION_STRING> \
+#         rag-db-password=<RAG_DB_PASSWORD> \
+#     --env-vars \
+#         MONGO_URI=secretref:mongo-uri \
+#         AZURE_STORAGE_CONNECTION_STRING=secretref:azure-conn-str \
+#         AZURE_CONTAINER_NAME=files \
+#         RAG_DB_HOST=<pgvector-host> \
+#         RAG_DB_PORT=5432 \
+#         RAG_DB_NAME=librechat_rag \
+#         RAG_DB_USER=<pgvector-user> \
+#         RAG_DB_PASSWORD=secretref:rag-db-password
+
+name: librechat-cleanup-job
+
+trigger:
+  type: Schedule
+  schedule:
+    # Runs at 2:00 AM UTC every night
+    cronExpression: "0 2 * * *"
+
+replicaTimeout: 300      # seconds — job is killed if it runs longer
+replicaRetryLimit: 1     # retry once on failure before marking failed
+replicaCompletionCount: 1
+parallelism: 1
+
+container:
+  image: <registry>/librechat-cleanup:latest
+  resources:
+    cpu: 0.25
+    memory: 0.5Gi
+  env:
+    - name: MONGO_URI
+      secretRef: mongo-uri
+    - name: AZURE_STORAGE_CONNECTION_STRING
+      secretRef: azure-conn-str
+    - name: AZURE_CONTAINER_NAME
+      value: files
+    - name: RAG_DB_HOST
+      value: <pgvector-host>
+    - name: RAG_DB_PORT
+      value: "5432"
+    - name: RAG_DB_NAME
+      value: librechat_rag
+    - name: RAG_DB_USER
+      value: <pgvector-user>
+    - name: RAG_DB_PASSWORD
+      secretRef: rag-db-password
+
+secrets:
+  - name: mongo-uri
+    value: <MONGO_URI>
+  - name: azure-conn-str
+    value: <AZURE_STORAGE_CONNECTION_STRING>
+  - name: rag-db-password
+    value: <RAG_DB_PASSWORD>

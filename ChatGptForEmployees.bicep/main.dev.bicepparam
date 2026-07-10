@@ -6,7 +6,7 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.7.5'
+param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param flagshipModelName = 'gpt-4.1'
