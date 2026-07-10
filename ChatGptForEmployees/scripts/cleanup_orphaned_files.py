@@ -1,9 +1,66 @@
 #!/usr/bin/env python3
 """
-Nightly cleanup job for PBI-21-BE (Option A): deletes files from Azure Blob Storage,
-pgvector, and MongoDB that have no matching active conversation.
+Nightly cleanup job for PBI-21-BE (Option A), hardened to fail-closed per
+"Harden Nightly Orphaned-File Cleanup to Fail-Closed". Deletes files from
+Azure Blob Storage, pgvector, and MongoDB that have no matching active
+conversation.
 
 Runs as an ACA scheduled job (cron: 0 2 * * *).
+
+Two-pass mark-and-sweep, report-only by default:
+  Pass 1 (mark):  find files that look orphaned (no active conversation,
+                  older than RETENTION_DAYS, not already marked) and stamp
+                  them pendingDeletion=True / markedAt=now. Nothing is
+                  deleted in this pass.
+  Pass 2 (sweep): find files marked more than GRACE_PERIOD_DAYS ago,
+                  re-verify each one individually via a targeted
+                  per-candidate lookup (not the pass-1 snapshot), then
+                  delete embeddings -> blob -> Mongo record, in that order,
+                  idempotently. A file whose conversation became active
+                  again during the grace window is un-marked instead of
+                  deleted.
+
+Both passes run on every invocation; nothing is actually written to Mongo,
+Blob, or pgvector unless CLEANUP_ENFORCE=true (see below) -- the default
+mode only logs/records what it would do.
+
+Safety layers (see PBI for full rationale):
+  1. Canary liveness  -- CANARY_CONVERSATION_ID must appear in the same
+     active-conversation query used for orphan detection, or the job aborts
+     without touching anything. Its updatedAt is refreshed on every
+     successful check so LibreChat's own CONVERSATION_RETENTION_DAYS sweep
+     (packages/api/src/files/sweep.ts sweepExpiredConversations -- which
+     deletes ANY conversation with a stale updatedAt, not just null-ID
+     ones; see getExpiredConversations in
+     packages/data-schemas/src/methods/conversation.ts) never reaps it as
+     a side effect of this job simply running nightly.
+  2. Per-candidate existence check -- both passes re-query Mongo for a
+     file's specific conversationId individually (conversation_exists)
+     instead of trusting a bulk in-memory diff as the final word.
+  3. Volume circuit breaker -- CIRCUIT_BREAKER_MAX_ABSOLUTE /
+     CIRCUIT_BREAKER_MAX_RATIO abort the mark pass (marking nothing) if too
+     many candidates appear at once, since that usually means the
+     active-conversation query is broken rather than that many files being
+     genuinely orphaned.
+  4. Age filter -- RETENTION_DAYS (default 90); only files whose createdAt
+     is older are ever eligible for marking.
+  5. Two-pass mark-and-sweep with grace window -- see above.
+  6. Delete ordering -- embeddings (pgvector) -> blob -> Mongo record last.
+     Each step is idempotent/re-runnable (already-gone is success, not
+     failure), so a crash mid-item is safely retried on the next run
+     without double-deleting or leaving a dangling record.
+  7. Recoverability backstop -- Azure Blob soft-delete + versioning
+     (ChatGptForEmployees.bicep/storage.bicep), independent of this script.
+  8. Report-only by default -- see CLEANUP_ENFORCE below.
+  9. Audit log -- one JSON line per marked/unmarked/deleted/failed file,
+     written to AUDIT_LOG_PATH. Exits non-zero on ANY per-item failure.
+ 10. pgvector path -- DELETE ... WHERE cmetadata->>'file_id' = ANY(%s),
+     verified against the real rag_api ingestion code (LangChain Document
+     metadata attaches a flat `file_id` key, stored in the `cmetadata`
+     JSONB column).
+ 11. Regression coverage -- scripts/validate_cascade_delete.py and
+     scripts/seed_cascade_test_fixtures.py exercise this against a seeded
+     orphan+keeper dataset.
 
 Required environment variables (from ACA secrets / .env):
   MONGO_URI                  MongoDB connection string
@@ -15,14 +72,33 @@ Required environment variables (from ACA secrets / .env):
   RAG_DB_USER                pgvector user
   RAG_DB_PASSWORD            pgvector password
 
+Config (all optional):
+  CLEANUP_ENFORCE                 "true" to actually mark/delete. Anything
+                                   else (including unset) = report-only.
+                                   Flipping this is the explicit, documented
+                                   config change required to go live in a
+                                   shared/prod environment -- confirm the
+                                   canary exists (seed_canary_conversation.py)
+                                   and the circuit breaker thresholds below
+                                   fit that environment's file volume first.
+  CANARY_CONVERSATION_ID          default: __cleanup_canary__
+  RETENTION_DAYS                  default: 90
+  GRACE_PERIOD_DAYS               default: 3
+  CIRCUIT_BREAKER_MAX_ABSOLUTE     default: 500
+  CIRCUIT_BREAKER_MAX_RATIO        default: 0.10 (10% of all file records)
+  AUDIT_LOG_PATH                   default: cleanup_audit.log (next to this file)
+
 Exit codes:
-  0 -- completed (with or without deletions)
-  1 -- unrecoverable error
+  0 -- completed, zero per-item failures (report-only or enforcing)
+  1 -- canary missing, circuit breaker tripped, per-item failure, or
+       unrecoverable error
 """
 
 import os
 import sys
+import json
 import logging
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -42,51 +118,179 @@ RAG_DB_NAME = os.environ.get("RAG_DB_NAME", "librechat_rag")
 RAG_DB_USER = os.environ.get("RAG_DB_USER", "")
 RAG_DB_PASSWORD = os.environ.get("RAG_DB_PASSWORD", "")
 
+CLEANUP_ENFORCE = os.environ.get("CLEANUP_ENFORCE", "false").strip().lower() == "true"
+CANARY_CONVERSATION_ID = os.environ.get("CANARY_CONVERSATION_ID", "__cleanup_canary__")
+RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "90"))
+GRACE_PERIOD_DAYS = int(os.environ.get("GRACE_PERIOD_DAYS", "3"))
+CIRCUIT_BREAKER_MAX_ABSOLUTE = int(os.environ.get("CIRCUIT_BREAKER_MAX_ABSOLUTE", "500"))
+CIRCUIT_BREAKER_MAX_RATIO = float(os.environ.get("CIRCUIT_BREAKER_MAX_RATIO", "0.10"))
+AUDIT_LOG_PATH = os.environ.get(
+    "AUDIT_LOG_PATH", os.path.join(os.path.dirname(__file__), "cleanup_audit.log")
+)
 
-def get_orphaned_files(db):
-    """Return file records in MongoDB whose conversationId has no active conversation."""
+
+class CircuitBreakerTripped(Exception):
+    pass
+
+
+def audit(entry: dict) -> None:
+    entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+    entry["mode"] = "enforcing" if CLEANUP_ENFORCE else "report-only"
+    with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+
+
+def get_db_name(uri: str) -> str:
+    return uri.rstrip("/").split("/")[-1].split("?")[0] or "LibreChat"
+
+
+def check_canary(db) -> bool:
+    """Safety layer #1. Aborts unless the sentinel canary conversation is
+    visible through the query used for orphan detection. Refreshes
+    updatedAt on success so LibreChat's own conversation-retention sweep
+    never reaps it as a side effect of this job being the only thing that
+    ever touches it (see module docstring, safety layer #1)."""
+    doc = db.conversations.find_one({"conversationId": CANARY_CONVERSATION_ID}, {"_id": 1})
+    if doc is None:
+        log.error(
+            "CANARY MISSING: conversationId=%s not found in conversations collection. "
+            "Aborting without deleting or marking anything. Run seed_canary_conversation.py, "
+            "or check MONGO_URI points at the right database, before re-running.",
+            CANARY_CONVERSATION_ID,
+        )
+        return False
+
+    db.conversations.update_one(
+        {"_id": doc["_id"]}, {"$set": {"updatedAt": datetime.now(timezone.utc)}}
+    )
+    log.info("Canary check passed: conversationId=%s", CANARY_CONVERSATION_ID)
+    return True
+
+
+def conversation_exists(db, conversation_id) -> bool:
+    """Safety layer #2: a fresh, targeted lookup for this one
+    conversationId, not a bulk in-memory diff."""
+    if not conversation_id:
+        return False
+    return db.conversations.find_one({"conversationId": conversation_id}, {"_id": 1}) is not None
+
+
+def find_mark_candidates(db):
+    """Pass 1 discovery. A bulk diff is used only as a cheap pre-filter
+    (avoids a per-document query against every file record in the
+    collection); every candidate it surfaces is then re-checked
+    individually before it's trusted -- see safety layer #2."""
     active_ids = set(
         doc["conversationId"]
         for doc in db.conversations.find({}, {"conversationId": 1})
         if doc.get("conversationId")
     )
-    return list(
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
+    prefiltered = list(
         db.files.find(
             {
-                "conversationId": {
-                    "$exists": True,
-                    "$nin": list(active_ids),
-                    "$type": "string",
-                }
+                "conversationId": {"$exists": True, "$nin": list(active_ids), "$type": "string"},
+                "pendingDeletion": {"$ne": True},
+                "createdAt": {"$lt": cutoff},
             }
         )
     )
 
+    verified = [c for c in prefiltered if not conversation_exists(db, c["conversationId"])]
+    skipped = len(prefiltered) - len(verified)
+    if skipped:
+        log.warning(
+            "%d candidate(s) dropped by per-candidate re-check (conversation reappeared "
+            "between the bulk pre-filter and verification)",
+            skipped,
+        )
+    return verified
+
+
+def mark_pass(db) -> int:
+    """Pass 1: mark eligible orphan candidates. Never deletes anything."""
+    candidates = find_mark_candidates(db)
+    total_files = db.files.count_documents({})
+
+    if not candidates:
+        log.info("Mark pass: no new orphan candidates found.")
+        return 0
+
+    ratio = (len(candidates) / total_files) if total_files else 1.0
+    if len(candidates) > CIRCUIT_BREAKER_MAX_ABSOLUTE or ratio > CIRCUIT_BREAKER_MAX_RATIO:
+        log.error(
+            "CIRCUIT BREAKER TRIPPED: %d candidate(s) (%.1f%% of %d total file records) "
+            "exceeds threshold (max_absolute=%d, max_ratio=%.2f). Aborting mark pass without "
+            "marking anything -- this usually means the active-conversation query is broken, "
+            "not that this many files are genuinely orphaned.",
+            len(candidates), ratio * 100, total_files,
+            CIRCUIT_BREAKER_MAX_ABSOLUTE, CIRCUIT_BREAKER_MAX_RATIO,
+        )
+        audit({
+            "action": "circuit_breaker_tripped",
+            "candidate_count": len(candidates),
+            "total_files": total_files,
+            "ratio": ratio,
+        })
+        raise CircuitBreakerTripped()
+
+    log.info("Mark pass: %d candidate(s) eligible for marking.", len(candidates))
+    now = datetime.now(timezone.utc)
+    for f in candidates:
+        file_id = f.get("file_id", str(f.get("_id")))
+        evidence = (
+            f"conversationId={f.get('conversationId')} has no active conversation; "
+            f"createdAt older than {RETENTION_DAYS}d"
+        )
+        if CLEANUP_ENFORCE:
+            db.files.update_one(
+                {"_id": f["_id"]}, {"$set": {"pendingDeletion": True, "markedAt": now}}
+            )
+        audit({
+            "action": "marked" if CLEANUP_ENFORCE else "would_mark",
+            "file_id": file_id,
+            "conversationId": f.get("conversationId"),
+            "evidence": evidence,
+        })
+    log.info(
+        "Mark pass complete: %d file(s) %s.",
+        len(candidates), "marked" if CLEANUP_ENFORCE else "would be marked",
+    )
+    return len(candidates)
+
+
+def find_sweep_candidates(db):
+    grace_cutoff = datetime.now(timezone.utc) - timedelta(days=GRACE_PERIOD_DAYS)
+    return list(db.files.find({"pendingDeletion": True, "markedAt": {"$lt": grace_cutoff}}))
+
 
 def delete_from_blob(file):
-    """Delete a blob from Azure Blob Storage. Skips silently on 404."""
+    """Delete a blob from Azure Blob Storage. Skips silently on 404 (idempotent)."""
     if not AZURE_CONN_STR:
-        log.warning("AZURE_STORAGE_CONNECTION_STRING not set — skipping blob delete for %s", file.get("file_id"))
+        log.warning(
+            "AZURE_STORAGE_CONNECTION_STRING not set — skipping blob delete for %s",
+            file.get("file_id"),
+        )
         return
 
     filepath = file.get("filepath", "")
     if not filepath:
         return
 
+    from azure.storage.blob import BlobServiceClient
+
+    client = BlobServiceClient.from_connection_string(AZURE_CONN_STR)
+    container_client = client.get_container_client(AZURE_CONTAINER)
+
+    marker = f"{AZURE_CONTAINER}/"
+    if marker in filepath:
+        blob_path = filepath.split(marker, 1)[1]
+    else:
+        log.warning("Could not parse blob path from filepath=%s", filepath)
+        return
+
     try:
-        from azure.storage.blob import BlobServiceClient
-
-        client = BlobServiceClient.from_connection_string(AZURE_CONN_STR)
-        container_client = client.get_container_client(AZURE_CONTAINER)
-
-        # filepath is a full blob URL; extract the path after the container name
-        marker = f"{AZURE_CONTAINER}/"
-        if marker in filepath:
-            blob_path = filepath.split(marker, 1)[1]
-        else:
-            log.warning("Could not parse blob path from filepath=%s", filepath)
-            return
-
         container_client.delete_blob(blob_path)
         log.info("Blob deleted: %s", blob_path)
     except Exception as e:
@@ -94,116 +298,158 @@ def delete_from_blob(file):
         if status == 404 or "BlobNotFound" in str(e):
             log.debug("Blob already gone: %s", filepath)
         else:
-            log.error("Failed to delete blob for file_id=%s: %s", file.get("file_id"), e)
             raise
 
 
 def delete_from_pgvector(file_ids):
-    """Delete pgvector embedding rows for the given file_ids."""
+    """Delete pgvector embedding rows for the given file_ids. Verified
+    metadata path: rag_api attaches a flat `file_id` key to each LangChain
+    Document, stored in the `cmetadata` JSONB column (safety layer #10)."""
     if not RAG_DB_USER or not file_ids:
         return 0
 
-    try:
-        import psycopg2
+    import psycopg2
 
-        conn = psycopg2.connect(
-            host=RAG_DB_HOST,
-            port=RAG_DB_PORT,
-            dbname=RAG_DB_NAME,
-            user=RAG_DB_USER,
-            password=RAG_DB_PASSWORD,
-            connect_timeout=10,
-        )
+    conn = psycopg2.connect(
+        host=RAG_DB_HOST,
+        port=RAG_DB_PORT,
+        dbname=RAG_DB_NAME,
+        user=RAG_DB_USER,
+        password=RAG_DB_PASSWORD,
+        connect_timeout=10,
+    )
+    try:
         cur = conn.cursor()
         cur.execute(
-            """
-            DELETE FROM langchain_pg_embedding
-            WHERE cmetadata->>'file_id' = ANY(%s)
-            """,
+            "DELETE FROM langchain_pg_embedding WHERE cmetadata->>'file_id' = ANY(%s)",
             (list(file_ids),),
         )
         count = cur.rowcount
         conn.commit()
         cur.close()
-        conn.close()
         return count
-    except Exception as e:
-        log.error("pgvector delete failed: %s", e)
-        return 0
+    finally:
+        conn.close()
+
+
+def sweep_pass(db):
+    """Pass 2: re-verify each previously-marked file individually right
+    before deleting, in embeddings -> blob -> Mongo order (safety layer #6).
+    Any failure at a given step aborts that file's chain so the record
+    survives for retry on the next run; already-gone at any step counts as
+    success (idempotent)."""
+    candidates = find_sweep_candidates(db)
+    if not candidates:
+        log.info("Sweep pass: no file(s) past the grace window.")
+        return 0, 0
+
+    log.info(
+        "Sweep pass: %d file(s) past the %dd grace window, re-verifying individually.",
+        len(candidates), GRACE_PERIOD_DAYS,
+    )
+
+    deleted = 0
+    failed = 0
+    for f in candidates:
+        file_id = f.get("file_id", str(f.get("_id")))
+        conversation_id = f.get("conversationId")
+
+        # Second application of safety layer #2: re-check right before
+        # delete, not the mark-pass snapshot.
+        if conversation_exists(db, conversation_id):
+            log.info(
+                "Un-marking file_id=%s: conversationId=%s is active again.",
+                file_id, conversation_id,
+            )
+            if CLEANUP_ENFORCE:
+                db.files.update_one(
+                    {"_id": f["_id"]}, {"$unset": {"pendingDeletion": "", "markedAt": ""}}
+                )
+            audit({
+                "action": "unmarked",
+                "file_id": file_id,
+                "conversationId": conversation_id,
+                "evidence": "conversation became active again during the grace window",
+            })
+            continue
+
+        source = f.get("source", "local")
+        evidence = (
+            f"conversationId={conversation_id} still absent after {GRACE_PERIOD_DAYS}d grace window"
+        )
+
+        has_embeddings = f.get("embedded") is True
+        try:
+            embedded_rows = 0
+            if has_embeddings and CLEANUP_ENFORCE:
+                embedded_rows = delete_from_pgvector([file_id])
+
+            if source == "azure_blob" and CLEANUP_ENFORCE:
+                delete_from_blob(f)
+
+            if CLEANUP_ENFORCE:
+                db.files.delete_one({"_id": f["_id"]})
+
+            audit({
+                "action": "deleted" if CLEANUP_ENFORCE else "would_delete",
+                "file_id": file_id,
+                "conversationId": conversation_id,
+                "evidence": evidence,
+                "source": source,
+                "has_embeddings": has_embeddings,
+                "embedded_rows_deleted": embedded_rows if CLEANUP_ENFORCE else None,
+            })
+            log.info(
+                "%s file_id=%s source=%s conversationId=%s has_embeddings=%s",
+                "Deleted" if CLEANUP_ENFORCE else "Would delete",
+                file_id, source, conversation_id, has_embeddings,
+            )
+            deleted += 1
+        except Exception as e:
+            failed += 1
+            log.error("Sweep failed for file_id=%s: %s", file_id, e)
+            audit({
+                "action": "failed",
+                "file_id": file_id,
+                "conversationId": conversation_id,
+                "evidence": evidence,
+                "error": str(e),
+            })
+
+    return deleted, failed
 
 
 def main():
-    log.info("=== Orphaned file cleanup starting ===")
+    mode = "ENFORCING" if CLEANUP_ENFORCE else "REPORT-ONLY"
+    log.info("=== Orphaned file cleanup starting (mode=%s) ===", mode)
 
     try:
         from pymongo import MongoClient
 
         mongo = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
-        db_name = MONGO_URI.rstrip("/").split("/")[-1].split("?")[0] or "LibreChat"
-        db = mongo[db_name]
-    except Exception as e:
-        log.error("MongoDB connection failed: %s", e)
-        sys.exit(1)
+        db = mongo[get_db_name(MONGO_URI)]
 
-    try:
-        orphans = get_orphaned_files(db)
-    except Exception as e:
-        log.error("Failed to query orphaned files: %s", e)
-        mongo.close()
-        sys.exit(1)
+        if not check_canary(db):
+            mongo.close()
+            sys.exit(1)
 
-    if not orphans:
-        log.info("No orphaned files found. Nothing to do.")
-        mongo.close()
-        sys.exit(0)
-
-    log.info("Found %d orphaned file(s) to clean up", len(orphans))
-
-    blob_deleted = 0
-    blob_failed = 0
-    mongo_deleted = 0
-    embedded_file_ids = []
-
-    for file in orphans:
-        file_id = file.get("file_id", str(file.get("_id")))
-        source = file.get("source", "local")
-
-        # Delete from Azure Blob if applicable
-        if source == "azure_blob":
-            try:
-                delete_from_blob(file)
-                blob_deleted += 1
-            except Exception:
-                blob_failed += 1
-                log.warning("Skipping MongoDB delete for file_id=%s due to blob error", file_id)
-                continue
-
-        # Collect embedded file_ids for batch pgvector delete
-        if file.get("embedded") is True:
-            embedded_file_ids.append(file_id)
-
-        # Delete MongoDB record
         try:
-            db.files.delete_one({"_id": file["_id"]})
-            mongo_deleted += 1
-            log.info("Deleted file_id=%s source=%s conversationId=%s", file_id, source, file.get("conversationId"))
-        except Exception as e:
-            log.error("MongoDB delete failed for file_id=%s: %s", file_id, e)
+            marked = mark_pass(db)
+        except CircuitBreakerTripped:
+            mongo.close()
+            sys.exit(1)
 
-    # Batch delete pgvector embeddings
-    vector_rows_deleted = 0
-    if embedded_file_ids:
-        vector_rows_deleted = delete_from_pgvector(embedded_file_ids)
-        log.info("Deleted %d pgvector row(s) for %d embedded file(s)", vector_rows_deleted, len(embedded_file_ids))
-
-    mongo.close()
+        deleted, failed = sweep_pass(db)
+        mongo.close()
+    except Exception as e:
+        log.error("Unrecoverable error during cleanup: %s", e)
+        sys.exit(1)
 
     log.info(
-        "=== Cleanup complete: blob_deleted=%d blob_failed=%d mongo_deleted=%d vector_rows_deleted=%d ===",
-        blob_deleted, blob_failed, mongo_deleted, vector_rows_deleted,
+        "=== Cleanup complete: mode=%s marked=%d deleted=%d failed=%d ===",
+        mode, marked, deleted, failed,
     )
-
-    sys.exit(1 if blob_failed > 0 else 0)
+    sys.exit(1 if failed > 0 else 0)
 
 
 if __name__ == "__main__":
