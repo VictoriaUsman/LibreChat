@@ -25,15 +25,16 @@ Blob, or pgvector unless CLEANUP_ENFORCE=true (see below) -- the default
 mode only logs/records what it would do.
 
 Safety layers (see PBI for full rationale):
-  1. Canary liveness  -- CANARY_CONVERSATION_ID must appear in the same
-     active-conversation query used for orphan detection, or the job aborts
-     without touching anything. Its updatedAt is refreshed on every
-     successful check so LibreChat's own CONVERSATION_RETENTION_DAYS sweep
-     (packages/api/src/files/sweep.ts sweepExpiredConversations -- which
-     deletes ANY conversation with a stale updatedAt, not just null-ID
-     ones; see getExpiredConversations in
-     packages/data-schemas/src/methods/conversation.ts) never reaps it as
-     a side effect of this job simply running nightly.
+  1. Canary liveness  -- CANARY_CONVERSATION_ID must appear in the SAME
+     active-conversation query used for orphan detection
+     (get_active_conversation_ids), or the job aborts without touching
+     anything. This turns a broken or misdirected query (DB down, wrong
+     database, empty/partial result) into a hard stop instead of "every file
+     looks orphaned". The canary is a non-empty-ID Conversation
+     (seed_canary_conversation.py); LibreChat's only conversation reaper is
+     deleteNullOrEmptyConversations, which targets null/empty/missing-ID
+     documents only (packages/data-schemas/src/methods/conversation.ts), so
+     the app never sweeps the canary and this job never has to write to it.
   2. Per-candidate existence check -- both passes re-query Mongo for a
      file's specific conversationId individually (conversation_exists)
      instead of trusting a bulk in-memory diff as the final word.
@@ -144,26 +145,36 @@ def get_db_name(uri: str) -> str:
     return uri.rstrip("/").split("/")[-1].split("?")[0] or "LibreChat"
 
 
-def check_canary(db) -> bool:
+def get_active_conversation_ids(db) -> set:
+    """The single active-conversation query. Both the canary liveness check
+    (safety layer #1) and the mark-pass pre-filter read from THIS result, so a
+    broken or partial query is caught by the canary instead of silently making
+    every file look orphaned."""
+    return set(
+        doc["conversationId"]
+        for doc in db.conversations.find({}, {"conversationId": 1})
+        if doc.get("conversationId")
+    )
+
+
+def check_canary(active_ids) -> bool:
     """Safety layer #1. Aborts unless the sentinel canary conversation is
-    visible through the query used for orphan detection. Refreshes
-    updatedAt on success so LibreChat's own conversation-retention sweep
-    never reaps it as a side effect of this job being the only thing that
-    ever touches it (see module docstring, safety layer #1)."""
-    doc = db.conversations.find_one({"conversationId": CANARY_CONVERSATION_ID}, {"_id": 1})
-    if doc is None:
+    present in the active-conversation set -- the SAME set used for orphan
+    detection. The canary is a record we know exists; if it's missing, the
+    query did not truly reach a healthy database, so we must not delete. No
+    write is needed: the canary is a non-empty-ID doc, immune to LibreChat's
+    deleteNullOrEmptyConversations sweep (see module docstring, safety #1)."""
+    if CANARY_CONVERSATION_ID not in active_ids:
         log.error(
-            "CANARY MISSING: conversationId=%s not found in conversations collection. "
-            "Aborting without deleting or marking anything. Run seed_canary_conversation.py, "
-            "or check MONGO_URI points at the right database, before re-running.",
+            "CANARY MISSING: conversationId=%s not present in the active-conversation "
+            "query result. Aborting without marking or deleting anything. Seed it with "
+            "seed_canary_conversation.py, or check MONGO_URI points at the right database.",
             CANARY_CONVERSATION_ID,
         )
         return False
-
-    db.conversations.update_one(
-        {"_id": doc["_id"]}, {"$set": {"updatedAt": datetime.now(timezone.utc)}}
+    log.info(
+        "Canary check passed: conversationId=%s present in active set.", CANARY_CONVERSATION_ID
     )
-    log.info("Canary check passed: conversationId=%s", CANARY_CONVERSATION_ID)
     return True
 
 
@@ -175,17 +186,10 @@ def conversation_exists(db, conversation_id) -> bool:
     return db.conversations.find_one({"conversationId": conversation_id}, {"_id": 1}) is not None
 
 
-def find_mark_candidates(db):
-    """Pass 1 discovery. A bulk diff is used only as a cheap pre-filter
-    (avoids a per-document query against every file record in the
-    collection); every candidate it surfaces is then re-checked
-    individually before it's trusted -- see safety layer #2."""
-    active_ids = set(
-        doc["conversationId"]
-        for doc in db.conversations.find({}, {"conversationId": 1})
-        if doc.get("conversationId")
-    )
-
+def find_mark_candidates(db, active_ids):
+    """Pass 1 discovery. The active_ids set (already canary-verified in main)
+    is used only as a cheap pre-filter; every candidate it surfaces is then
+    re-checked individually before it's trusted -- see safety layer #2."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
     prefiltered = list(
         db.files.find(
@@ -208,9 +212,9 @@ def find_mark_candidates(db):
     return verified
 
 
-def mark_pass(db) -> int:
+def mark_pass(db, active_ids) -> int:
     """Pass 1: mark eligible orphan candidates. Never deletes anything."""
-    candidates = find_mark_candidates(db)
+    candidates = find_mark_candidates(db, active_ids)
     total_files = db.files.count_documents({})
 
     if not candidates:
@@ -343,6 +347,27 @@ def sweep_pass(db):
         log.info("Sweep pass: no file(s) past the grace window.")
         return 0, 0
 
+    # Safety layer #3 applied to the sweep too: every marked file already
+    # passed the mark-pass breaker, but a backlog accumulated over many nights
+    # could still sweep a large batch at once. Abort rather than mass-delete.
+    total_files = db.files.count_documents({})
+    ratio = (len(candidates) / total_files) if total_files else 1.0
+    if len(candidates) > CIRCUIT_BREAKER_MAX_ABSOLUTE or ratio > CIRCUIT_BREAKER_MAX_RATIO:
+        log.error(
+            "CIRCUIT BREAKER TRIPPED (sweep): %d marked file(s) past grace (%.1f%% of %d "
+            "total) exceeds threshold (max_absolute=%d, max_ratio=%.2f). Aborting sweep "
+            "without deleting anything.",
+            len(candidates), ratio * 100, total_files,
+            CIRCUIT_BREAKER_MAX_ABSOLUTE, CIRCUIT_BREAKER_MAX_RATIO,
+        )
+        audit({
+            "action": "circuit_breaker_tripped_sweep",
+            "candidate_count": len(candidates),
+            "total_files": total_files,
+            "ratio": ratio,
+        })
+        raise CircuitBreakerTripped()
+
     log.info(
         "Sweep pass: %d file(s) past the %dd grace window, re-verifying individually.",
         len(candidates), GRACE_PERIOD_DAYS,
@@ -429,17 +454,20 @@ def main():
         mongo = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
         db = mongo[get_db_name(MONGO_URI)]
 
-        if not check_canary(db):
+        # Single active-conversation query, shared by the canary check and the
+        # mark pass so the canary genuinely rides the same query (safety #1).
+        active_ids = get_active_conversation_ids(db)
+        if not check_canary(active_ids):
             mongo.close()
             sys.exit(1)
 
         try:
-            marked = mark_pass(db)
+            marked = mark_pass(db, active_ids)
+            deleted, failed = sweep_pass(db)
         except CircuitBreakerTripped:
             mongo.close()
             sys.exit(1)
 
-        deleted, failed = sweep_pass(db)
         mongo.close()
     except Exception as e:
         log.error("Unrecoverable error during cleanup: %s", e)

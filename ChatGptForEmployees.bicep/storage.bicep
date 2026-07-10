@@ -80,3 +80,9 @@ output storageAccountKey string = storageAccount.listKeys().keys[0].value
 output liteLlmShareName string = liteLlmShareName
 output libreChatShareName string = libreChatShareName
 output blobContainerName string = filesContainer.name
+// Consumed by libreChat.bicep (fileStrategy: azure_blob) and, separately, by
+// the cleanup job. Managed identity would be preferable to a key-bearing
+// connection string — tracked as a security follow-up in the working notes.
+#disable-next-line outputs-should-not-contain-secrets
+@secure()
+output blobConnectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
