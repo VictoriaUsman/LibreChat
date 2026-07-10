@@ -89,10 +89,16 @@ modelSpecs:
         # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
         # token map does not recognize the branded name and silently falls back to
         # a 4095-token default, dropping earlier turns without warning (PBI: Fix
-        # Silent Conversation-History Truncation). Set explicitly, capped below the
-        # real window to reserve headroom for the model's max output (32,768 tokens)
-        # plus prompt/tool overhead.
-        maxContextTokens: 1000000
+        # Silent Conversation-History Truncation). Set explicitly to fix that bug,
+        # but capped at 128000 rather than the full 1,047,576-token window (PBI:
+        # Address Remaining Review Follow-ups from feat/phase0implementation) --
+        # Azure OpenAI bills per input token, and re-sending up to 1M tokens on
+        # every turn as a chat grows is a large, mostly-unnecessary cost driver.
+        # 128k tokens (~450-500k characters) comfortably retains dozens of turns
+        # of typical internal chat/document-review use, so real conversations
+        # keep their earliest turns well before hitting this cap; only unusually
+        # long sessions truncate, which is the deliberate cost/recall trade-off.
+        maxContextTokens: 128000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -123,9 +129,9 @@ modelSpecs:
         # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
         # which shares the gpt-4.1 family's 1,047,576-token context window (see
         # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
-        # same fix. Capped below the real window to reserve headroom for the
-        # model's max output (32,768 tokens) plus prompt/tool overhead.
-        maxContextTokens: 1000000
+        # same fix, and the same 128000 cost/recall cap -- see the rationale on
+        # the Standard preset above.
+        maxContextTokens: 128000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
