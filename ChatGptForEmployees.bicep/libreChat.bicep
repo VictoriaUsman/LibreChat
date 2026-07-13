@@ -115,17 +115,21 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
               mountPath: '/app/api/data'
             }
           ]
+          // Health probe path is '/health' on LibreChat v0.8.x (api/server/index.js).
+          // It was '/api/health' on v0.7.5 — using the old path 404s, so probes fail,
+          // the replica never goes ready, and the revision crash-loops ("Progress
+          // Deadline Exceeded"). Re-verify this path on any future major version bump.
           probes: [
             {
               type: 'Liveness'
-              httpGet: { path: '/api/health', port: 3080 }
+              httpGet: { path: '/health', port: 3080 }
               initialDelaySeconds: 20
               periodSeconds: 30
               failureThreshold: 3
             }
             {
               type: 'Readiness'
-              httpGet: { path: '/api/health', port: 3080 }
+              httpGet: { path: '/health', port: 3080 }
               initialDelaySeconds: 20
               periodSeconds: 10
               failureThreshold: 3
