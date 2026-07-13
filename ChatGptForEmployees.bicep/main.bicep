@@ -9,7 +9,18 @@ param environmentName string = 'Dev'
 param rgName string = 'rg-dev-shared'
 
 param liteLlmImage string = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.7.5'
+// v0.7.5 was a stale placeholder carried from the deployment template's
+// example tag, not a deliberate choice -- it predates the v0.8.0 config
+// schema, so Phase 0's summarization/customWelcome keys (config/librechat.yaml)
+// were silently dropped on it. Bumped to the stable v0.8.6 release (shipped
+// 2026-06-01, PBI: Pin LibreChat to Stable v0.8.6 Across All Environments)
+// per the "pin to stable tag when v0.8.6 is released" plan in
+// Phase_0_Findings_v1_Recommendation.md. Deploy to Dev/Test and smoke test
+// (Okta login, send/stream chat, model picker, existing conversations, file
+// upload) before promoting to Prod -- see Erik_recommendation.md Section 6.5.
+// Rollback: revert this pin to v0.7.5 and redeploy; note this silently
+// re-disables the v0.8.x-only config keys above, which is expected/known.
+param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
 param flagshipModelName string = 'gpt-4.1'
@@ -19,7 +30,15 @@ param fastModelVersion string = '2025-04-14'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-param flagshipCapacity int = 10
+// capacity = throughput (tokens-per-minute rate limit), NOT context window or
+// output length — that's maxContextTokens in config/librechat.yaml (PBI-01-FE).
+// GlobalStandard capacity units are ~1,000 TPM each for gpt-4.1 in eastus2 at
+// time of writing; confirm the exact unit in the target region before relying
+// on this for capacity planning, as Azure's per-unit TPM can vary by model/region.
+// flagshipCapacity=100 (~100K TPM) supports realistic concurrent load testing
+// without hitting artificial 429s (see PBI: Increase Azure OpenAI TPM Capacity
+// for Realistic Testing). Raising capacity has a direct cost impact — see PR.
+param flagshipCapacity int = 100
 param fastCapacity int = 20
 param embeddingsCapacity int = 20
 
@@ -174,6 +193,8 @@ module libreChat 'libreChat.bicep' = {
     openIdClientId: openIdClientId
     openIdClientSecret: openIdClientSecret
     openIdSessionSecret: openIdSessionSecret
+    storageConnectionString: storage.outputs.blobConnectionString
+    blobContainerName: storage.outputs.blobContainerName
   }
 }
 

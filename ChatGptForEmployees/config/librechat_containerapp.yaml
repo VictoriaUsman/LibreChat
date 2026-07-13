@@ -25,7 +25,7 @@
 # Image pinning:
 #   Do not use :latest in production — it changes without notice.
 #   Pin to a specific release tag from: https://github.com/danny-avila/LibreChat/releases
-#   Example: ghcr.io/danny-avila/librechat:v0.7.5
+#   Example: ghcr.io/danny-avila/librechat:v0.8.6
 #
 # Volume mount:
 #   LibreChat persists its SQLite database, user sessions, and runtime config
@@ -75,7 +75,7 @@ properties:
   template:
     containers:
       - name: librechat
-        image: ghcr.io/danny-avila/librechat:v0.7.5   # Pin to a specific release tag
+        image: ghcr.io/danny-avila/librechat:v0.8.6   # Pin to a specific release tag
         resources:
           cpu: 0.5
           memory: 1Gi
