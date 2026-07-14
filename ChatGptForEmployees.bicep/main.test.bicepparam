@@ -1,5 +1,14 @@
 using 'main.bicep'
 
+// Redeploy trigger (2026-07-14). The pipeline's "Detect Folder Changes" gate only
+// runs the Bicep stage when a file under ChatGptForEmployees.bicep/ changed since
+// the LAST SUCCESSFUL build. A prior Test build advanced that baseline without
+// deploying (Bicep stage skipped, build still marked successful), leaving Test
+// stuck on librechat v0.7.5 while the params below already pin v0.8.6. This no-op
+// edit is a changed file under the watched folder, so it forces the Bicep stage to
+// run and roll the v0.8.6 revision. Follow-up: make the gate diff against the last
+// successfully-DEPLOYED SHA (or add a forceDeploy param) so this can't silently
+// skip a deploy again — Prod will hit the same trap on its v0.8.6 cutover.
 param environmentName = 'Test'
 param rgName = 'rg-test-shared'
 param location = 'eastus2'
