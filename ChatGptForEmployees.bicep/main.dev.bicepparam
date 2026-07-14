@@ -13,6 +13,15 @@ param flagshipModelName = 'gpt-4.1'
 param fastModelName = 'gpt-4.1-mini'
 param embeddingsModelName = 'text-embedding-3-small'
 
+// URGENT (2026-07-14): raise flagship (gpt-4.1) throughput to ~1,000,000 TPM for Dev.
+// GlobalStandard capacity unit ~= 1,000 TPM (see main.bicep note), so 1000 = ~1M TPM.
+// Overrides the main.bicep default of 100 (~100K TPM), for Dev only (test/prod unchanged).
+// PREREQUISITE: the subscription must have >=1M TPM of gpt-4.1 GlobalStandard quota
+// available in eastus2, or the deployment FAILS with a quota error — verify in
+// Azure AI Foundry > Management center > Quotas before merging. fastCapacity and
+// embeddingsCapacity are unchanged (still 20 / ~20K TPM each via the main.bicep default).
+param flagshipCapacity = 1000
+
 param postgresAdminUser = 'cgfeadmin'
 
 // Secrets from Key Vault
