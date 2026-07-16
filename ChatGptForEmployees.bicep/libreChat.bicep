@@ -25,6 +25,9 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+@secure()
+param storageConnectionString string
+param blobContainerName string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
@@ -57,6 +60,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-client-id', value: openIdClientId }
         { name: 'openid-client-secret', value: openIdClientSecret }
         { name: 'openid-session-secret', value: openIdSessionSecret }
+        { name: 'azure-storage-connection-string', value: storageConnectionString }
       ]
     }
     template: {
@@ -98,6 +102,12 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_CLIENT_ID', secretRef: 'openid-client-id' }
             { name: 'OPENID_CLIENT_SECRET', secretRef: 'openid-client-secret' }
             { name: 'OPENID_SESSION_SECRET', secretRef: 'openid-session-secret' }
+            // Azure Blob file storage (fileStrategy: azure_blob in librechat.yaml).
+            // PUBLIC_ACCESS forced false so PHI files are never publicly readable
+            // (LibreChat defaults it to true). Container + soft-delete: storage.bicep.
+            { name: 'AZURE_STORAGE_CONNECTION_STRING', secretRef: 'azure-storage-connection-string' }
+            { name: 'AZURE_CONTAINER_NAME', value: blobContainerName }
+            { name: 'AZURE_STORAGE_PUBLIC_ACCESS', value: 'false' }
           ]
           volumeMounts: [
             {
@@ -105,17 +115,21 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
               mountPath: '/app/api/data'
             }
           ]
+          // Health probe path is '/health' on LibreChat v0.8.x (api/server/index.js).
+          // It was '/api/health' on v0.7.5 — using the old path 404s, so probes fail,
+          // the replica never goes ready, and the revision crash-loops ("Progress
+          // Deadline Exceeded"). Re-verify this path on any future major version bump.
           probes: [
             {
               type: 'Liveness'
-              httpGet: { path: '/api/health', port: 3080 }
+              httpGet: { path: '/health', port: 3080 }
               initialDelaySeconds: 20
               periodSeconds: 30
               failureThreshold: 3
             }
             {
               type: 'Readiness'
-              httpGet: { path: '/api/health', port: 3080 }
+              httpGet: { path: '/health', port: 3080 }
               initialDelaySeconds: 20
               periodSeconds: 10
               failureThreshold: 3

@@ -52,6 +52,19 @@ cache: true
 # tells the model that prior messages existed, which mitigates the old
 # "you never asked that" fabrication. Removing the marker entirely would
 # require a custom-built image (not config).
+
+# PBI: Harden Nightly Orphaned-File Cleanup — file storage strategy.
+# Store uploaded files in Azure Blob rather than the default `local`/file-share
+# strategy, so each File record gets source: 'azure_blob'. The nightly cleanup
+# job (scripts/cleanup_orphaned_files.py) reclaims orphaned file BYTES via that
+# blob source, and storage.bicep provides the soft-delete + versioning recovery
+# window. Connection + container come from the AZURE_STORAGE_* env vars in
+# ChatGptForEmployees.bicep/libreChat.bicep, where AZURE_STORAGE_PUBLIC_ACCESS
+# is forced false so PHI files are never publicly readable (LibreChat defaults
+# it to true). VERIFY on first deploy that uploads land in Blob with
+# source=azure_blob (deploy-time verification is tracked in the team working notes).
+fileStrategy: "azure_blob"
+
 summarization:
   enabled: true
   provider: "LiteLLM Gateway"
