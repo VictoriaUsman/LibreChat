@@ -42,6 +42,25 @@ param flagshipCapacity int = 100
 param fastCapacity int = 20
 param embeddingsCapacity int = 20
 
+// GPT-5 family — deployed alongside gpt-4.1/gpt-4.1-mini. Old deployments stay
+// until devs wire LiteLLM to the new ones and validate, then remove old ones.
+// Verify model names and versions in AI Foundry model catalog before deploying.
+// Capacity units: 1 unit ≈ 1K TPM. TPM split per environment:
+//   gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25K, Test(pre-launch)=875K, Prod(pre-launch)=100K
+//   gpt-5.4-mini:                   Dev=25K, Test=100K,             Prod=875K
+param gpt5FlagshipModelName string = 'gpt-5'
+param gpt5FlagshipModelVersion string = '2025-05-16'
+param gpt5FastModelName string = 'gpt-5-mini'
+param gpt5FastModelVersion string = '2025-05-16'
+param gpt5FlagshipBackupModelName string = 'gpt-5.1'
+param gpt5FlagshipBackupModelVersion string = '2025-07-01'
+param gpt5FastBackupModelName string = 'gpt-5.4-mini'
+param gpt5FastBackupModelVersion string = '2025-07-01'
+param gpt5FlagshipCapacity int = 25
+param gpt5FastCapacity int = 25
+param gpt5FlagshipBackupCapacity int = 25
+param gpt5FastBackupCapacity int = 25
+
 param postgresAdminUser string = 'cgfeadmin'
 @secure()
 param postgresAdminPassword string
@@ -116,6 +135,18 @@ module aiFoundry 'aiFoundry.bicep' = {
     flagshipCapacity: flagshipCapacity
     fastCapacity: fastCapacity
     embeddingsCapacity: embeddingsCapacity
+    gpt5FlagshipModelName: gpt5FlagshipModelName
+    gpt5FlagshipModelVersion: gpt5FlagshipModelVersion
+    gpt5FastModelName: gpt5FastModelName
+    gpt5FastModelVersion: gpt5FastModelVersion
+    gpt5FlagshipBackupModelName: gpt5FlagshipBackupModelName
+    gpt5FlagshipBackupModelVersion: gpt5FlagshipBackupModelVersion
+    gpt5FastBackupModelName: gpt5FastBackupModelName
+    gpt5FastBackupModelVersion: gpt5FastBackupModelVersion
+    gpt5FlagshipCapacity: gpt5FlagshipCapacity
+    gpt5FastCapacity: gpt5FastCapacity
+    gpt5FlagshipBackupCapacity: gpt5FlagshipBackupCapacity
+    gpt5FastBackupCapacity: gpt5FastBackupCapacity
   }
 }
 
