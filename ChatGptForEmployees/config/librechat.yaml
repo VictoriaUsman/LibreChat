@@ -227,7 +227,7 @@ interface:
   # is documented in the PR that merges this change.
   #   [ ] Comms
   #   [ ] Legal
-  customWelcome: "Welcome to ROMTech AI. Conversations may be reviewed under ROMTech's Acceptable Use Policy — avoid entering confidential client data, personal data, or trade secrets."
+  customWelcome: "Welcome to ROMTech AI. Conversations may be reviewed under ROMTech's Acceptable Use Policy."
   # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
   # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
   # Policy is currently an internal draft doc, not a published page — see
