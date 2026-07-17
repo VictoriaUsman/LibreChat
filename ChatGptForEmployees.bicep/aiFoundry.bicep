@@ -18,14 +18,12 @@ param fastBackupModelVersion string = '2026-03-17'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-// Capacity = TPM / 1000. Shared pool per model across all environments.
-// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (1M total each)
-// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (1M total)
-param flagshipCapacity int = 25
-param flagshipBackupCapacity int = 25
-param fastCapacity int = 25
-param fastBackupCapacity int = 25
-param embeddingsCapacity int = 120
+// Capacity values are driven by ternaries in main.bicep — defaults here are never used directly.
+param flagshipCapacity int
+param flagshipBackupCapacity int
+param fastCapacity int
+param fastBackupCapacity int
+param embeddingsCapacity int
 
 var accountName = 'ais${toLower(appName)}${toLower(envName)}'
 

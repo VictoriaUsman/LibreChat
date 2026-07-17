@@ -30,17 +30,14 @@ param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-// capacity = throughput (tokens-per-minute rate limit), NOT context window or
-// output length — that's maxContextTokens in config/librechat.yaml (PBI-01-FE).
-// GlobalStandard capacity units are ~1,000 TPM each for gpt-4.1 in eastus2 at
-// time of writing; confirm the exact unit in the target region before relying
-// on this for capacity planning, as Azure's per-unit TPM can vary by model/region.
-// flagshipCapacity=100 (~100K TPM) supports realistic concurrent load testing
-// without hitting artificial 429s (see PBI: Increase Azure OpenAI TPM Capacity
-// for Realistic Testing). Raising capacity has a direct cost impact — see PR.
-param flagshipCapacity int = 100
-param fastCapacity int = 20
-param embeddingsCapacity int = 20
+// capacity = TPM / 1000. GlobalStandard, shared pool (1M per model) across all envs.
+// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (sum = 1,000)
+// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (sum = 1,000)
+var flagshipCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var flagshipBackupCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var fastCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var fastBackupCapacity = environmentName == 'Prod' ? 875 : environmentName == 'Test' ? 100 : 25
+var embeddingsCapacity = 120
 
 // Backup models — LiteLLM falls back to these on 429 or transient error.
 // Versions verified in AI Foundry model catalog.
@@ -48,12 +45,6 @@ param flagshipBackupModelName string = 'gpt-5.1'
 param flagshipBackupModelVersion string = '2025-11-13'
 param fastBackupModelName string = 'gpt-5.4-mini'
 param fastBackupModelVersion string = '2026-03-17'
-
-// Capacity units: 1 unit = 1K TPM. Shared pool per model across all envs.
-// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (1M total each)
-// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (1M total)
-param flagshipBackupCapacity int = 25
-param fastBackupCapacity int = 25
 
 param postgresAdminUser string = 'cgfeadmin'
 @secure()
