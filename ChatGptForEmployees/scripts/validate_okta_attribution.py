@@ -18,6 +18,9 @@ What this script checks:
      error) is reported as a FIND -- it's a structural property of the sync
      script (fetch-fully-before-write, per-table transaction), not something
      this script simulates against a live Okta/Mongo outage.
+  6. sync_run_log gets exactly one row per Test 4 run, each with the status
+     expected given whether Okta is configured in this environment, and a
+     sane duration_seconds.
 
 Usage:
   pip install -r requirements.txt
@@ -229,7 +232,14 @@ def sync_run_acceptable(rc, err, out):
         and "user_directory sync failed" not in combined
 
 
+run_log_count_before = None
+run_log_count_after = None
+
 try:
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM sync_run_log")
+        run_log_count_before = cur.fetchone()[0]
+
     rc1, out1, err1 = run_sync()
     if not sync_run_acceptable(rc1, err1, out1):
         fail("First sync run exited non-zero", err1[:300] or out1[:300])
@@ -255,6 +265,10 @@ try:
                     ok(f'"{table}" identical across both runs ({len(snap_after[table])} row(s))')
                 else:
                     fail(f'"{table}" changed between runs', "table state is not idempotent")
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) FROM sync_run_log")
+                run_log_count_after = cur.fetchone()[0]
 except Exception as e:
     fail("Idempotency check failed", str(e))
 
@@ -268,6 +282,52 @@ finding(
     "blocks — a fetch error in one leaves both tables untouched for that source. "
     "Not mechanically simulated here (would require faking an Okta/Mongo outage)."
 )
+
+# --- Test 6: sync_run_log gets exactly one row per Test 4 run ---
+
+print()
+print("6. sync_run_log records exactly one row per run")
+if run_log_count_before is None or run_log_count_after is None:
+    fail("Could not evaluate sync_run_log — Test 4 did not complete both runs")
+else:
+    gained = run_log_count_after - run_log_count_before
+    if gained != 2:
+        fail(
+            "Expected exactly 2 new sync_run_log rows for the two Test 4 runs",
+            f"before={run_log_count_before}, after={run_log_count_after}",
+        )
+    else:
+        ok(f"sync_run_log gained exactly 2 rows ({run_log_count_before} -> {run_log_count_after})")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, duration_seconds, detail FROM sync_run_log "
+                "ORDER BY run_at DESC LIMIT 2"
+            )
+            last_two = cur.fetchall()
+
+        # dept_map sync fails in any environment without OKTA_API_TOKEN (see Test 2/4),
+        # so status='failed' with a detail is the *expected* outcome here, not a bug —
+        # same known-local-credential-gap pattern tolerated by sync_run_acceptable() above.
+        expected_status = "success" if okta_configured else "failed"
+        bad = [r for r in last_two if r[0] != expected_status or r[1] is None or r[1] < 0]
+        if bad:
+            fail(
+                f"sync_run_log row(s) don't have status={expected_status!r} with a sane duration_seconds",
+                str(last_two),
+            )
+        else:
+            ok(f"Both new sync_run_log rows have status={expected_status!r} and sane duration_seconds")
+
+        if not okta_configured:
+            missing_detail = [r for r in last_two if not r[2]]
+            if missing_detail:
+                fail("Expected a non-null detail column on the known-Okta-gap failed rows", str(last_two))
+            else:
+                ok("Failed run(s) recorded a non-null detail column")
+    except Exception as e:
+        fail("sync_run_log content check failed", str(e))
 
 conn.close()
 

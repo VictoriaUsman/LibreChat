@@ -23,8 +23,14 @@ after its full source fetch has succeeded -- so a failure in Okta (bad token,
 API outage) cannot touch user_directory, a failure in Mongo cannot touch
 dept_map, and neither failure can partially write its own table.
 
-Azure scheduling (a recurring ACA job) is out of scope for this PBI; run this
-script manually / via any external scheduler for now.
+Deployed as a twice-weekly ACA Job (Tue/Fri, see jobs.bicep); this script is
+also safe to run manually / via any external scheduler. Each source's fetch
+is retried with exponential backoff (SYNC_RETRY_ATTEMPTS total tries, default
+4: initial + 3 retries at ~1/4/16 min) before that source is given up on for
+the run. Every run -- success or final failure -- writes exactly one row to
+sync_run_log and emits a SYNC_SUMMARY line to stdout, so a run's outcome is
+queryable in Postgres and visible in Log Analytics without touching Azure's
+job-execution history.
 
 Key Vault secret names for later Bicep wiring (mirrors okta-setup.md's OIDC
 secret convention, kv-romtech-<env>):
@@ -47,14 +53,24 @@ Optional:
                               Okta fetch returns fewer than this fraction of
                               the table's current active row count.
   USER_DIRECTORY_MIN_RATIO   default 0.5 -- same guard for user_directory.
+  SYNC_RETRY_ATTEMPTS        default 4 -- total tries per source (initial +
+                              retries) before that source's fetch is given up
+                              on for this run.
+  SYNC_RETRY_BASE_DELAY_SECONDS  default 60 -- delay before retry N is
+                              base * 4**N seconds (60/240/960s by default,
+                              i.e. ~1/4/16 min). Lower this for fast local
+                              testing of the retry path.
 
 Exit codes:
-  0 -- both sources synced successfully
-  1 -- at least one source failed (see per-source log lines for which)
+  0 -- both sources synced successfully (after retries if needed)
+  1 -- at least one source failed after exhausting retries (see per-source
+       log lines for which); sync_run_log still gets exactly one row either
+       way, with status='failed' and a detail column on failure.
 """
 
 import os
 import sys
+import time
 import logging
 
 try:
@@ -81,6 +97,9 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/LibreChat")
 DEPT_MAP_MIN_RATIO = float(os.environ.get("DEPT_MAP_MIN_RATIO", "0.5"))
 USER_DIRECTORY_MIN_RATIO = float(os.environ.get("USER_DIRECTORY_MIN_RATIO", "0.5"))
 
+SYNC_RETRY_ATTEMPTS = int(os.environ.get("SYNC_RETRY_ATTEMPTS", "4"))
+SYNC_RETRY_BASE_DELAY_SECONDS = float(os.environ.get("SYNC_RETRY_BASE_DELAY_SECONDS", "60"))
+
 DDL = """
 CREATE TABLE IF NOT EXISTS dept_map (
     email       TEXT PRIMARY KEY,
@@ -95,6 +114,16 @@ CREATE TABLE IF NOT EXISTS user_directory (
     email       TEXT NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS sync_run_log (
+    id                     BIGSERIAL PRIMARY KEY,
+    run_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status                 TEXT NOT NULL,
+    dept_map_synced        INTEGER,
+    user_directory_synced  INTEGER,
+    duration_seconds       NUMERIC(10,3) NOT NULL,
+    detail                 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sync_run_log_run_at ON sync_run_log (run_at);
 """
 
 
@@ -106,7 +135,36 @@ def ensure_tables(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(DDL)
     conn.commit()
-    log.info("DDL applied: dept_map, user_directory present.")
+    log.info("DDL applied: dept_map, user_directory, sync_run_log present.")
+
+
+class ConfigError(Exception):
+    """Raised for missing/invalid required configuration. Not retried --
+    retrying a source that's simply unconfigured just delays the same
+    failure by ~21 minutes for no benefit."""
+
+
+def run_with_retries(fn, label: str):
+    """Calls fn() with exponential backoff: SYNC_RETRY_ATTEMPTS total tries,
+    delay = SYNC_RETRY_BASE_DELAY_SECONDS * 4**n before retry n (default
+    60s/240s/960s, i.e. ~1/4/16 min). ConfigError fails fast, no retry.
+    Re-raises the final attempt's exception once all attempts are exhausted."""
+    last_exc = None
+    for attempt in range(SYNC_RETRY_ATTEMPTS):
+        try:
+            return fn()
+        except ConfigError:
+            raise
+        except Exception as e:
+            last_exc = e
+            if attempt < SYNC_RETRY_ATTEMPTS - 1:
+                delay = SYNC_RETRY_BASE_DELAY_SECONDS * (4 ** attempt)
+                log.warning(
+                    "%s attempt %d/%d failed: %s -- retrying in %.0fs",
+                    label, attempt + 1, SYNC_RETRY_ATTEMPTS, e, delay,
+                )
+                time.sleep(delay)
+    raise last_exc
 
 
 def fetch_okta_users() -> list:
@@ -114,7 +172,7 @@ def fetch_okta_users() -> list:
     rel="next" header until exhausted. Raises on any non-200 response --
     the caller treats that as a fetch failure and skips dept_map entirely."""
     if not OKTA_ORG_URL or not OKTA_API_TOKEN:
-        raise RuntimeError("OKTA_ORG_URL / OKTA_API_TOKEN not set")
+        raise ConfigError("OKTA_ORG_URL / OKTA_API_TOKEN not set")
 
     url = f"{OKTA_ORG_URL}/api/v1/users?limit=200"
     headers = {"Authorization": f"SSWS {OKTA_API_TOKEN}", "Accept": "application/json"}
@@ -260,6 +318,13 @@ def main() -> int:
         log.error("DATABASE_URL not set.")
         return 1
 
+    start = time.monotonic()
+    status = "failed"
+    duration = 0.0
+    dept_map_synced = None
+    user_directory_synced = None
+    detail_parts = []
+
     conn = psycopg2.connect(DATABASE_URL)
     ok = True
     try:
@@ -267,23 +332,42 @@ def main() -> int:
 
         log.info("--- Okta -> dept_map ---")
         try:
-            okta_users = fetch_okta_users()
-            sync_dept_map(conn, okta_users)
+            okta_users = run_with_retries(fetch_okta_users, "Okta fetch")
+            dept_map_synced = sync_dept_map(conn, okta_users)
         except Exception as e:
-            log.error("dept_map sync failed, table left untouched: %s", e)
+            log.error("dept_map sync failed after retries, table left untouched: %s", e)
             ok = False
+            detail_parts.append(f"dept_map: {e}")
 
         log.info("--- Mongo -> user_directory ---")
         try:
-            mongo_users = fetch_mongo_users()
-            sync_user_directory(conn, mongo_users)
+            mongo_users = run_with_retries(fetch_mongo_users, "Mongo fetch")
+            user_directory_synced = sync_user_directory(conn, mongo_users)
         except Exception as e:
-            log.error("user_directory sync failed, table left untouched: %s", e)
+            log.error("user_directory sync failed after retries, table left untouched: %s", e)
             ok = False
+            detail_parts.append(f"user_directory: {e}")
+
+        duration = time.monotonic() - start
+        status = "success" if ok else "failed"
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO sync_run_log
+                    (status, dept_map_synced, user_directory_synced, duration_seconds, detail)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (status, dept_map_synced, user_directory_synced, duration,
+                 "; ".join(detail_parts) or None),
+            )
+        conn.commit()
     finally:
         conn.close()
 
-    log.info("=== Sync complete: %s ===", "OK" if ok else "ONE OR MORE SOURCES FAILED")
+    log.info(
+        "SYNC_SUMMARY status=%s dept_map_synced=%s user_directory_synced=%s duration_s=%.1f",
+        status, dept_map_synced, user_directory_synced, duration,
+    )
     return 0 if ok else 1
 
 
