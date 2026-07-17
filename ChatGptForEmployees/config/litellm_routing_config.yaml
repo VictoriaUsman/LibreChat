@@ -14,21 +14,39 @@
 model_list:
 
   # --- Model 1: ROMTech AI Standard (recommended default) ---
+  # Primary: romtech-standard (gpt-5).
+  # Fallback: romtech-standard-backup (gpt-5.1) — LiteLLM switches automatically
+  # on 429 or transient error.
   - model_name: "ROMTech AI Standard"
     litellm_params:
       model: azure/romtech-standard
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"
-      # gpt-4.1 rejects `max_tokens` on some API versions in favor of
-      # `max_completion_tokens`; drop it so LiteLLM doesn't forward a
-      # param the deployment may reject (see RUN_LOCAL.md gotchas).
+      additional_drop_params: ["max_tokens"]
+
+  - model_name: "ROMTech AI Standard"
+    litellm_params:
+      model: azure/romtech-standard-backup
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
       additional_drop_params: ["max_tokens"]
 
   # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
+  # Primary: romtech-fast (gpt-5-mini).
+  # Fallback: romtech-fast-backup (gpt-5.4-mini).
   - model_name: "ROMTech AI Fast"
     litellm_params:
       model: azure/romtech-fast
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+      additional_drop_params: ["max_tokens"]
+
+  - model_name: "ROMTech AI Fast"
+    litellm_params:
+      model: azure/romtech-fast-backup
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"

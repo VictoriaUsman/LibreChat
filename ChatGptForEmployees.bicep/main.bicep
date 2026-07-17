@@ -23,10 +23,10 @@ param liteLlmImage string = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
-param flagshipModelName string = 'gpt-4.1'
-param flagshipModelVersion string = '2025-04-14'
-param fastModelName string = 'gpt-4.1-mini'
-param fastModelVersion string = '2025-04-14'
+param flagshipModelName string = 'gpt-5'
+param flagshipModelVersion string = '2025-08-07'
+param fastModelName string = 'gpt-5-mini'
+param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
@@ -42,24 +42,18 @@ param flagshipCapacity int = 100
 param fastCapacity int = 20
 param embeddingsCapacity int = 20
 
-// GPT-5 family — deployed alongside gpt-4.1/gpt-4.1-mini. Old deployments stay
-// until devs wire LiteLLM to the new ones and validate, then remove old ones.
-// Verify model names and versions in AI Foundry model catalog before deploying.
-// Capacity units: 1 unit ≈ 1K TPM. TPM split per environment:
-//   gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25K, Test(pre-launch)=875K, Prod(pre-launch)=100K
-//   gpt-5.4-mini:                   Dev=25K, Test=100K,             Prod=875K
-param gpt5FlagshipModelName string = 'gpt-5'
-param gpt5FlagshipModelVersion string = '2025-08-07'
-param gpt5FastModelName string = 'gpt-5-mini'
-param gpt5FastModelVersion string = '2025-08-07'
-param gpt5FlagshipBackupModelName string = 'gpt-5.1'
-param gpt5FlagshipBackupModelVersion string = '2025-11-13'
-param gpt5FastBackupModelName string = 'gpt-5.4-mini'
-param gpt5FastBackupModelVersion string = '2026-03-17'
-param gpt5FlagshipCapacity int = 25
-param gpt5FastCapacity int = 25
-param gpt5FlagshipBackupCapacity int = 25
-param gpt5FastBackupCapacity int = 25
+// Backup models — LiteLLM falls back to these on 429 or transient error.
+// Versions verified in AI Foundry model catalog.
+param flagshipBackupModelName string = 'gpt-5.1'
+param flagshipBackupModelVersion string = '2025-11-13'
+param fastBackupModelName string = 'gpt-5.4-mini'
+param fastBackupModelVersion string = '2026-03-17'
+
+// Capacity units: 1 unit = 1K TPM. Shared pool per model across all envs.
+// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (1M total each)
+// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (1M total)
+param flagshipBackupCapacity int = 25
+param fastBackupCapacity int = 25
 
 param postgresAdminUser string = 'cgfeadmin'
 @secure()
@@ -133,20 +127,14 @@ module aiFoundry 'aiFoundry.bicep' = {
     embeddingsModelName: embeddingsModelName
     embeddingsModelVersion: embeddingsModelVersion
     flagshipCapacity: flagshipCapacity
+    flagshipBackupModelName: flagshipBackupModelName
+    flagshipBackupModelVersion: flagshipBackupModelVersion
+    flagshipBackupCapacity: flagshipBackupCapacity
     fastCapacity: fastCapacity
+    fastBackupModelName: fastBackupModelName
+    fastBackupModelVersion: fastBackupModelVersion
+    fastBackupCapacity: fastBackupCapacity
     embeddingsCapacity: embeddingsCapacity
-    gpt5FlagshipModelName: gpt5FlagshipModelName
-    gpt5FlagshipModelVersion: gpt5FlagshipModelVersion
-    gpt5FastModelName: gpt5FastModelName
-    gpt5FastModelVersion: gpt5FastModelVersion
-    gpt5FlagshipBackupModelName: gpt5FlagshipBackupModelName
-    gpt5FlagshipBackupModelVersion: gpt5FlagshipBackupModelVersion
-    gpt5FastBackupModelName: gpt5FastBackupModelName
-    gpt5FastBackupModelVersion: gpt5FastBackupModelVersion
-    gpt5FlagshipCapacity: gpt5FlagshipCapacity
-    gpt5FastCapacity: gpt5FastCapacity
-    gpt5FlagshipBackupCapacity: gpt5FlagshipBackupCapacity
-    gpt5FastBackupCapacity: gpt5FastBackupCapacity
   }
 }
 
