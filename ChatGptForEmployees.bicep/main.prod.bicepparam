@@ -9,13 +9,9 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4.1'
-param fastModelName = 'gpt-4.1-mini'
+param flagshipModelName = 'gpt-5'
+param fastModelName = 'gpt-5-mini'
 param embeddingsModelName = 'text-embedding-3-small'
-
-param flagshipCapacity = 50
-param fastCapacity = 100
-param embeddingsCapacity = 50
 
 param postgresAdminUser = 'cgfeadmin'
 

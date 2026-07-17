@@ -9,19 +9,9 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4.1'
-param fastModelName = 'gpt-4.1-mini'
+param flagshipModelName = 'gpt-5'
+param fastModelName = 'gpt-5-mini'
 param embeddingsModelName = 'text-embedding-3-small'
-
-// URGENT (2026-07-14): raise flagship (gpt-4.1) AND fast (gpt-4.1-mini) throughput to
-// ~1,000,000 TPM each for Dev. GlobalStandard capacity unit ~= 1,000 TPM (see main.bicep),
-// so 1000 = ~1M TPM. Overrides the main.bicep defaults (flagship 100 / fast 20), Dev only
-// (test/prod unchanged). PREREQUISITE: the subscription needs >=1M TPM of quota for EACH
-// model (gpt-4.1 and gpt-4.1-mini, GlobalStandard, eastus2), or the deploy FAILS with a
-// quota error — verify in Azure AI Foundry > Quotas before merging. embeddingsCapacity is
-// unchanged (~20K TPM via the main.bicep default).
-param flagshipCapacity = 1000
-param fastCapacity = 1000
 
 param postgresAdminUser = 'cgfeadmin'
 
