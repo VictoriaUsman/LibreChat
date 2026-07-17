@@ -49,13 +49,13 @@ param embeddingsCapacity int = 20
 //   gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25K, Test(pre-launch)=875K, Prod(pre-launch)=100K
 //   gpt-5.4-mini:                   Dev=25K, Test=100K,             Prod=875K
 param gpt5FlagshipModelName string = 'gpt-5'
-param gpt5FlagshipModelVersion string = '2025-05-16'
+param gpt5FlagshipModelVersion string = '2025-08-07'
 param gpt5FastModelName string = 'gpt-5-mini'
-param gpt5FastModelVersion string = '2025-05-16'
+param gpt5FastModelVersion string = '2025-08-07'
 param gpt5FlagshipBackupModelName string = 'gpt-5.1'
-param gpt5FlagshipBackupModelVersion string = '2025-07-01'
+param gpt5FlagshipBackupModelVersion string = '2025-11-13'
 param gpt5FastBackupModelName string = 'gpt-5.4-mini'
-param gpt5FastBackupModelVersion string = '2025-07-01'
+param gpt5FastBackupModelVersion string = '2026-03-17'
 param gpt5FlagshipCapacity int = 25
 param gpt5FastCapacity int = 25
 param gpt5FlagshipBackupCapacity int = 25
