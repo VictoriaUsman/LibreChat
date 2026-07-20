@@ -41,4 +41,15 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdSessionSecret')
-param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
+// --- Okta department-sync ACA Job: DORMANT until Ops wiring is ready ---
+// The job is gated off because its image and Okta secret aren't provisioned yet
+// (see Ops_Requests_for_Launch.md "Scheduled jobs"). To ENABLE, once Ops has
+// built/pushed the image and created the kv secret:
+//   1. set `jobsImage` above to the real ACR reference
+//   2. set `deployJobs = true`
+//   3. restore the getSecret line for oktaApiToken (uncomment below, delete the '' line)
+// Leaving oktaApiToken='' + deployJobs=false keeps the dev deploy green (no
+// getSecret against a not-yet-created secret, and the jobs module isn't deployed).
+param deployJobs               = false
+param oktaApiToken             = ''
+// param oktaApiToken          = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
