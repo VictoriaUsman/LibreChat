@@ -26,6 +26,16 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     apiProperties: {
       serverVersion: '4.2'
     }
+    // Serverless doesn't support Continuous backup (true PITR) — only Periodic.
+    // 30-day retention (720 h) is the maximum available on Serverless.
+    backupPolicy: {
+      type: 'Periodic'
+      periodicModeProperties: {
+        backupIntervalInMinutes: 240
+        backupRetentionIntervalInHours: 720
+        backupStorageRedundancy: 'Local'
+      }
+    }
   }
 }
 

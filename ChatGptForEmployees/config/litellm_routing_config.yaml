@@ -1,91 +1,111 @@
-# LiteLLM — Validated Phase 0 Routing Configuration
+# LiteLLM — Routing Configuration (GPT-5 family: failover + spend attribution)
 # -----------------------------------------------------------------------
-# This file is the validated Phase 0 configuration. Deploy to the LiteLLM
-# Azure Container App by mounting it via an Azure File Share.
+# Mounted into the LiteLLM Container App at runtime via an Azure Files share.
+# Secrets are referenced via os.environ/ (never stored here); set them as
+# container env vars from Key Vault + managed identity.
 #
-# Secrets are referenced via os.environ/ so they are never stored in this
-# file. Set the corresponding environment variables in the Container App
-# using Azure Key Vault references and managed identity.
+# MODELS (the azure/<name> refs MUST match the deployment names in
+# ChatGptForEmployees.bicep/aiFoundry.bicep):
+#   Standard tier — primary romtech-standard (gpt-5), failover romtech-standard-backup (gpt-5.1)
+#   Fast tier     — primary romtech-fast (gpt-5-mini), failover romtech-fast-backup (gpt-5.4-mini)
+# Only the two PRIMARY model_names ("ROMTech AI Standard" / "ROMTech AI Fast") are
+# offered to users in LibreChat. The *-Backup entries are kept as SEPARATE model_names
+# (NOT extra deployments of the same name) so LiteLLM never load-balances normal
+# traffic onto the pricier backups — they are reached ONLY on failover (see
+# router_settings.fallbacks below), i.e. when the primary 429s / errors.
 #
-# See Phase_0_Findings_v1_Recommendation.md Section 2 for the full
-# environment variable reference.
+# COST REGISTRATION (model_info.*_cost_per_token) is REQUIRED so LiteLLM_SpendLogs.spend
+# is non-zero — LiteLLM can't price the custom azure/romtech-* deployment names.
+# per-token = (Azure_Pricing.md GlobalStandard $ per 1M) / 1,000,000:
+#   gpt-5        $1.25 in / $10.00 out      gpt-5.1      $1.25 in / $10.00 out
+#   gpt-5-mini   $0.25 in /  $2.00 out      gpt-5.4-mini $0.75 in /  $4.50 out
 #
-# PBI: Register Model Cost & Enable Per-User Spend in LiteLLM.
-# LiteLLM prices a request by looking up its `litellm_params.model` value in
-# LiteLLM's built-in cost table, keyed by canonical names (e.g. azure/gpt-4.1).
-# Our deployments are named azure/romtech-standard / azure/romtech-fast
-# (see ChatGptForEmployees.bicep/aiFoundry.bicep), which aren't in that table,
-# so every request priced $0 and silently zeroed LiteLLM_SpendLogs.spend.
-# Each model_list entry below now carries an explicit model_info: block with
-# per-token cost, so pricing no longer depends on LiteLLM recognizing the
-# custom deployment name. `base_model` documents which canonical model the
-# cost was sourced from; it does not affect routing.
-#
-# Pricing source: ChatGptForEmployees.docs/Azure_Pricing.md.
-# NOTE: this file is the LOCAL DEV filled-in config. dev-lms-foundry only has
-# one real deployment (gpt-5.4-mini — see litellm_params.model above), so both
-# model slots are priced at "GPT-5.4 mini Global" Standard tier ($0.75 in /
-# $4.50 out per 1M) here, NOT the GPT-4.1 series prod uses. Prod's own
-# filled-in config (generated from litellm_routing_config.yaml.template,
-# never committed) prices against its actual romtech-standard/romtech-fast
-# deployments per aiFoundry.bicep's gpt-4.1 / gpt-4.1-mini mapping:
-#   azure/romtech-standard -> gpt-4.1-2025-04-14      ($2.00 in / $8.00 out per 1M)
-#   azure/romtech-fast     -> gpt-4.1-mini-2025-04-14 ($0.40 in / $1.60 out per 1M)
-# If the Azure deployment SKU changes from Global/Standard (e.g. Data Zone or
-# Priority Processing), update these numbers from the same pricing doc.
+# ⚠️ VERIFY BEFORE TRUSTING THIS CONFIG: api_version "2024-10-21" was chosen for
+# gpt-4.1. Confirm it actually serves the GPT-5 models on this Azure resource — if
+# not, every call 400s and it must be bumped (e.g. a 2024-12-01-preview or later).
+# Flagged in the reconcile/santi-launch-prep review.
 # -----------------------------------------------------------------------
 
 model_list:
 
-  # --- Model 1: ROMTech AI Standard (recommended default) ---
+  # --- Standard tier: PRIMARY (gpt-5) ---
   - model_name: "ROMTech AI Standard"
     litellm_params:
-      # Dev deployment name (scripts/.env AZURE_OPENAI_DEPLOYMENT_FLAGSHIP) —
-      # dev-lms-foundry only has one real deployment, gpt-5.4-mini; prod
-      # provisions distinct romtech-standard/romtech-fast deployments (see
-      # RUN_LOCAL.md "Two model slots point at one Azure deployment in Phase 0").
-      model: azure/gpt-5.4-mini
+      model: azure/romtech-standard
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"
-      # gpt-4.1 rejects `max_tokens` on some API versions in favor of
-      # `max_completion_tokens`; drop it so LiteLLM doesn't forward a
-      # param the deployment may reject (see RUN_LOCAL.md gotchas).
       additional_drop_params: ["max_tokens"]
     model_info:
-      base_model: azure/gpt-5.4-mini
-      input_cost_per_token: 0.00000075
-      output_cost_per_token: 0.0000045
+      base_model: azure/gpt-5
+      input_cost_per_token: 0.00000125     # $1.25 / 1M
+      output_cost_per_token: 0.00001       # $10.00 / 1M
 
-  # --- Model 2: ROMTech AI Fast (high-volume tasks) ---
+  # --- Standard tier: FAILOVER (gpt-5.1) — internal; reached only via fallbacks ---
+  - model_name: "ROMTech AI Standard Backup"
+    litellm_params:
+      model: azure/romtech-standard-backup
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+      additional_drop_params: ["max_tokens"]
+    model_info:
+      base_model: azure/gpt-5.1
+      input_cost_per_token: 0.00000125     # $1.25 / 1M
+      output_cost_per_token: 0.00001       # $10.00 / 1M
+
+  # --- Fast tier: PRIMARY (gpt-5-mini) ---
   - model_name: "ROMTech AI Fast"
     litellm_params:
-      # Dev deployment name (scripts/.env AZURE_OPENAI_DEPLOYMENT_FAST) — see
-      # note on "ROMTech AI Standard" above.
-      model: azure/gpt-5.4-mini
+      model: azure/romtech-fast
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+      additional_drop_params: ["max_tokens"]
+    model_info:
+      base_model: azure/gpt-5-mini
+      input_cost_per_token: 0.00000025     # $0.25 / 1M
+      output_cost_per_token: 0.000002      # $2.00 / 1M
+
+  # --- Fast tier: FAILOVER (gpt-5.4-mini) — internal; reached only via fallbacks ---
+  - model_name: "ROMTech AI Fast Backup"
+    litellm_params:
+      model: azure/romtech-fast-backup
       api_base: os.environ/AZURE_OPENAI_ENDPOINT
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_version: "2024-10-21"
       additional_drop_params: ["max_tokens"]
     model_info:
       base_model: azure/gpt-5.4-mini
-      input_cost_per_token: 0.00000075
-      output_cost_per_token: 0.0000045
+      input_cost_per_token: 0.00000075     # $0.75 / 1M
+      output_cost_per_token: 0.0000045     # $4.50 / 1M
 
 
 router_settings:
-  num_retries: 2
-  timeout: 60
-  retry_after: 5
+  num_retries: 2          # Retry transient Azure errors on the primary first
+  timeout: 60             # Seconds before a request is abandoned
+  retry_after: 5          # Seconds between retries
+  # TRUE FAILOVER (not load-balancing): each primary falls over to its dedicated
+  # backup model_name only AFTER num_retries is exhausted (429 / transient error).
+  # Because the backups carry their own model_names, normal traffic never touches
+  # the pricier gpt-5.1 / gpt-5.4-mini.
+  # ⚠️ Verify this key's placement against litellm v1.57.4 — `fallbacks` has lived
+  # under both `router_settings` and `litellm_settings` across versions. If failover
+  # doesn't trigger in testing, move this block to litellm_settings.
+  fallbacks:
+    - "ROMTech AI Standard": ["ROMTech AI Standard Backup"]
+    - "ROMTech AI Fast": ["ROMTech AI Fast Backup"]
+
+
 litellm_settings:
-  drop_params: true
+  drop_params: true       # Silently ignore params Azure doesn't support
 
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
-  # Per-user spend dimension (this PBI): the OpenAI-compatible `user` field on
-  # each request is required for department/user cost attribution per Okta
-  # identity (see wiki: attribution is post-hoc via Okta, not per-key).
-  # Without this, LiteLLM accepts but silently drops the `user` field.
+  # Per-user spend attribution: LiteLLM records the request `user` field (the Mongo
+  # _id LibreChat sends) into LiteLLM_SpendLogs.end_user, which the department rollup
+  # joins on. LiteLLM logs end_user by DEFAULT; this opt-in is kept for parity —
+  # confirm its exact effect against the pinned image (it may be a no-op).
   allow_user_requests: true

@@ -10,8 +10,8 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' =
   name: serverName
   location: location
   sku: {
-    name: envName == 'Prod' ? 'Standard_B2ms' : 'Standard_B1ms'
-    tier: 'Burstable'
+    name: envName == 'Prod' ? 'Standard_D2s_v3' : 'Standard_B1ms'
+    tier: envName == 'Prod' ? 'GeneralPurpose' : 'Burstable'
   }
   properties: {
     administratorLogin: adminUser
@@ -21,7 +21,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' =
       storageSizeGB: 32
     }
     backup: {
-      backupRetentionDays: 7
+      backupRetentionDays: envName == 'Prod' ? 35 : 7
       geoRedundantBackup: 'Disabled'
     }
     highAvailability: {
