@@ -38,6 +38,18 @@ model_list:
       api_base: <AZURE_OPENAI_ENDPOINT>
       api_key: <AZURE_OPENAI_API_KEY>
       api_version: "2024-02-01"
+    model_info:
+      # COST REGISTRATION — REQUIRED, do not leave unfilled.
+      # LiteLLM prices a request by looking up litellm_params.model in its
+      # built-in cost table, keyed by CANONICAL names (azure/gpt-4.1, azure/gpt-5,
+      # ...). Our custom azure/<deployment> names are NOT in that table, so
+      # without explicit per-token cost every request prices $0 and the whole
+      # department-spend report silently sums to zero. Fill both values from the
+      # DEPLOYED model's row in ChatGptForEmployees.docs/Azure_Pricing.md
+      # (per-token = per-1M ÷ 1,000,000).
+      base_model: azure/<CANONICAL_MODEL>            # e.g. azure/gpt-5 — documents the pricing source; does NOT affect routing
+      input_cost_per_token: <INPUT_COST_PER_TOKEN>   # (input $/1M) ÷ 1,000,000
+      output_cost_per_token: <OUTPUT_COST_PER_TOKEN> # (output $/1M) ÷ 1,000,000
 
   # --- Model 2: ROMTech AI Fast (GPT-4o-mini-class, high-volume / low-complexity) ---
   - model_name: "ROMTech AI Fast"
@@ -46,6 +58,11 @@ model_list:
       api_base: <AZURE_OPENAI_ENDPOINT>
       api_key: <AZURE_OPENAI_API_KEY>
       api_version: "2024-02-01"
+    model_info:
+      # COST REGISTRATION — REQUIRED (see the note on ROMTech AI Standard above).
+      base_model: azure/<CANONICAL_MODEL_FAST>       # e.g. azure/gpt-5-mini
+      input_cost_per_token: <INPUT_COST_PER_TOKEN_FAST>   # (input $/1M) ÷ 1,000,000
+      output_cost_per_token: <OUTPUT_COST_PER_TOKEN_FAST> # (output $/1M) ÷ 1,000,000
 
 
 router_settings:
@@ -61,3 +78,10 @@ litellm_settings:
 
 general_settings:
   master_key: <LITELLM_MASTER_KEY>    # Must match the value in the container environment
+  # Per-user spend attribution: the department rollup joins on
+  # LiteLLM_SpendLogs.end_user, which LiteLLM populates from the OpenAI-compatible
+  # `user` field LibreChat sends (the Mongo _id). LiteLLM records end_user by
+  # DEFAULT; this explicit opt-in is set for parity with the filled dev config.
+  # Confirm its exact effect against the pinned LiteLLM image — it may be a no-op,
+  # in which case end_user attribution still works without it.
+  allow_user_requests: true
