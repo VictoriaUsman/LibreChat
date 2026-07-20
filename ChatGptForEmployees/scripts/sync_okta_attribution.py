@@ -63,9 +63,11 @@ Optional:
 
 Exit codes:
   0 -- both sources synced successfully (after retries if needed)
-  1 -- at least one source failed after exhausting retries (see per-source
-       log lines for which); sync_run_log still gets exactly one row either
-       way, with status='failed' and a detail column on failure.
+  1 -- at least one source failed after exhausting retries, OR a safety guard
+       aborted a write (empty/below-MIN_RATIO fetch -- a deliberately-skipped
+       sync is reported as failed so the alert fires); see per-source log lines
+       and the sync_run_log.detail column for which. sync_run_log still gets
+       exactly one row either way, with status='failed' on any non-success.
 """
 
 import os
@@ -142,6 +144,15 @@ class ConfigError(Exception):
     """Raised for missing/invalid required configuration. Not retried --
     retrying a source that's simply unconfigured just delays the same
     failure by ~21 minutes for no benefit."""
+
+
+class SyncAbort(Exception):
+    """Raised when a source fetch SUCCEEDS but a safety guard refuses to write
+    (empty result, or fewer rows than MIN_RATIO of the current table). This is
+    a deliberately-skipped write, not a healthy no-op: the run is recorded
+    status='failed' with a non-zero exit so the twice-weekly failure alert
+    fires and the stale table gets investigated -- rather than the old
+    behaviour of returning 0 and reporting status='success'."""
 
 
 def run_with_retries(fn, label: str):
@@ -227,16 +238,14 @@ def sync_dept_map(conn, users: list) -> int:
         current_active = cur.fetchone()[0]
 
     if not users:
-        log.error("dept_map sync aborted: Okta fetch returned 0 users.")
-        return 0
+        raise SyncAbort("Okta fetch returned 0 users -- nothing written.")
     if current_active > 0 and len(users) < current_active * DEPT_MAP_MIN_RATIO:
-        log.error(
-            "dept_map sync aborted: Okta fetch returned %d users, below %.0f%% of "
-            "the %d currently active row(s) -- looks like a bad token/org or partial "
-            "outage, not a genuine mass departure. Nothing written.",
-            len(users), DEPT_MAP_MIN_RATIO * 100, current_active,
+        raise SyncAbort(
+            "Okta fetch returned %d users, below %.0f%% of the %d currently active "
+            "row(s) -- likely a bad token/org or partial outage, not a genuine mass "
+            "departure. Nothing written." % (
+                len(users), DEPT_MAP_MIN_RATIO * 100, current_active)
         )
-        return 0
 
     emails = [u["email"] for u in users]
     try:
@@ -280,16 +289,14 @@ def sync_user_directory(conn, users: list) -> int:
         current_count = cur.fetchone()[0]
 
     if not users:
-        log.error("user_directory sync aborted: Mongo fetch returned 0 users.")
-        return 0
+        raise SyncAbort("Mongo fetch returned 0 users -- nothing written.")
     if current_count > 0 and len(users) < current_count * USER_DIRECTORY_MIN_RATIO:
-        log.error(
-            "user_directory sync aborted: Mongo fetch returned %d users, below %.0f%% "
-            "of the %d currently stored row(s) -- looks like a bad connection/wrong "
-            "database, not a genuine mass deletion. Nothing written.",
-            len(users), USER_DIRECTORY_MIN_RATIO * 100, current_count,
+        raise SyncAbort(
+            "Mongo fetch returned %d users, below %.0f%% of the %d currently stored "
+            "row(s) -- likely a bad connection/wrong database, not a genuine mass "
+            "deletion. Nothing written." % (
+                len(users), USER_DIRECTORY_MIN_RATIO * 100, current_count)
         )
-        return 0
 
     try:
         with conn.cursor() as cur:
@@ -325,7 +332,14 @@ def main() -> int:
     user_directory_synced = None
     detail_parts = []
 
-    conn = psycopg2.connect(DATABASE_URL)
+    # Keepalives: the connection is opened up front (we must be able to write
+    # the sync_run_log row even if BOTH fetches fail) but then sits idle across
+    # each source's up-to-~21 min retry backoff. TCP keepalives stop an idle
+    # NAT/firewall/server timeout from silently dropping it before the writes.
+    conn = psycopg2.connect(
+        DATABASE_URL,
+        keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5,
+    )
     ok = True
     try:
         ensure_tables(conn)
@@ -335,7 +349,7 @@ def main() -> int:
             okta_users = run_with_retries(fetch_okta_users, "Okta fetch")
             dept_map_synced = sync_dept_map(conn, okta_users)
         except Exception as e:
-            log.error("dept_map sync failed after retries, table left untouched: %s", e)
+            log.error("dept_map sync failed (retries exhausted or safety-guard abort), table left untouched: %s", e)
             ok = False
             detail_parts.append(f"dept_map: {e}")
 
@@ -344,7 +358,7 @@ def main() -> int:
             mongo_users = run_with_retries(fetch_mongo_users, "Mongo fetch")
             user_directory_synced = sync_user_directory(conn, mongo_users)
         except Exception as e:
-            log.error("user_directory sync failed after retries, table left untouched: %s", e)
+            log.error("user_directory sync failed (retries exhausted or safety-guard abort), table left untouched: %s", e)
             ok = False
             detail_parts.append(f"user_directory: {e}")
 

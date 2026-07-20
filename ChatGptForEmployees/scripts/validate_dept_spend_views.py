@@ -45,6 +45,14 @@ except ImportError:
     print("ERROR: psycopg2 package not installed. Run: pip install -r requirements.txt")
     sys.exit(1)
 
+# Single source of truth for the reporting timezone: reuse the same constant the
+# views are built with, so this validator can't drift from setup_dept_spend_views
+# and fail spuriously if the pinned zone changes.
+try:
+    from setup_dept_spend_views import REPORT_TIMEZONE
+except ImportError:
+    REPORT_TIMEZONE = "America/New_York"  # fallback; keep in sync with setup_dept_spend_views.py
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 if not DATABASE_URL:
@@ -231,10 +239,10 @@ try:
     print("4. Unmapped end_user shows up under department='Unknown' (no silent drop)")
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT total_spend FROM v_spend_by_dept_month
             WHERE department = 'Unknown'
-              AND period = date_trunc('month', (%s::timestamp AT TIME ZONE 'UTC') AT TIME ZONE 'America/New_York')
+              AND period = date_trunc('month', (%s::timestamp AT TIME ZONE 'UTC') AT TIME ZONE '{REPORT_TIMEZONE}')
             """,
             (UNMAPPED_TIME,),
         )

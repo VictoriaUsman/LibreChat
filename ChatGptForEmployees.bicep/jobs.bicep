@@ -47,14 +47,20 @@ resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
         parallelism: 1
         replicaCompletionCount: 1
       }
-      // 30 min: covers the in-script retry path's ~21 min worst-case sleep
-      // (3 retries at ~1/4/16 min) plus fetch/sync time. Deliberately larger
-      // than the cleanup job's 300s, which has no retry sleep to accommodate.
-      replicaTimeout: 1800
-      // Infra-level backstop on top of (not instead of) the in-script
-      // backoff -- only engages for failures the script itself can't catch
-      // (unhandled crash, OOM), matching the cleanup job's replicaRetryLimit.
-      replicaRetryLimit: 1
+      // 50 min: the two sources (Okta, Mongo) are fetched SEQUENTIALLY, each
+      // with its own ~21 min worst-case retry backoff (~1/4/16 min), so a
+      // both-sources-down run needs ~42 min of sleeps plus fetch/sync/audit
+      // time. 1800s (30 min) would kill the replica mid-run -- BEFORE it writes
+      // the status='failed' sync_run_log audit row -- exactly when recording the
+      // failure matters most. Sized above the summed two-source worst case.
+      replicaTimeout: 3000
+      // 0: the script owns retries (run_with_retries + exponential backoff) and
+      // exits non-zero only AFTER exhausting them, having already written a
+      // status='failed' sync_run_log row. ACA retries a replica on ANY non-zero
+      // exit, so any value >0 re-runs the whole ~42 min backoff for no benefit
+      // and writes a second audit row (skewing run counts). The twice-weekly
+      // schedule is the retry cadence.
+      replicaRetryLimit: 0
       secrets: [
         { name: 'database-url', value: databaseUrl }
         { name: 'mongo-uri', value: mongoUri }

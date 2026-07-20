@@ -10,8 +10,11 @@ What this script checks:
      block with input_cost_per_token / output_cost_per_token (the fix for the
      $0-spend bug — LiteLLM's built-in price table doesn't know our custom
      azure/romtech-* deployment names).
-  2. general_settings.allow_user_requests is true (required for LiteLLM to
-     record the request-body "user" field instead of silently dropping it).
+  2. general_settings.allow_user_requests is true. NOTE: LiteLLM records the
+     request-body "user" field into LiteLLM_SpendLogs.end_user by DEFAULT; this
+     opt-in is checked for parity with the deployed config, but its exact gating
+     effect is unconfirmed against the pinned image and may be a no-op (end_user
+     attribution works regardless). Test 4 below empirically confirms capture.
   3. A live request against each model logs a non-zero spend in /spend/logs
      that matches prompt_tokens * input_cost_per_token +
      completion_tokens * output_cost_per_token exactly.
