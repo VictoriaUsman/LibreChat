@@ -23,6 +23,21 @@ param liteLlmImage string = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
+// Shared image for both ACA Jobs (nightly cleanup + twice-weekly Okta sync);
+// no registry/image has been built/pushed yet -- see jobs.bicep's Ops
+// dependencies comment for the placeholder-to-real-image hand-off.
+param jobsImage string = '<registry>/librechat-cleanup:latest'
+param oktaOrgUrl string = 'https://romtech.okta.com'
+
+// Gate for the Okta department-sync ACA Job. Kept FALSE until Ops has (a) built
+// & pushed the jobs image to a registry and (b) created the
+// ChatGptForEmployees<Env>-OktaApiToken Key Vault secret (see the Ops addendum,
+// Ops_Requests_for_Launch.md). While false, the `jobs` module is not deployed,
+// so the <registry> placeholder image and the (not-yet-created) Okta secret
+// cannot fail the deployment. Flip to true in the env bicepparam once both are
+// ready (see that file for the full enable steps).
+param deployJobs bool = false
+
 param flagshipModelName string = 'gpt-5'
 param flagshipModelVersion string = '2025-08-07'
 param fastModelName string = 'gpt-5-mini'
@@ -68,6 +83,10 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+@secure()
+// Defaulted empty so the deployment doesn't require it when deployJobs=false
+// (the env bicepparam supplies the real Key Vault value only when enabling the job).
+param oktaApiToken string = ''
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 var minReplicas = 1
 
@@ -160,6 +179,20 @@ module liteLlm 'liteLlm.bicep' = {
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
     liteLlmMasterKey: liteLlmMasterKey
     databaseUrl: postgresql.outputs.liteLlmConnectionString
+  }
+}
+
+module jobs 'jobs.bicep' = if (deployJobs) {
+  name: 'jobs'
+  params: {
+    envName: environmentName
+    location: location
+    environmentId: containerAppsEnvironment.outputs.environmentId
+    jobsImage: jobsImage
+    oktaOrgUrl: oktaOrgUrl
+    oktaApiToken: oktaApiToken
+    databaseUrl: postgresql.outputs.liteLlmConnectionString
+    mongoUri: cosmosDb.outputs.connectionString
   }
 }
 
