@@ -1,8 +1,11 @@
 # LiteLLM — Routing Configuration (GPT-5 family: failover + spend attribution)
 # -----------------------------------------------------------------------
-# Mounted into the LiteLLM Container App at runtime via an Azure Files share.
-# Secrets are referenced via os.environ/ (never stored here); set them as
-# container env vars from Key Vault + managed identity.
+# THIS committed file is the deployed config for EVERY environment. The deploy
+# pipelines (ChatGptForEmployees.pipelines/{dev,test,prod}.yml) upload it verbatim
+# to each env's Azure Files share — there is NO per-env "template fill" step, and no
+# `.template` (removed 2026-07-20). It is env-agnostic because every secret/endpoint
+# is an os.environ/ ref resolved from that env's container env vars (Key Vault +
+# managed identity). So a change here applies to dev, test, AND prod on next deploy.
 #
 # MODELS (the azure/<name> refs MUST match the deployment names in
 # ChatGptForEmployees.bicep/aiFoundry.bicep):

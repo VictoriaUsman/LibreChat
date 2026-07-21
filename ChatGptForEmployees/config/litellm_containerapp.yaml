@@ -12,8 +12,10 @@
 #
 # Prerequisites (PBI-03-BE — routing config):
 #   - An Azure Storage Account and File Share exist in the same resource group.
-#   - litellm_routing_config.yaml (filled in from litellm_routing_config.yaml.template)
-#     has been uploaded to the file share at the path: /litellm/config.yaml
+#   - config/litellm_routing_config.yaml (the committed, env-agnostic config — uses
+#     os.environ/ refs, so one file serves all envs) is uploaded to the file share.
+#     The deploy pipelines (ChatGptForEmployees.pipelines/{dev,test,prod}.yml) do this
+#     upload per environment; there is no per-env "template fill" step.
 #   - The file share is registered as a storage mount in the Container Apps Environment:
 #       az containerapp env storage set \
 #         --name <ENVIRONMENT_NAME> \

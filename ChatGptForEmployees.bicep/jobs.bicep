@@ -4,24 +4,21 @@
 // shape of config/cleanup-job.yaml (that job has no bicep of its own yet)
 // and on liteLlm.bicep's identity/secrets/env conventions.
 //
-// Ops dependencies (NOT done by this module -- explicitly out of scope per
-// the PBI):
-//   - Grant this Job's principalId (see `principalId` output) "Key Vault
-//     Secrets User" on kv-romtech-<env>, the same way keyvault.bicep does
-//     for liteLlm/libreChat/ragApi.
-//   - Confirm this Job's outbound network path reaches the Cosmos Mongo and
-//     Postgres endpoints (VNet/firewall config), same as the other apps in
-//     this Container Apps environment.
-//   - Create the `ChatGptForEmployees<Env>-OktaApiToken` secret in each
-//     kv-romtech-<env> Key Vault (see sync_okta_attribution.py's docstring).
-//   - Build and push a real image to replace the `jobsImage` placeholder
-//     value used in main.<env>.bicepparam.
-//   - Wire an Azure Monitor alert on Job execution failure.
+// Now wired in-repo (WI 11711): the ACR (acr.bicep) + the image build/push
+// (deploy pipeline `az acr build`) + this Job's AcrPull and "Key Vault Secrets
+// User" role assignments (below). The Okta token secret already exists in every
+// kv-romtech-<env>.
+// Remaining external dependencies:
+//   - Confirm this Job's outbound path reaches Cosmos Mongo + Postgres (it shares
+//     the app's Container Apps environment, so should inherit it).
+//   - Wire an Azure Monitor alert on Job execution failure (needs the alert
+//     destination from Ops).
 
 param envName string = 'Dev'
 param location string = 'eastus'
 param environmentId string
-param jobsImage string
+param acrName string
+param keyVaultName string
 param oktaOrgUrl string
 
 @secure()
@@ -32,6 +29,24 @@ param databaseUrl string
 param mongoUri string
 
 var jobName = 'job-okta-sync-${toLower(envName)}'
+
+// The image is built + pushed to this env's ACR by the deploy pipeline
+// (az acr build). The Job pulls it via its own managed identity (AcrPull, below).
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: acrName
+}
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
+}
+resource acrPullRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  scope: subscription()
+  name: '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
+}
+resource kvSecretsUserRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  scope: subscription()
+  name: '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
+}
+var jobsImage = '${acr.properties.loginServer}/librechat-cleanup:latest'
 
 resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
   name: jobName
@@ -66,6 +81,14 @@ resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
         { name: 'mongo-uri', value: mongoUri }
         { name: 'okta-api-token', value: oktaApiToken }
       ]
+      // Pull the image from this env's ACR using the Job's own managed identity
+      // (granted AcrPull below) — no admin creds on the registry.
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: 'system'
+        }
+      ]
     }
     template: {
       containers: [
@@ -87,6 +110,28 @@ resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
         }
       ]
     }
+  }
+}
+
+// The Job's identity pulls its image from ACR and reads its secrets from Key
+// Vault — both granted here. This module only deploys when deployJobs=true, so
+// these assignments are inherently conditional on the Job existing.
+resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: acr
+  name: guid(acr.id, oktaSyncJob.id, acrPullRole.id)
+  properties: {
+    roleDefinitionId: acrPullRole.id
+    principalId: oktaSyncJob.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+resource kvSecretsAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, oktaSyncJob.id, kvSecretsUserRole.id)
+  properties: {
+    roleDefinitionId: kvSecretsUserRole.id
+    principalId: oktaSyncJob.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
