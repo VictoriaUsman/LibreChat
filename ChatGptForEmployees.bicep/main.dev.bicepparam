@@ -36,6 +36,7 @@ param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 // now ENABLED for Dev: on deploy it creates job-cgfe-okta-sync-dev with its
 // AcrPull + Key Vault Secrets User role assignments and pulls the image. Trigger
 // it via the portal ("Run now") to test, or wait for the Tue/Fri cron. Test/Prod
-// stay gated (deployJobs defaults to false) until enabled in their own bicepparams.
+// are also enabled (in their own bicepparams) but only deploy when those pipelines
+// run — so we validate in Dev first, then promote dev -> test -> prod when ready.
 param deployJobs               = true
 param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
