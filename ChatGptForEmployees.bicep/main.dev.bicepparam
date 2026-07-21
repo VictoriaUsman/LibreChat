@@ -31,13 +31,11 @@ param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 // --- Okta department-sync ACA Job ---
 // The ACR + image build/push + AcrPull/KV-role assignments are now all in-repo
 // (WI 11711); the image ref is derived from the ACR automatically (no jobsImage
-// param). The Okta token secret already exists in kv-romtech-dev. The Job is kept
-// OFF pending a deploy that confirms the image builds and the Job can pull it —
-// then ENABLE by:
-//   1. set `deployJobs = true`
-//   2. restore the getSecret line for oktaApiToken (uncomment below, delete the '' line)
-// While deployJobs=false, the Job (and its getSecret dependency) don't deploy, so
-// the pipeline stays green even before the first image build.
-param deployJobs               = false
-param oktaApiToken             = ''
-// param oktaApiToken          = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
+// param). The Okta token secret already exists in kv-romtech-dev, and the ACR +
+// image (acrcgfedev / librechat-cleanup) are built and verified — so the Job is
+// now ENABLED for Dev: on deploy it creates job-cgfe-okta-sync-dev with its
+// AcrPull + Key Vault Secrets User role assignments and pulls the image. Trigger
+// it via the portal ("Run now") to test, or wait for the Tue/Fri cron. Test/Prod
+// stay gated (deployJobs defaults to false) until enabled in their own bicepparams.
+param deployJobs               = true
+param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
