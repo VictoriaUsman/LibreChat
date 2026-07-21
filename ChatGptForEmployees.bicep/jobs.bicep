@@ -28,7 +28,7 @@ param databaseUrl string
 @secure()
 param mongoUri string
 
-var jobName = 'job-okta-sync-${toLower(envName)}'
+var jobName = 'job-cgfe-okta-sync-${toLower(envName)}'
 
 // The image is built + pushed to this env's ACR by the deploy pipeline
 // (az acr build). The Job pulls it via its own managed identity (AcrPull, below).
@@ -93,7 +93,7 @@ resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
     template: {
       containers: [
         {
-          name: 'okta-sync'
+          name: 'cgfe-okta-sync'
           image: jobsImage
           resources: {
             cpu: json('0.25')
