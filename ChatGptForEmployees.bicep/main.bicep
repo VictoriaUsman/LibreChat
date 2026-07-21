@@ -23,10 +23,10 @@ param liteLlmImage string = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
-// Shared image for both ACA Jobs (nightly cleanup + twice-weekly Okta sync);
-// no registry/image has been built/pushed yet -- see jobs.bicep's Ops
-// dependencies comment for the placeholder-to-real-image hand-off.
-param jobsImage string = '<registry>/librechat-cleanup:latest'
+// The scheduled-jobs image lives in a per-env ACR (acr.bicep -> `acrcgfe<env>`);
+// the deploy pipeline builds + pushes it, and jobs.bicep derives the image ref
+// from the registry and pulls it via the Job's managed identity. No jobsImage
+// param is needed.
 param oktaOrgUrl string = 'https://romtech.okta.com'
 
 // Gate for the Okta department-sync ACA Job. Kept FALSE until Ops has (a) built
@@ -182,13 +182,24 @@ module liteLlm 'liteLlm.bicep' = {
   }
 }
 
+// ACR for the scheduled-jobs image — deployed always (the pipeline pushes to it
+// even while the Job itself stays gated off via deployJobs).
+module acr 'acr.bicep' = {
+  name: 'acr'
+  params: {
+    envName: environmentName
+    location: location
+  }
+}
+
 module jobs 'jobs.bicep' = if (deployJobs) {
   name: 'jobs'
   params: {
     envName: environmentName
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
-    jobsImage: jobsImage
+    acrName: acr.outputs.name
+    keyVaultName: 'kv-romtech-${toLower(environmentName)}'
     oktaOrgUrl: oktaOrgUrl
     oktaApiToken: oktaApiToken
     databaseUrl: postgresql.outputs.liteLlmConnectionString
