@@ -1,3 +1,6 @@
+// redeploy trigger (2026-07-21): no-op change to force a fresh pipeline run so the
+// Bicep create stage re-applies after the approval gate and actually creates the
+// now-enabled job-cgfe-okta-sync-<env>. Safe to remove once the deploy has run.
 param appName string = 'ChatGptForEmployees'
 param location string = 'eastus'
 param subId string = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
