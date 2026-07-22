@@ -4,8 +4,10 @@
 // SMTP and no Ops dependency. Point `alertEmailAddresses` at the inboxes/DLs we own.
 //
 // The alert is a Log Analytics scheduled query rule over the jobs' console logs.
-// ⚠️ VALIDATE IN DEV BEFORE RELYING ON IT (see main.dev.bicepparam): set a dev
-// recipient, deploy, FORCE a failed run, and confirm the email arrives.
+// VALIDATED IN DEV 2026-07-22 against a real forced failure: table is
+// ContainerAppConsoleLogs_CL and jobs are scoped by ContainerGroupName_s (jobs
+// leave ContainerAppName_s empty). The rule evaluates hourly, so the email lands
+// within ~1h of a failure (not instantly, unlike the action-group Test button).
 //
 // COVERAGE / KNOWN GAP: this query keys on the jobs' own stdout, so it catches
 // every *handled* failure (both scripts log `[ERROR]` before a non-zero exit; the
@@ -43,17 +45,19 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
-// Scoped to our jobs by the `job-cgfe-` name prefix. `startswith` (not an exact
-// name list) survives either log schema — bare job name or execution-suffixed
-// replica name — so the rule can't silently match nothing. No app is named
-// `job-cgfe-*`, so app traffic can't trip it.
+// Scope to our jobs by ContainerGroupName_s — the job EXECUTION name, e.g.
+// 'job-cgfe-cleanup-dev-<exec>'. ⚠️ ACA JOBS leave ContainerAppName_s EMPTY (only
+// apps populate it), so the job identity lives in ContainerGroupName_s — verified
+// against a real dev failure 2026-07-22. `startswith 'job-cgfe-'` matches both
+// jobs across the execution suffix and excludes the apps (containers
+// litellm/librechat/ragapi), so app traffic can't trip it.
 // FAILURE-ONLY markers: `[ERROR]` (both scripts log it only on real failures),
 // the sync job's explicit `SYNC_SUMMARY status=failed`, and `Traceback` (an
 // exception that escaped main()). Deliberately NOT bare 'canary' / 'circuit
 // breaker' — those appear in HEALTHY logs and would false-alarm.
 // NB: single-quoted (interpolated) string — Bicep triple-quote strings do NOT
 // interpolate.
-var failureQuery = 'ContainerAppConsoleLogs_CL\n| where ContainerAppName_s startswith \'job-cgfe-\'\n| where Log_s contains \'[ERROR]\' or Log_s contains \'SYNC_SUMMARY status=failed\' or Log_s contains \'Traceback (most recent call last)\''
+var failureQuery = 'ContainerAppConsoleLogs_CL\n| where ContainerGroupName_s startswith \'job-cgfe-\'\n| where Log_s contains \'[ERROR]\' or Log_s contains \'SYNC_SUMMARY status=failed\' or Log_s contains \'Traceback (most recent call last)\''
 
 resource jobFailureAlert 'Microsoft.Insights/scheduledQueryRules@2022-06-15' = {
   name: 'alert-cgfe-job-failure-${toLower(envName)}'
