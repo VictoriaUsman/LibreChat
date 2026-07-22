@@ -1,18 +1,29 @@
 param appName string = 'ChatGptForEmployees'
 param envName string = 'Dev'
 param location string = 'eastus'
-param flagshipModelName string = 'gpt-4.1'
-param flagshipModelVersion string = '2025-04-14'
-param fastModelName string = 'gpt-4.1-mini'
-param fastModelVersion string = '2025-04-14'
+
+// Primary models — romtech-standard and romtech-fast are the deployment names
+// LiteLLM references. Changing the model here swaps what those names point to.
+param flagshipModelName string = 'gpt-5'
+param flagshipModelVersion string = '2025-08-07'
+param fastModelName string = 'gpt-5-mini'
+param fastModelVersion string = '2025-08-07'
+
+// Backup models — used by LiteLLM as fallback when primary hits 429 or error.
+param flagshipBackupModelName string = 'gpt-5.1'
+param flagshipBackupModelVersion string = '2025-11-13'
+param fastBackupModelName string = 'gpt-5.4-mini'
+param fastBackupModelVersion string = '2026-03-17'
+
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
-// Defaults here are only used if a caller omits the param — main.bicep is the
-// effective entry point and always passes its own value explicitly. Kept in
-// sync with main.bicep's default to avoid two different-looking defaults.
-param flagshipCapacity int = 100
-param fastCapacity int = 100
-param embeddingsCapacity int = 120
+
+// Capacity values are driven by ternaries in main.bicep — defaults here are never used directly.
+param flagshipCapacity int
+param flagshipBackupCapacity int
+param fastCapacity int
+param fastBackupCapacity int
+param embeddingsCapacity int
 
 var accountName = 'ais${toLower(appName)}${toLower(envName)}'
 
@@ -50,10 +61,27 @@ resource flagshipDeployment 'Microsoft.CognitiveServices/accounts/deployments@20
   }
 }
 
+resource flagshipBackupDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
+  parent: aiFoundryAccount
+  name: 'romtech-standard-backup'
+  dependsOn: [flagshipDeployment]
+  sku: {
+    name: 'GlobalStandard'
+    capacity: flagshipBackupCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: flagshipBackupModelName
+      version: flagshipBackupModelVersion
+    }
+  }
+}
+
 resource fastDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
   parent: aiFoundryAccount
   name: 'romtech-fast'
-  dependsOn: [flagshipDeployment]
+  dependsOn: [flagshipBackupDeployment]
   sku: {
     name: 'GlobalStandard'
     capacity: fastCapacity
@@ -67,10 +95,27 @@ resource fastDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-0
   }
 }
 
+resource fastBackupDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
+  parent: aiFoundryAccount
+  name: 'romtech-fast-backup'
+  dependsOn: [fastDeployment]
+  sku: {
+    name: 'GlobalStandard'
+    capacity: fastBackupCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: fastBackupModelName
+      version: fastBackupModelVersion
+    }
+  }
+}
+
 resource embeddingsDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
   parent: aiFoundryAccount
   name: 'romtech-embeddings'
-  dependsOn: [fastDeployment]
+  dependsOn: [fastBackupDeployment]
   sku: {
     name: 'GlobalStandard'
     capacity: embeddingsCapacity

@@ -35,6 +35,30 @@ stages:
       resourceGroup: $(resourceGroup)
       serviceConnection: $(serviceConnection)
 
+  - stage: BuildJobsImage
+    displayName: 'Build & push scheduled-jobs image'
+    dependsOn: BicepCreate
+    jobs:
+      - job: BuildPush
+        displayName: 'az acr build Dockerfile.cleanup -> acrcgfedev'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Build & push librechat-cleanup image to ACR'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                # Build scripts/Dockerfile.cleanup server-side in ACR and push
+                # librechat-cleanup:latest. The ACA Job (jobs.bicep) pulls this via
+                # its managed identity. Runs even while the Job is gated off
+                # (deployJobs=false), so the image is ready when the Job is enabled.
+                az acr build \
+                  --registry acrcgfedev \
+                  --image librechat-cleanup:latest \
+                  --file "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts/Dockerfile.cleanup" \
+                  "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts"
+
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
     dependsOn: BicepCreate

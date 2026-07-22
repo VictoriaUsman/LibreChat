@@ -9,19 +9,11 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4.1'
-param fastModelName = 'gpt-4.1-mini'
-param embeddingsModelName = 'text-embedding-3-small'
+param oktaOrgUrl = 'https://romtech.okta.com'
 
-// URGENT (2026-07-14): raise flagship (gpt-4.1) AND fast (gpt-4.1-mini) throughput to
-// ~1,000,000 TPM each for Dev. GlobalStandard capacity unit ~= 1,000 TPM (see main.bicep),
-// so 1000 = ~1M TPM. Overrides the main.bicep defaults (flagship 100 / fast 20), Dev only
-// (test/prod unchanged). PREREQUISITE: the subscription needs >=1M TPM of quota for EACH
-// model (gpt-4.1 and gpt-4.1-mini, GlobalStandard, eastus2), or the deploy FAILS with a
-// quota error — verify in Azure AI Foundry > Quotas before merging. embeddingsCapacity is
-// unchanged (~20K TPM via the main.bicep default).
-param flagshipCapacity = 1000
-param fastCapacity = 1000
+param flagshipModelName = 'gpt-5'
+param fastModelName = 'gpt-5-mini'
+param embeddingsModelName = 'text-embedding-3-small'
 
 param postgresAdminUser = 'cgfeadmin'
 
@@ -36,3 +28,15 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdSessionSecret')
+// --- Okta department-sync ACA Job ---
+// The ACR + image build/push + AcrPull/KV-role assignments are now all in-repo
+// (WI 11711); the image ref is derived from the ACR automatically (no jobsImage
+// param). The Okta token secret already exists in kv-romtech-dev, and the ACR +
+// image (acrcgfedev / librechat-cleanup) are built and verified — so the Job is
+// now ENABLED for Dev: on deploy it creates job-cgfe-okta-sync-dev with its
+// AcrPull + Key Vault Secrets User role assignments and pulls the image. Trigger
+// it via the portal ("Run now") to test, or wait for the Tue/Fri cron. Test/Prod
+// are also enabled (in their own bicepparams) but only deploy when those pipelines
+// run — so we validate in Dev first, then promote dev -> test -> prod when ready.
+param deployJobs               = true
+param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')

@@ -9,13 +9,9 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4.1'
-param fastModelName = 'gpt-4.1-mini'
+param flagshipModelName = 'gpt-5'
+param fastModelName = 'gpt-5-mini'
 param embeddingsModelName = 'text-embedding-3-small'
-
-param flagshipCapacity = 50
-param fastCapacity = 100
-param embeddingsCapacity = 50
 
 param postgresAdminUser = 'cgfeadmin'
 
@@ -30,3 +26,8 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdSessionSecret')
+
+// Okta department-sync ACA Job — enabled for Prod. Deploys only when the Prod
+// pipeline runs (i.e. when we promote test -> prod). See main.dev.bicepparam for notes.
+param deployJobs               = true
+param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OktaApiToken')

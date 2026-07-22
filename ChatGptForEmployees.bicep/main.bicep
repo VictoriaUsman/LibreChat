@@ -1,3 +1,6 @@
+// redeploy trigger (2026-07-21): no-op change to force a fresh pipeline run so the
+// Bicep create stage re-applies after the approval gate and actually creates the
+// now-enabled job-cgfe-okta-sync-<env>. Safe to remove once the deploy has run.
 param appName string = 'ChatGptForEmployees'
 param location string = 'eastus'
 param subId string = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
@@ -23,24 +26,43 @@ param liteLlmImage string = 'ghcr.io/berriai/litellm:main-v1.57.4'
 param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
-param flagshipModelName string = 'gpt-4.1'
-param flagshipModelVersion string = '2025-04-14'
-param fastModelName string = 'gpt-4.1-mini'
-param fastModelVersion string = '2025-04-14'
+// The scheduled-jobs image lives in a per-env ACR (acr.bicep -> `acrcgfe<env>`);
+// the deploy pipeline builds + pushes it, and jobs.bicep derives the image ref
+// from the registry and pulls it via the Job's managed identity. No jobsImage
+// param is needed.
+param oktaOrgUrl string = 'https://romtech.okta.com'
+
+// Gate for the Okta department-sync ACA Job. Kept FALSE until Ops has (a) built
+// & pushed the jobs image to a registry and (b) created the
+// ChatGptForEmployees<Env>-OktaApiToken Key Vault secret (see the Ops addendum,
+// Ops_Requests_for_Launch.md). While false, the `jobs` module is not deployed,
+// so the <registry> placeholder image and the (not-yet-created) Okta secret
+// cannot fail the deployment. Flip to true in the env bicepparam once both are
+// ready (see that file for the full enable steps).
+param deployJobs bool = false
+
+param flagshipModelName string = 'gpt-5'
+param flagshipModelVersion string = '2025-08-07'
+param fastModelName string = 'gpt-5-mini'
+param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-// capacity = throughput (tokens-per-minute rate limit), NOT context window or
-// output length — that's maxContextTokens in config/librechat.yaml (PBI-01-FE).
-// GlobalStandard capacity units are ~1,000 TPM each for gpt-4.1 in eastus2 at
-// time of writing; confirm the exact unit in the target region before relying
-// on this for capacity planning, as Azure's per-unit TPM can vary by model/region.
-// flagshipCapacity=100 (~100K TPM) supports realistic concurrent load testing
-// without hitting artificial 429s (see PBI: Increase Azure OpenAI TPM Capacity
-// for Realistic Testing). Raising capacity has a direct cost impact — see PR.
-param flagshipCapacity int = 100
-param fastCapacity int = 20
-param embeddingsCapacity int = 20
+// capacity = TPM / 1000. GlobalStandard, shared pool (1M per model) across all envs.
+// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (sum = 1,000)
+// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (sum = 1,000)
+var flagshipCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var flagshipBackupCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var fastCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
+var fastBackupCapacity = environmentName == 'Prod' ? 875 : environmentName == 'Test' ? 100 : 25
+var embeddingsCapacity = 120
+
+// Backup models — LiteLLM falls back to these on 429 or transient error.
+// Versions verified in AI Foundry model catalog.
+param flagshipBackupModelName string = 'gpt-5.1'
+param flagshipBackupModelVersion string = '2025-11-13'
+param fastBackupModelName string = 'gpt-5.4-mini'
+param fastBackupModelVersion string = '2026-03-17'
 
 param postgresAdminUser string = 'cgfeadmin'
 @secure()
@@ -64,6 +86,10 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+@secure()
+// Defaulted empty so the deployment doesn't require it when deployJobs=false
+// (the env bicepparam supplies the real Key Vault value only when enabling the job).
+param oktaApiToken string = ''
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 var minReplicas = 1
 
@@ -114,7 +140,13 @@ module aiFoundry 'aiFoundry.bicep' = {
     embeddingsModelName: embeddingsModelName
     embeddingsModelVersion: embeddingsModelVersion
     flagshipCapacity: flagshipCapacity
+    flagshipBackupModelName: flagshipBackupModelName
+    flagshipBackupModelVersion: flagshipBackupModelVersion
+    flagshipBackupCapacity: flagshipBackupCapacity
     fastCapacity: fastCapacity
+    fastBackupModelName: fastBackupModelName
+    fastBackupModelVersion: fastBackupModelVersion
+    fastBackupCapacity: fastBackupCapacity
     embeddingsCapacity: embeddingsCapacity
   }
 }
@@ -150,6 +182,30 @@ module liteLlm 'liteLlm.bicep' = {
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
     liteLlmMasterKey: liteLlmMasterKey
     databaseUrl: postgresql.outputs.liteLlmConnectionString
+  }
+}
+
+// ACR for the scheduled-jobs image — deployed always (the pipeline pushes to it
+// even while the Job itself stays gated off via deployJobs).
+module acr 'acr.bicep' = {
+  name: 'acr'
+  params: {
+    envName: environmentName
+    location: location
+  }
+}
+
+module jobs 'jobs.bicep' = if (deployJobs) {
+  name: 'jobs'
+  params: {
+    envName: environmentName
+    location: location
+    environmentId: containerAppsEnvironment.outputs.environmentId
+    acrName: acr.outputs.name
+    oktaOrgUrl: oktaOrgUrl
+    oktaApiToken: oktaApiToken
+    databaseUrl: postgresql.outputs.liteLlmConnectionString
+    mongoUri: cosmosDb.outputs.connectionString
   }
 }
 

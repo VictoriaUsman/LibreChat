@@ -35,6 +35,26 @@ stages:
       resourceGroup: $(resourceGroup)
       serviceConnection: $(serviceConnection)
 
+  - stage: BuildJobsImage
+    displayName: 'Build & push scheduled-jobs image'
+    dependsOn: BicepCreate
+    jobs:
+      - job: BuildPush
+        displayName: 'az acr build Dockerfile.cleanup -> acrcgfeprod'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Build & push librechat-cleanup image to ACR'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az acr build \
+                  --registry acrcgfeprod \
+                  --image librechat-cleanup:latest \
+                  --file "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts/Dockerfile.cleanup" \
+                  "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts"
+
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
     dependsOn: BicepCreate
