@@ -1,7 +1,7 @@
 // Failure alerting for the scheduled ACA Jobs (WI 12341).
 //
 // Azure Monitor sends the alert email NATIVELY via an action group — no app
-// SMTP and no Ops dependency. Point `alertEmailAddress` at any inbox/DL we own.
+// SMTP and no Ops dependency. Point `alertEmailAddresses` at the inboxes/DLs we own.
 //
 // The alert is a Log Analytics scheduled query rule over the jobs' console logs.
 // ⚠️ VALIDATE IN DEV BEFORE RELYING ON IT (see main.dev.bicepparam): set a dev
@@ -21,9 +21,9 @@ param envName string = 'Dev'
 param location string = 'eastus'
 // Log Analytics workspace the ACA environment logs to (main.bicep: cdb-workspace-<env>).
 param workspaceName string
-// Recipient for the failure email (an inbox or DL we own). Empty => caller should
+// Recipients for the failure email (inboxes/DLs we own). Empty => caller should
 // not deploy this module (main.bicep gates on non-empty).
-param alertEmailAddress string
+param alertEmailAddresses array
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
   name: workspaceName
@@ -35,13 +35,11 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   properties: {
     groupShortName: 'cgfejobs'
     enabled: true
-    emailReceivers: [
-      {
-        name: 'jobalerts'
-        emailAddress: alertEmailAddress
-        useCommonAlertSchema: true
-      }
-    ]
+    emailReceivers: [for (email, i) in alertEmailAddresses: {
+      name: 'jobalerts-${i}'
+      emailAddress: email
+      useCommonAlertSchema: true
+    }]
   }
 }
 
