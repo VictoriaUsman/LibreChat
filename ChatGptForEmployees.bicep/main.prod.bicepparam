@@ -31,3 +31,9 @@ param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 // pipeline runs (i.e. when we promote test -> prod). See main.dev.bicepparam for notes.
 param deployJobs               = true
 param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OktaApiToken')
+// Scheduled-job failure alert recipients (sync + cleanup jobs). See jobAlerts.bicep.
+param alertEmailAddresses      = [
+  'behnam.bozorgi@romtech.com'
+  'andrea.tiamson@romtech.com'
+  'ian.tristan@romtech.com'
+]

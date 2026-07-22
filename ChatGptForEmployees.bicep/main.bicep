@@ -41,6 +41,11 @@ param oktaOrgUrl string = 'https://romtech.okta.com'
 // ready (see that file for the full enable steps).
 param deployJobs bool = false
 
+// Recipients for scheduled-job failure alerts (jobAlerts.bicep). Azure Monitor
+// emails them natively — no app SMTP, no Ops. Leave [] to skip alert deployment;
+// set it in the env bicepparam (inboxes/DLs we own) to turn alerting on.
+param alertEmailAddresses array = []
+
 param flagshipModelName string = 'gpt-5'
 param flagshipModelVersion string = '2025-08-07'
 param fastModelName string = 'gpt-5-mini'
@@ -206,6 +211,25 @@ module jobs 'jobs.bicep' = if (deployJobs) {
     oktaApiToken: oktaApiToken
     databaseUrl: postgresql.outputs.liteLlmConnectionString
     mongoUri: cosmosDb.outputs.connectionString
+    // Nightly cleanup job inputs
+    storageConnectionString: storage.outputs.blobConnectionString
+    blobContainerName: storage.outputs.blobContainerName
+    postgresHost: postgresql.outputs.hostname
+    postgresUser: postgresql.outputs.adminUser
+    postgresPassword: postgresql.outputs.adminPassword
+  }
+}
+
+// Failure alerting for the scheduled jobs (WI 12341). Deploys only when the jobs
+// are on AND an alert recipient is set (Azure Monitor emails it natively — no app
+// SMTP, no Ops). Set alertEmailAddress in the env bicepparam to enable.
+module jobAlerts 'jobAlerts.bicep' = if (deployJobs && !empty(alertEmailAddresses)) {
+  name: 'jobAlerts'
+  params: {
+    envName: environmentName
+    location: location
+    workspaceName: workspaceName
+    alertEmailAddresses: alertEmailAddresses
   }
 }
 
