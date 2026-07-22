@@ -15,6 +15,90 @@
 version: "1.2.0"
 cache: true
 
+# PBI: Enable & Configure Conversation Summarization on v0.8.6.
+# SUPERSEDES WI 11300's `summarization.enabled: false` decision for the
+# v0.8.6 runtime. Rationale: preserve context past the maxContextTokens cap.
+# Without summarization, long sessions hit the cap and LibreChat drops
+# the earliest turns entirely (deterministic oldest-first truncation). With
+# this block, v0.8.6 prunes those same oldest turns but compresses them into
+# a running summary via a dedicated cheap model, so the assistant retains the
+# gist of the whole conversation.
+#
+# PBI: Lower Context Cap to 64k & Verify Summarization Headroom. Retuned
+# maxContextTokens 128k -> 64k on both modelSpecs presets below (~half the
+# worst-case per-turn input cost on gpt-4.1: ~$0.26/msg at 128k -> ~$0.12/msg
+# at 64k), while still holding dozens of typical turns. This halves every
+# figure in the trigger math that follows; re-verified at 64k against
+# summarization.stub.e2e.test.ts (recall, failure-mode, no-regression, plus a
+# dedicated large-payload test proving the trigger fires correctly and the
+# ~12k headroom is comfortable at this cap) before this PBI's config change
+# shipped.
+#
+# Trigger threshold — how "fires before the cap" works in v0.8.6:
+#   - `reserveRatio: 0.1` is applied twice by the runtime (once when LibreChat
+#     computes the effective context budget: 64,000 x 0.9 = 57,600; once
+#     again by the agents-SDK pruner: 57,600 x 0.9 = 51,840), so pruning +
+#     summarization begins at ~51.8k tokens ≈ 81% of the 64k cap, leaving
+#     ~12k tokens of headroom for the summary call (maxSummaryTokens: 2000)
+#     and the model's reply — comfortably more than either needs, so no
+#     reserveRatio change was necessary.
+#   - `trigger: token_ratio 0.8` gates summarization on ≥80% usage of the
+#     effective budget. Summarization only ever runs when pruning has
+#     occurred, so this gate is always satisfied at prune time; it is kept
+#     explicit to document intent and guard against future default changes.
+#   - Conversations that stay under ~51.8k tokens never prune and never
+#     summarize — behavior is byte-identical to today (no regression).
+#
+# Model routing / HIPAA: `provider` names our own custom endpoint, so the
+# summary call reuses the LiteLLM Gateway client (same key, same baseURL) and
+# only swaps the model to "ROMTech AI Fast" (Azure gpt-4.1-mini under the
+# BAA). No new data boundary; summary calls do not burden gpt-4.1.
+#
+# Failure mode (verified in code + test): pruning happens BEFORE the summary
+# call, so if the summary LLM call fails the oldest turns are dropped exactly
+# as deterministic truncation would drop them, and the failure is logged at
+# error level ("Summarization LLM call failed"). Residual caveat: the stock
+# v0.8.6 image then labels the dropped span with a one-line
+# "[Metadata summary: N messages (...)]" marker — unlike the pre-v0.8 bug,
+# this is clearly labeled metadata (not a fake "summary"), and the marker
+# tells the model that prior messages existed, which mitigates the old
+# "you never asked that" fabrication. Removing the marker entirely would
+# require a custom-built image (not config).
+
+# PBI: Harden Nightly Orphaned-File Cleanup — file storage strategy.
+# Store uploaded files in Azure Blob rather than the default `local`/file-share
+# strategy, so each File record gets source: 'azure_blob'. The nightly cleanup
+# job (scripts/cleanup_orphaned_files.py) reclaims orphaned file BYTES via that
+# blob source, and storage.bicep provides the soft-delete + versioning recovery
+# window. Connection + container come from the AZURE_STORAGE_* env vars in
+# ChatGptForEmployees.bicep/libreChat.bicep, where AZURE_STORAGE_PUBLIC_ACCESS
+# is forced false so PHI files are never publicly readable (LibreChat defaults
+# it to true). VERIFY on first deploy that uploads land in Blob with
+# source=azure_blob (deploy-time verification is tracked in the team working notes).
+fileStrategy: "azure_blob"
+
+summarization:
+  enabled: true
+  provider: "LiteLLM Gateway"
+  model: "ROMTech AI Fast"
+  trigger:
+    type: "token_ratio"
+    value: 0.8
+  reserveRatio: 0.1
+  # Cap on the summary the Fast model may emit per compaction (also sets the
+  # summary call's max output tokens). ~2k tokens is a rich checkpoint while
+  # staying negligible in the rebuilt context.
+  maxSummaryTokens: 2000
+
+# PBI 10952 — restrict registration and login to @romtech.com email addresses.
+# LibreChat checks the domain of every email at sign-up and social/OIDC login.
+# Non-romtech.com addresses are rejected with a clear UI message before any
+# session is created. Enforcement on the Okta OIDC path is tracked separately
+# once the Okta tile is live.
+registration:
+  allowedDomains:
+    - "romtech.com"
+
 endpoints:
   custom:
     - name: "LiteLLM Gateway"
@@ -25,7 +109,10 @@ endpoints:
         fetch: true
       titleConvo: true
       titleModel: "ROMTech AI Fast"
-      summarize: true
+      # `summarize`/`summaryModel` are not valid custom-endpoint keys in this
+      # LibreChat version (silently stripped) — the top-level `summarization:`
+      # block above is the real mechanism and is now ENABLED with
+      # "ROMTech AI Fast" as the dedicated summary model.
       streamRate: 15
 
 # -----------------------------------------------------------------------
@@ -59,6 +146,25 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
+        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-4.1 (2025-04-14),
+        # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
+        # token map does not recognize the branded name and silently falls back to
+        # a 4095-token default, dropping earlier turns without warning (PBI: Fix
+        # Silent Conversation-History Truncation). Set explicitly to fix that bug,
+        # but capped well under the full 1,047,576-token window (PBI: Address
+        # Remaining Review Follow-ups from feat/phase0implementation) -- Azure
+        # OpenAI bills per input token, and re-sending a huge context on every
+        # turn as a chat grows is a large, mostly-unnecessary cost driver.
+        # Lowered 128000 -> 64000 (PBI: Lower Context Cap to 64k & Verify
+        # Summarization Headroom) -- ~halves the worst-case per-turn input cost
+        # (~$0.26/msg at 128k -> ~$0.12/msg at 64k on gpt-4.1) now that
+        # summarization (below) carries recall past the cap instead of silent
+        # truncation, so the smaller cap no longer costs earlier-turn context.
+        # 64k tokens (~225-250k characters) still comfortably retains dozens of
+        # turns of typical internal chat/document-review use; only unusually
+        # long sessions hit the summarization trigger, which is the deliberate
+        # cost/recall trade-off -- see the trigger-math comment above.
+        maxContextTokens: 64000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -86,6 +192,12 @@ modelSpecs:
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
+        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
+        # which shares the gpt-4.1 family's 1,047,576-token context window (see
+        # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
+        # same fix, and the same 64000 cost/recall cap -- see the rationale on
+        # the Standard preset above.
+        maxContextTokens: 64000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
@@ -113,7 +225,10 @@ modelSpecs:
 # interface.parameters: false also hides the system prompt from users (PBI 9575).
 interface:
   endpointsMenu: false
-  modelSelect: true
+  # false: the header model dropdown was a second, redundant control alongside
+  # the enforced modelSpecs buttons (Standard/Fast) for the same choice. Also
+  # hides the API-key gear icon. PBI: Remove Redundant Model Selector.
+  modelSelect: false
   agents: false
   memories: false
   bookmarks: false
@@ -121,6 +236,22 @@ interface:
   parameters: false
   multiConvo: false
   skills: false
+  # -----------------------------------------------------------------------
+  # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
+  # -----------------------------------------------------------------------
+  # STATUS: DRAFT — awaiting sign-off from Comms/Legal, same as the system
+  # prompt above. DO NOT deploy to any user-facing environment until sign-off
+  # is documented in the PR that merges this change.
+  #   [ ] Comms
+  #   [ ] Legal
+  customWelcome: "Welcome to ROMTech AI."
+  # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
+  # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
+  # Policy is currently an internal draft doc, not a published page — see
+  # ChatGptForEmployees.docs/acceptable_use_policy.md). Add
+  # interface.privacyPolicy.externalUrl / interface.termsOfService.externalUrl
+  # once Legal publishes a hosted URL; until then this omission is the
+  # documented sign-off decision for this AC.
 
 # File upload — enabled for v1 (PBI 9563)
 # Restricted to approved MIME types and size limits.

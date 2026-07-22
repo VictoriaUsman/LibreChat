@@ -27,3 +27,7 @@ ChatGptForEmployees.docs/ROMTech_AI_Employee_Assistant_v1_PBIs.md
 Thumbs.db
 .venv/
 venv/
+
+# Local AI-assistant tooling (per-developer, not part of the deployed app)
+.claude/settings.local.json
+.serena/

@@ -6,16 +6,12 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.7.5'
+param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
-param flagshipModelName = 'gpt-4.1'
-param fastModelName = 'gpt-4.1-mini'
+param flagshipModelName = 'gpt-5'
+param fastModelName = 'gpt-5-mini'
 param embeddingsModelName = 'text-embedding-3-small'
-
-param flagshipCapacity = 20
-param fastCapacity = 40
-param embeddingsCapacity = 20
 
 param postgresAdminUser = 'cgfeadmin'
 
@@ -30,3 +26,8 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-test-shared', 'kv-romtech-test', 'ChatGptForEmployeesTest-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-test-shared', 'kv-romtech-test', 'ChatGptForEmployeesTest-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-test-shared', 'kv-romtech-test', 'ChatGptForEmployeesTest-OpenIdSessionSecret')
+
+// Okta department-sync ACA Job — enabled for Test. Deploys only when the Test
+// pipeline runs (i.e. when we promote dev -> test). See main.dev.bicepparam for notes.
+param deployJobs               = true
+param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-test-shared', 'kv-romtech-test', 'ChatGptForEmployeesTest-OktaApiToken')
