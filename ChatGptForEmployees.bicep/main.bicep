@@ -202,7 +202,6 @@ module jobs 'jobs.bicep' = if (deployJobs) {
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrName: acr.outputs.name
-    keyVaultName: 'kv-romtech-${toLower(environmentName)}'
     oktaOrgUrl: oktaOrgUrl
     oktaApiToken: oktaApiToken
     databaseUrl: postgresql.outputs.liteLlmConnectionString
