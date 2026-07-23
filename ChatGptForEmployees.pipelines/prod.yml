@@ -110,6 +110,10 @@ stages:
   - stage: DeployLiteLLM
     displayName: 'Deploy LiteLLM'
     dependsOn: UploadConfigs
+    # Explicit result check on the immediate parent. The default succeeded() is
+    # evaluated over the whole upstream tree, so the Skipped BicepCreate ancestor
+    # would poison it and skip this restart even though UploadConfigs succeeded.
+    condition: in(dependencies.UploadConfigs.result, 'Succeeded', 'SucceededWithIssues')
     jobs:
       - job: RestartLiteLLM
         displayName: 'Restart LiteLLM Container App'
@@ -134,6 +138,9 @@ stages:
   - stage: DeployRagApi
     displayName: 'Deploy RAG API'
     dependsOn: UploadConfigs
+    # Explicit result check on the immediate parent (see DeployLiteLLM note) so a
+    # Skipped BicepCreate ancestor doesn't poison the default succeeded().
+    condition: in(dependencies.UploadConfigs.result, 'Succeeded', 'SucceededWithIssues')
     jobs:
       - job: RestartRagApi
         displayName: 'Restart RAG API Container App'
@@ -160,6 +167,10 @@ stages:
     dependsOn:
       - DeployLiteLLM
       - DeployRagApi
+    # Explicit result check on the immediate parents (see DeployLiteLLM note).
+    # Restart LibreChat when both upstream restarts succeeded; the default
+    # succeeded() would be poisoned by the Skipped BicepCreate ancestor.
+    condition: and(in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'))
     jobs:
       - job: RestartLibreChat
         displayName: 'Restart LibreChat Container App'
