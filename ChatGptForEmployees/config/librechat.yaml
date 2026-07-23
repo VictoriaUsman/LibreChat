@@ -154,7 +154,6 @@ modelSpecs:
   list:
     - name: "romtech-ai-standard"
       label: "ROMTech AI Standard"
-      default: true
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
@@ -199,8 +198,12 @@ modelSpecs:
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
+    # default: true — Fast (gpt-5-mini) is the default model for new chats / on
+    # sign-in. Cheaper + faster for everyday productivity; users can still switch
+    # to Standard via the enforced Standard/Fast buttons for harder tasks.
     - name: "romtech-ai-fast"
       label: "ROMTech AI Fast"
+      default: true
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
