@@ -100,6 +100,18 @@ registration:
     - "romtech.com"
 
 endpoints:
+  # File Search (RAG) is surfaced via an ephemeral `file_search` capability on the
+  # agents endpoint — NOT the agent builder. interface.agents:false + disableBuilder
+  # keep the builder hidden, and the agents endpoint stays out of the model picker
+  # (endpointsMenu:false / modelSelect:false / modelSpecs.enforce:true). `context`
+  # is listed so the existing "Upload as Text" option is preserved (it is gated on
+  # the context capability). Declaring capabilities explicitly also makes the
+  # server-side file_search upload gate deterministic (checkCapability).
+  agents:
+    disableBuilder: true
+    capabilities:
+      - file_search
+      - context
   custom:
     - name: "LiteLLM Gateway"
       apiKey: "${LITELLM_VIRTUAL_KEY}"
@@ -246,6 +258,13 @@ interface:
   # FIRECRAWL_API_KEY / JINA) which we do not have provisioned, and outbound
   # web access is out of scope for this internal tool.
   webSearch: false
+  # true: exposes File Search (RAG). Surfaces the "File Search" tool toggle and the
+  # "Upload for File Search" attachment option so documents are embedded to pgvector
+  # and retrieved on demand, instead of inlined into the 64k context. Set EXPLICITLY
+  # (not just the schema default) so the FILE_SEARCH.USE permission refreshes past
+  # any stale value persisted in the DB from an earlier config. Needs a container
+  # restart for the permission sync to run.
+  fileSearch: true
   # -----------------------------------------------------------------------
   # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
   # -----------------------------------------------------------------------
@@ -278,10 +297,12 @@ fileConfig:
         - "text/csv"
         - "text/markdown"
         - "application/pdf"
-        - "image/jpeg"
-        - "image/png"
-        - "image/gif"
-        - "image/webp"
+        # Image MIME types intentionally REMOVED — image/vision input is not
+        # supported (no vision budget under the 64k cost cap, and text-embedding-3-
+        # small cannot embed images for RAG). Without this, an image is accepted at
+        # upload and then crashes the turn ("empty_messages": the base64 image blows
+        # past the context budget). Blocking at the MIME layer rejects images cleanly
+        # at the paperclip instead. Re-add these types if vision is ever scoped in.
         - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         - "application/vnd.openxmlformats-officedocument.presentationml.presentation"
