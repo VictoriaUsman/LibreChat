@@ -65,7 +65,10 @@ var flagshipCapacity = environmentName == 'Prod' ? 950 : 25
 var flagshipBackupCapacity = environmentName == 'Prod' ? 950 : 25
 var fastCapacity = environmentName == 'Prod' ? 950 : 25
 var fastBackupCapacity = environmentName == 'Prod' ? 950 : 25
-var embeddingsCapacity = 120
+// Embeddings (text-embedding-3-small) sit on a 3M quota (~1.6M free), so Prod can be
+// raised independently — no deploy-order constraint, unlike the 1M-quota chat models.
+// Prod=500K for launch-day file-upload / RAG-ingestion headroom; dev/test stay 120K.
+var embeddingsCapacity = environmentName == 'Prod' ? 500 : 120
 
 // Backup models — LiteLLM falls back to these on 429 or transient error.
 // Versions verified in AI Foundry model catalog.
