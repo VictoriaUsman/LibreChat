@@ -53,14 +53,22 @@ param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
-// capacity = TPM / 1000. GlobalStandard, shared pool (1M per model) across all envs.
-// gpt-5 / gpt-5-mini / gpt-5.1:  Dev=25, Test=875, Prod=100  (sum = 1,000)
-// gpt-5.4-mini:                   Dev=25, Test=100, Prod=875  (sum = 1,000)
-var flagshipCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
-var flagshipBackupCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
-var fastCapacity = environmentName == 'Prod' ? 100 : environmentName == 'Test' ? 875 : 25
-var fastBackupCapacity = environmentName == 'Prod' ? 875 : environmentName == 'Test' ? 100 : 25
-var embeddingsCapacity = 120
+// capacity = TPM / 1000 (GlobalStandard). Quota in eastus2 is SHARED across all
+// three envs: gpt-5 / gpt-5-mini / gpt-5.1 each have a 1M-TPM pool (fully consumed);
+// gpt-5.4-mini and embeddings have 3M. Prod-heavy for launch — Prod takes ~all of
+// each 1M pool (950K); dev + test sit at a 25K floor (950+25+25 = 1,000 = the quota).
+// Prior WIP layout was test-heavy (Test=875, Prod=100), a load-testing artifact.
+// ⚠️ DEPLOY ORDER: Test (875K -> 25K) MUST deploy BEFORE Prod (100K -> 950K), or the
+// prod deploy transiently needs 950+875+25 = 1.85M and FAILS the 1M gpt-5 quota. The
+// normal dev -> test -> prod promotion satisfies this; never deploy prod first.
+var flagshipCapacity = environmentName == 'Prod' ? 950 : 25
+var flagshipBackupCapacity = environmentName == 'Prod' ? 950 : 25
+var fastCapacity = environmentName == 'Prod' ? 950 : 25
+var fastBackupCapacity = environmentName == 'Prod' ? 950 : 25
+// Embeddings (text-embedding-3-small) sit on a 3M quota (~1.6M free), so Prod can be
+// raised independently — no deploy-order constraint, unlike the 1M-quota chat models.
+// Prod=500K for launch-day file-upload / RAG-ingestion headroom; dev/test stay 120K.
+var embeddingsCapacity = environmentName == 'Prod' ? 500 : 120
 
 // Backup models — LiteLLM falls back to these on 429 or transient error.
 // Versions verified in AI Foundry model catalog.
