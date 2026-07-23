@@ -62,6 +62,13 @@ stages:
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
     dependsOn: BicepCreate
+    # Config files (litellm_routing_config.yaml, librechat.yaml) change
+    # independently of infrastructure. BicepCreate is Skipped when a push
+    # touches no .bicep files, which previously skipped this stage AND the
+    # restart stages that depend on it — so config-only changes never reached
+    # the Azure File Shares. Run when BicepCreate Succeeded OR was Skipped;
+    # only bail if it actually Failed.
+    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: UploadConfigs
         displayName: 'Upload litellm and librechat config'
