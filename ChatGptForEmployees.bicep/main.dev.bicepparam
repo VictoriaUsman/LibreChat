@@ -40,3 +40,10 @@ param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 // run — so we validate in Dev first, then promote dev -> test -> prod when ready.
 param deployJobs               = true
 param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
+// Scheduled-job failure alert recipients. Azure Monitor emails these on a sync or
+// cleanup job failure (jobAlerts.bicep). Empty [] = no alert deployed.
+param alertEmailAddresses      = [
+  'behnam.bozorgi@romtech.com'
+  'andrea.tiamson@romtech.com'
+  'ian.tristan@romtech.com'
+]
