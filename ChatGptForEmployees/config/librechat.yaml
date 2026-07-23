@@ -25,9 +25,10 @@ cache: true
 # gist of the whole conversation.
 #
 # PBI: Lower Context Cap to 64k & Verify Summarization Headroom. Retuned
-# maxContextTokens 128k -> 64k on both modelSpecs presets below (~half the
-# worst-case per-turn input cost on gpt-4.1: ~$0.26/msg at 128k -> ~$0.12/msg
-# at 64k), while still holding dozens of typical turns. This halves every
+# maxContextTokens 128k -> 64k on both modelSpecs presets below (~halves the
+# worst-case per-turn input cost; per-token rates for the deployed gpt-5 models
+# live in ChatGptForEmployees.docs/Azure_Pricing.md), while still holding dozens
+# of typical turns. This halves every
 # figure in the trigger math that follows; re-verified at 64k against
 # summarization.stub.e2e.test.ts (recall, failure-mode, no-regression, plus a
 # dedicated large-payload test proving the trigger fires correctly and the
@@ -51,8 +52,8 @@ cache: true
 #
 # Model routing / HIPAA: `provider` names our own custom endpoint, so the
 # summary call reuses the LiteLLM Gateway client (same key, same baseURL) and
-# only swaps the model to "ROMTech AI Fast" (Azure gpt-4.1-mini under the
-# BAA). No new data boundary; summary calls do not burden gpt-4.1.
+# only swaps the model to "ROMTech AI Fast" (Azure gpt-5-mini under the
+# BAA). No new data boundary; summary calls do not burden gpt-5.
 #
 # Failure mode (verified in code + test): pruning happens BEFORE the summary
 # call, so if the summary LLM call fails the oldest turns are dropped exactly
