@@ -183,7 +183,7 @@ modelSpecs:
           - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
 
           Important:
-          - Do not enter confidential client data, personal data of colleagues or customers, or trade secrets into this assistant. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - ROMTech AI is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMTech AI over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
@@ -216,7 +216,7 @@ modelSpecs:
           - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
 
           Important:
-          - Do not enter confidential client data, personal data of colleagues or customers, or trade secrets into this assistant. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - ROMTech AI is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMTech AI over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
@@ -236,6 +236,16 @@ interface:
   parameters: false
   multiConvo: false
   skills: false
+  # false: removes the "Run Code" (Code Interpreter) toggle from the chat UI.
+  # That feature requires LibreChat's hosted Code Interpreter API
+  # (LIBRECHAT_CODE_API_KEY), which we do not have provisioned — leaving it
+  # visible only surfaces a toggle that 403s against api.librechat.ai on use.
+  runCode: false
+  # false: removes the "Web Search" toggle from the chat UI. Web search
+  # requires configured search/scraper provider keys (e.g. SERPER_API_KEY,
+  # FIRECRAWL_API_KEY / JINA) which we do not have provisioned, and outbound
+  # web access is out of scope for this internal tool.
+  webSearch: false
   # -----------------------------------------------------------------------
   # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
   # -----------------------------------------------------------------------
