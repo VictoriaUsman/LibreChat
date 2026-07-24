@@ -191,3 +191,38 @@ stages:
                   --name $(appNameEnvLibreChat) \
                   --resource-group $(resourceGroup) \
                   --revision "$REVISION"
+
+  - stage: DeployHelpPage
+    displayName: 'Deploy Help Page to Static Web App'
+    dependsOn: BicepCreate
+    # Run on config/content-only changes too (same rationale as UploadConfigs): the
+    # help HTML lives in the repo, so pushing an update should redeploy it even when
+    # no .bicep changed (BicepCreate Skipped). Only bail if BicepCreate actually Failed.
+    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    jobs:
+      - job: DeployHelp
+        displayName: 'Push romtech_ai_help.html to the SWA'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy help page via the SWA CLI'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                # SWA content deploy needs the deployment token + the Static Web Apps
+                # CLI — there is no `az` command to push content to a SWA. Resolve the
+                # site by name-prefix within the RG, fetch its token, then deploy the
+                # page as index.html so it serves at the site root.
+                SWA_NAME=$(az staticwebapp list \
+                  --resource-group $(resourceGroup) \
+                  --query "[?starts_with(name, 'swa-cgfe')].name | [0]" -o tsv)
+                TOKEN=$(az staticwebapp secrets list \
+                  --name "$SWA_NAME" \
+                  --resource-group $(resourceGroup) \
+                  --query "properties.apiKey" -o tsv)
+                mkdir -p /tmp/helpsite
+                cp "$(Build.SourcesDirectory)/ChatGptForEmployees.docs/romtech_ai_help.html" /tmp/helpsite/index.html
+                npx -y @azure/static-web-apps-cli deploy /tmp/helpsite \
+                  --deployment-token "$TOKEN" \
+                  --env production
