@@ -25,9 +25,10 @@ cache: true
 # gist of the whole conversation.
 #
 # PBI: Lower Context Cap to 64k & Verify Summarization Headroom. Retuned
-# maxContextTokens 128k -> 64k on both modelSpecs presets below (~half the
-# worst-case per-turn input cost on gpt-4.1: ~$0.26/msg at 128k -> ~$0.12/msg
-# at 64k), while still holding dozens of typical turns. This halves every
+# maxContextTokens 128k -> 64k on both modelSpecs presets below (~halves the
+# worst-case per-turn input cost; per-token rates for the deployed gpt-5 models
+# live in ChatGptForEmployees.docs/Azure_Pricing.md), while still holding dozens
+# of typical turns. This halves every
 # figure in the trigger math that follows; re-verified at 64k against
 # summarization.stub.e2e.test.ts (recall, failure-mode, no-regression, plus a
 # dedicated large-payload test proving the trigger fires correctly and the
@@ -51,8 +52,8 @@ cache: true
 #
 # Model routing / HIPAA: `provider` names our own custom endpoint, so the
 # summary call reuses the LiteLLM Gateway client (same key, same baseURL) and
-# only swaps the model to "ROMTech AI Fast" (Azure gpt-4.1-mini under the
-# BAA). No new data boundary; summary calls do not burden gpt-4.1.
+# only swaps the model to "ROMTech AI Fast" (Azure gpt-5-mini under the
+# BAA). No new data boundary; summary calls do not burden gpt-5.
 #
 # Failure mode (verified in code + test): pruning happens BEFORE the summary
 # call, so if the summary LLM call fails the oldest turns are dropped exactly
@@ -100,6 +101,25 @@ registration:
     - "romtech.com"
 
 endpoints:
+  # File Search (RAG) is surfaced via an ephemeral `file_search` capability on the
+  # agents endpoint — NOT the agent builder. interface.agents:false + disableBuilder
+  # keep the builder hidden, and the agents endpoint stays out of the model picker
+  # (endpointsMenu:false / modelSelect:false / modelSpecs.enforce:true). `context`
+  # is listed so the existing "Upload as Text" option is preserved, and `artifacts`
+  # so the Artifacts tool toggle is preserved (each maps to a feature: context ->
+  # "Upload as Text" in the paperclip, artifacts -> the Artifacts toggle in the
+  # tools dropdown, file_search -> File Search toggle + "Upload for File Search").
+  # NOTE: declaring capabilities explicitly REPLACES the default set — anything
+  # omitted is turned OFF, so this list must contain everything we want kept.
+  # (code/web_search are intentionally omitted; they're already off via interface
+  # runCode/webSearch flags.) This also makes the server-side file_search upload
+  # gate deterministic (checkCapability).
+  agents:
+    disableBuilder: true
+    capabilities:
+      - file_search
+      - context
+      - artifacts
   custom:
     - name: "LiteLLM Gateway"
       apiKey: "${LITELLM_VIRTUAL_KEY}"
@@ -141,24 +161,23 @@ modelSpecs:
   prioritize: true
   list:
     - name: "romtech-ai-standard"
-      label: "ROMTech AI Standard"
-      default: true
+      label: "ROMChat Standard"
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
-        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-4.1 (2025-04-14),
-        # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
-        # token map does not recognize the branded name and silently falls back to
-        # a 4095-token default, dropping earlier turns without warning (PBI: Fix
+        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-5 (2025-08-07; see
+        # aiFoundry.bicep for the deployed model + version). LibreChat's token map
+        # does not recognize the branded alias and silently falls back to a
+        # 4095-token default, dropping earlier turns without warning (PBI: Fix
         # Silent Conversation-History Truncation). Set explicitly to fix that bug,
-        # but capped well under the full 1,047,576-token window (PBI: Address
+        # but capped well under the model's full context window (PBI: Address
         # Remaining Review Follow-ups from feat/phase0implementation) -- Azure
         # OpenAI bills per input token, and re-sending a huge context on every
         # turn as a chat grows is a large, mostly-unnecessary cost driver.
         # Lowered 128000 -> 64000 (PBI: Lower Context Cap to 64k & Verify
         # Summarization Headroom) -- ~halves the worst-case per-turn input cost
-        # (~$0.26/msg at 128k -> ~$0.12/msg at 64k on gpt-4.1) now that
-        # summarization (below) carries recall past the cap instead of silent
+        # (current gpt-5 per-token rates: ChatGptForEmployees.docs/Azure_Pricing.md)
+        # now that summarization (below) carries recall past the cap instead of silent
         # truncation, so the smaller cap no longer costs earlier-turn context.
         # 64k tokens (~225-250k characters) still comfortably retains dozens of
         # turns of typical internal chat/document-review use; only unusually
@@ -166,7 +185,7 @@ modelSpecs:
         # cost/recall trade-off -- see the trigger-math comment above.
         maxContextTokens: 64000
         promptPrefix: |
-          You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
+          You are ROMChat, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
           You can help with:
           - Drafting business communications, documents, reports, proposals, and templates
@@ -183,23 +202,26 @@ modelSpecs:
           - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
 
           Important:
-          - ROMTech AI is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMTech AI over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - ROMChat is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMChat over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
+    # default: true — Fast (gpt-5-mini) is the default model for new chats / on
+    # sign-in. Cheaper + faster for everyday productivity; users can still switch
+    # to Standard via the enforced Standard/Fast buttons for harder tasks.
     - name: "romtech-ai-fast"
-      label: "ROMTech AI Fast"
+      label: "ROMChat Fast"
+      default: true
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
-        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
-        # which shares the gpt-4.1 family's 1,047,576-token context window (see
-        # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
-        # same fix, and the same 64000 cost/recall cap -- see the rationale on
-        # the Standard preset above.
+        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-5-mini (2025-08-07; see
+        # aiFoundry.bicep for the deployed model + version). Same fallback-to-4095
+        # bug as the standard preset above; same fix, and the same 64000 cost/recall
+        # cap -- see the rationale on the Standard preset above.
         maxContextTokens: 64000
         promptPrefix: |
-          You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
+          You are ROMChat, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
 
           You can help with:
           - Drafting business communications, documents, reports, proposals, and templates
@@ -216,7 +238,7 @@ modelSpecs:
           - IT support (hardware, software access, system connectivity): Submit a ticket through the IT helpdesk portal.
 
           Important:
-          - ROMTech AI is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMTech AI over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
+          - ROMChat is the approved, secure place for sensitive work. It runs on HIPAA-eligible Azure OpenAI services under a Microsoft Business Associate Agreement (BAA), so you can use it with confidential, regulated, and sensitive information — including PHI, client data, and trade secrets. Prefer ROMChat over public AI tools such as ChatGPT or Claude for this content, as those tools are not approved for ROMTech confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable Use Policy.
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
@@ -246,6 +268,13 @@ interface:
   # FIRECRAWL_API_KEY / JINA) which we do not have provisioned, and outbound
   # web access is out of scope for this internal tool.
   webSearch: false
+  # true: exposes File Search (RAG). Surfaces the "File Search" tool toggle and the
+  # "Upload for File Search" attachment option so documents are embedded to pgvector
+  # and retrieved on demand, instead of inlined into the 64k context. Set EXPLICITLY
+  # (not just the schema default) so the FILE_SEARCH.USE permission refreshes past
+  # any stale value persisted in the DB from an earlier config. Needs a container
+  # restart for the permission sync to run.
+  fileSearch: true
   # -----------------------------------------------------------------------
   # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
   # -----------------------------------------------------------------------
@@ -254,7 +283,7 @@ interface:
   # is documented in the PR that merges this change.
   #   [ ] Comms
   #   [ ] Legal
-  customWelcome: "Welcome to ROMTech AI."
+  customWelcome: "Welcome to ROMChat."
   # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
   # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
   # Policy is currently an internal draft doc, not a published page — see
@@ -278,10 +307,12 @@ fileConfig:
         - "text/csv"
         - "text/markdown"
         - "application/pdf"
-        - "image/jpeg"
-        - "image/png"
-        - "image/gif"
-        - "image/webp"
+        # Image MIME types intentionally REMOVED — image/vision input is not
+        # supported (no vision budget under the 64k cost cap, and text-embedding-3-
+        # small cannot embed images for RAG). Without this, an image is accepted at
+        # upload and then crashes the turn ("empty_messages": the base64 image blows
+        # past the context budget). Blocking at the MIME layer rejects images cleanly
+        # at the paperclip instead. Re-add these types if vision is ever scoped in.
         - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         - "application/vnd.openxmlformats-officedocument.presentationml.presentation"

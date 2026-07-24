@@ -28,6 +28,9 @@ param openIdSessionSecret string
 @secure()
 param storageConnectionString string
 param blobContainerName string
+// Static Web App defaultHostname (from staticSite.bicep via main.bicep) — the user
+// Help/FAQ page. Used for the footer link + the account-menu Help & FAQ link below.
+param helpUrl string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
@@ -90,10 +93,16 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
             { name: 'OPENID_CALLBACK_URL', value: '/oauth/openid/callback' }
-            // DRAFT branding text — PBI: Apply ROMTech Branding. Awaiting
-            // Comms/Legal sign-off (see config/librechat.yaml customWelcome
-            // comment); do not deploy to a user-facing environment first.
-            { name: 'CUSTOM_FOOTER', value: 'ROMTech AI — Internal Use Only' }
+            // Browser-tab + in-app product name. Unset, LibreChat shows "LibreChat";
+            // brand it ROMChat (user-facing rebrand — model aliases stay unchanged).
+            { name: 'APP_TITLE', value: 'ROMChat' }
+            // Footer renders markdown (Footer.tsx) — a single clickable "Help & FAQ"
+            // link to the Static Web App help page (helpUrl, from staticSite.bicep).
+            // Replaced the earlier "ROMTech AI — Internal Use Only" branding text.
+            { name: 'CUSTOM_FOOTER', value: '[Help & FAQ](https://${helpUrl})' }
+            // Account-menu "Help & FAQ" link — defaults to librechat.ai when unset,
+            // so repoint it to our help page (opens in a new tab). Set to '/' to hide.
+            { name: 'HELP_AND_FAQ_URL', value: 'https://${helpUrl}' }
             { name: 'MONGO_URI', secretRef: 'mongo-uri' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
             { name: 'JWT_REFRESH_SECRET', secretRef: 'jwt-refresh-secret' }
