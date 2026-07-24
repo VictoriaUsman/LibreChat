@@ -104,14 +104,21 @@ endpoints:
   # agents endpoint — NOT the agent builder. interface.agents:false + disableBuilder
   # keep the builder hidden, and the agents endpoint stays out of the model picker
   # (endpointsMenu:false / modelSelect:false / modelSpecs.enforce:true). `context`
-  # is listed so the existing "Upload as Text" option is preserved (it is gated on
-  # the context capability). Declaring capabilities explicitly also makes the
-  # server-side file_search upload gate deterministic (checkCapability).
+  # is listed so the existing "Upload as Text" option is preserved, and `artifacts`
+  # so the Artifacts tool toggle is preserved (each maps to a feature: context ->
+  # "Upload as Text" in the paperclip, artifacts -> the Artifacts toggle in the
+  # tools dropdown, file_search -> File Search toggle + "Upload for File Search").
+  # NOTE: declaring capabilities explicitly REPLACES the default set — anything
+  # omitted is turned OFF, so this list must contain everything we want kept.
+  # (code/web_search are intentionally omitted; they're already off via interface
+  # runCode/webSearch flags.) This also makes the server-side file_search upload
+  # gate deterministic (checkCapability).
   agents:
     disableBuilder: true
     capabilities:
       - file_search
       - context
+      - artifacts
   custom:
     - name: "LiteLLM Gateway"
       apiKey: "${LITELLM_VIRTUAL_KEY}"
