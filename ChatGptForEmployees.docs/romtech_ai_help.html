@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROMChat — Help &amp; FAQ</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #1c2430;
+    --muted: #5a6572;
+    --accent: #1f6feb;
+    --accent-soft: #e8f0fe;
+    --line: #e4e8ee;
+    --ok: #0f7b4f;
+    --tip-bg: #f4f8ff;
+    --tip-line: #bcd4fb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 72px; }
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 { font-size: 1.9rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { color: var(--muted); margin: 0; font-size: 1.05rem; }
+  .intro {
+    background: var(--accent-soft);
+    border: 1px solid #cfe0fb;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 0 0 28px;
+    color: #123;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin: 0 0 16px;
+  }
+  .card h2 { font-size: 1.18rem; margin: 0 0 12px; }
+  ol, ul { margin: 10px 0 0; padding-left: 22px; }
+  li { margin: 7px 0; }
+  p { margin: 10px 0 0; }
+  .tip {
+    margin-top: 14px;
+    background: var(--tip-bg);
+    border: 1px solid var(--tip-line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.96rem;
+  }
+  .pill {
+    display: inline-block;
+    background: #eef1f5;
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-weight: 600;
+    font-size: 0.92em;
+  }
+  .yes { color: var(--ok); font-weight: 700; }
+  .opts { margin: 12px 0 0; padding: 0; list-style: none; }
+  .opts > li { margin: 0 0 12px; padding: 12px 14px; background: #f9fafb; border: 1px solid var(--line); border-radius: 10px; }
+  .opts .name { font-weight: 700; }
+  .opts .rec { color: var(--ok); font-weight: 600; font-size: 0.9em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .grid > div { background: #f9fafb; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .grid h3 { margin: 0 0 4px; font-size: 1rem; }
+  .grid small { color: var(--muted); }
+  .bottomline { margin-top: 12px; font-weight: 600; }
+  footer { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 30px; }
+  a { color: var(--accent); }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>ROMChat — Help &amp; FAQ</h1>
+    <p>Answers to common questions about getting started.</p>
+  </header>
+
+  <div class="intro">
+    <strong>New here?</strong> ROMChat is your internal AI assistant for everyday work —
+    drafting, summarizing, analysis, answering questions, and more. This page covers the
+    common questions. If you're ever stuck, you can also just ask the assistant directly in a chat.
+  </div>
+
+  <div class="card">
+    <h2>Is it safe to put sensitive information in?</h2>
+    <p>
+      <span class="yes">Yes.</span> ROMChat runs on ROMTech's approved, secure
+      infrastructure — it's built for confidential and sensitive work. You should use it
+      <strong>instead of</strong> public tools like ChatGPT or Claude for anything confidential,
+      because those public tools are not approved for ROMTech information.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>What can ROMChat help me with?</h2>
+    <ul>
+      <li>Drafting emails, documents, reports, and templates</li>
+      <li>Summarizing documents, meeting notes, and long content</li>
+      <li>Analyzing and reviewing information</li>
+      <li>Answering general business and technical questions</li>
+      <li>Translating between languages</li>
+      <li>Writing, reviewing, and explaining code</li>
+      <li>Creating simple diagrams, web pages, and code you can preview (see below)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>How do I ask questions about a document?</h2>
+    <p>To have the assistant read a file and answer questions about it, use <strong>File Search</strong>:</p>
+    <ol>
+      <li>Click the <span class="pill">tools</span> button next to the message box and switch on <strong>File Search</strong>.</li>
+      <li>Click the <span class="pill">paperclip</span> and choose <strong>Upload for File Search</strong>.</li>
+      <li>Pick your file (PDF, Word, PowerPoint, Excel, or plain text).</li>
+      <li>Type your question about the document and send.</li>
+    </ol>
+    <div class="tip">
+      <strong>Tip:</strong> turn on File Search <em>before</em> you upload. File Search covers
+      the documents you've added in <em>this</em> conversation.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>What's the difference between the upload options?</h2>
+    <p>When you attach a file you may see a few choices. Here's when to use each:</p>
+    <ul class="opts">
+      <li>
+        <span class="name">Upload for File Search</span> <span class="rec">— recommended for documents</span><br>
+        Works with PDF, Word, PowerPoint, Excel, and text files. The assistant reads your file and
+        pulls out the parts relevant to your question — best for most documents, including long ones.
+      </li>
+      <li>
+        <span class="name">Upload as Text</span><br>
+        Pulls the text out of a document (such as a PDF, Word, or text file) and adds it straight
+        into your message. Good for shorter documents you want the assistant to see in full.
+      </li>
+      <li>
+        <span class="name">Upload to Provider</span><br>
+        This option only accepts images and PDFs — it can't be used for Word, Excel, or text files.
+        On ROMChat you won't need it: images aren't supported, and PDFs work better with the two
+        options above. For any document, use <strong>Upload for File Search</strong> or
+        <strong>Upload as Text</strong>.
+      </li>
+    </ul>
+    <p class="bottomline">Bottom line: for documents, choose <strong>Upload for File Search</strong>.</p>
+  </div>
+
+  <div class="card">
+    <h2>What kinds of files can I upload?</h2>
+    <p><strong>Supported:</strong> PDF, Word, PowerPoint, Excel, and plain-text files.</p>
+    <p><strong>Not supported:</strong> images and photos (JPG, PNG, etc.).</p>
+  </div>
+
+  <div class="card">
+    <h2>I uploaded a document but it didn't seem to read it</h2>
+    <ul>
+      <li>Make sure <strong>File Search is turned on</strong> before uploading (step 1 above).</li>
+      <li>When attaching, choose <strong>“Upload for File Search.”</strong></li>
+      <li>Scanned or photo-based PDFs (no selectable text) may not be readable.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Which model should I use — Fast or Standard?</h2>
+    <div class="grid">
+      <div>
+        <h3>ROMChat Fast</h3>
+        <small>The default. Quick and great for everyday tasks — drafting, summaries, quick questions.</small>
+      </div>
+      <div>
+        <h3>ROMChat Standard</h3>
+        <small>More powerful. Reach for it on complex, detailed, or high-stakes work.</small>
+      </div>
+    </div>
+    <p>Switch anytime using the <strong>Fast / Standard</strong> buttons above the message box. New chats start on Fast.</p>
+  </div>
+
+  <div class="card">
+    <h2>Can I create diagrams, web pages, or code?</h2>
+    <p>
+      Yes. ROMChat can generate things like flowcharts, simple web pages, and code, and show
+      them in a live preview next to your chat.
+    </p>
+    <ol>
+      <li>Turn on <strong>Artifacts</strong> using the <span class="pill">+</span> button.</li>
+      <li>Ask for what you want — for example, <em>“Create a flowchart of our onboarding process”</em>
+        or <em>“Build a simple web page with a contact form.”</em></li>
+    </ol>
+    <div class="tip">
+      <strong>Tip:</strong> Artifacts only appears when you ask for something it can build (like a
+      diagram or a page). A normal question just gives you a normal answer.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Can I have a private, one-off chat?</h2>
+    <p>
+      Yes. Use <strong>Temporary Chat</strong> for a conversation you don't want kept in your
+      history — handy for quick, throwaway questions. Temporary chats aren't saved.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Are my conversations saved?</h2>
+    <p>
+      Yes. Your past conversations are listed in the left sidebar, so you can return to them any
+      time. (Temporary chats are the exception — those aren't saved.)
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Good to know</h2>
+    <ul>
+      <li>Responses are AI-generated — always double-check important information before acting on it.</li>
+      <li>ROMChat can't access ROMTech's internal systems, browse the internet, or send messages.</li>
+      <li>For <strong>HR</strong>, <strong>Legal</strong>, <strong>IT support</strong>, or a <strong>security concern</strong>, contact those teams directly rather than relying on the assistant.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Still need help?</h2>
+    <p>
+      If you run into a problem or have a question this page doesn't answer,
+      <strong>submit a ticket to IT</strong> and they'll help you out.
+    </p>
+  </div>
+
+  <footer>
+    ROMChat — Internal Use Only · Do not share confidential information outside approved ROMTech tools.
+  </footer>
+
+</div>
+</body>
+</html>

@@ -260,6 +260,17 @@ module ragApi 'ragApi.bicep' = {
   }
 }
 
+// Azure Static Web App (Free) hosting the user Help/FAQ page. bicep creates the empty
+// site; the pipeline's DeployHelpPage stage pushes the HTML (SWA deploy token + CLI).
+// Its URL is wired into LibreChat below (helpUrl). See staticSite.bicep.
+module staticSite 'staticSite.bicep' = {
+  name: 'staticSite'
+  params: {
+    envName: environmentName
+    location: 'eastus2' // SWA control-plane region (independent of the general location)
+  }
+}
+
 module libreChat 'libreChat.bicep' = {
   name: 'libreChat'
   params: {
@@ -283,6 +294,7 @@ module libreChat 'libreChat.bicep' = {
     openIdSessionSecret: openIdSessionSecret
     storageConnectionString: storage.outputs.blobConnectionString
     blobContainerName: storage.outputs.blobContainerName
+    helpUrl: staticSite.outputs.defaultHostname
   }
 }
 
@@ -299,3 +311,5 @@ module keyvault 'keyvault.bicep' = {
 output libreChatUrl string = 'https://${libreChat.outputs.fqdn}'
 output liteLlmInternalUrl string = liteLlm.outputs.fqdn
 output ragApiInternalUrl string = ragApi.outputs.fqdn
+output helpPageUrl string = 'https://${staticSite.outputs.defaultHostname}'
+output staticSiteName string = staticSite.outputs.name
