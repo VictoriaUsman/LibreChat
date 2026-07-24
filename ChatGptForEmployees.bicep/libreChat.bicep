@@ -93,6 +93,9 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OPENID_SCOPE', value: 'openid profile email' }
             { name: 'OPENID_BUTTON_TEXT', value: 'Login with ROMTech Okta' }
             { name: 'OPENID_CALLBACK_URL', value: '/oauth/openid/callback' }
+            // Browser-tab + in-app product name. Unset, LibreChat shows "LibreChat";
+            // brand it ROMChat (user-facing rebrand — model aliases stay unchanged).
+            { name: 'APP_TITLE', value: 'ROMChat' }
             // Footer renders markdown (Footer.tsx) — a single clickable "Help & FAQ"
             // link to the Static Web App help page (helpUrl, from staticSite.bicep).
             // Replaced the earlier "ROMTech AI — Internal Use Only" branding text.
