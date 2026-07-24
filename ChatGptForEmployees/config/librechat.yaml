@@ -25,9 +25,10 @@ cache: true
 # gist of the whole conversation.
 #
 # PBI: Lower Context Cap to 64k & Verify Summarization Headroom. Retuned
-# maxContextTokens 128k -> 64k on both modelSpecs presets below (~half the
-# worst-case per-turn input cost on gpt-4.1: ~$0.26/msg at 128k -> ~$0.12/msg
-# at 64k), while still holding dozens of typical turns. This halves every
+# maxContextTokens 128k -> 64k on both modelSpecs presets below (~halves the
+# worst-case per-turn input cost; per-token rates for the deployed gpt-5 models
+# live in ChatGptForEmployees.docs/Azure_Pricing.md), while still holding dozens
+# of typical turns. This halves every
 # figure in the trigger math that follows; re-verified at 64k against
 # summarization.stub.e2e.test.ts (recall, failure-mode, no-regression, plus a
 # dedicated large-payload test proving the trigger fires correctly and the
@@ -51,8 +52,8 @@ cache: true
 #
 # Model routing / HIPAA: `provider` names our own custom endpoint, so the
 # summary call reuses the LiteLLM Gateway client (same key, same baseURL) and
-# only swaps the model to "ROMTech AI Fast" (Azure gpt-4.1-mini under the
-# BAA). No new data boundary; summary calls do not burden gpt-4.1.
+# only swaps the model to "ROMTech AI Fast" (Azure gpt-5-mini under the
+# BAA). No new data boundary; summary calls do not burden gpt-5.
 #
 # Failure mode (verified in code + test): pruning happens BEFORE the summary
 # call, so if the summary LLM call fails the oldest turns are dropped exactly
@@ -161,23 +162,22 @@ modelSpecs:
   list:
     - name: "romtech-ai-standard"
       label: "ROMTech AI Standard"
-      default: true
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Standard"
-        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-4.1 (2025-04-14),
-        # real context window: 1,047,576 tokens (see aiFoundry.bicep). LibreChat's
-        # token map does not recognize the branded name and silently falls back to
-        # a 4095-token default, dropping earlier turns without warning (PBI: Fix
+        # "ROMTech AI Standard" is a LiteLLM alias for Azure gpt-5 (2025-08-07; see
+        # aiFoundry.bicep for the deployed model + version). LibreChat's token map
+        # does not recognize the branded alias and silently falls back to a
+        # 4095-token default, dropping earlier turns without warning (PBI: Fix
         # Silent Conversation-History Truncation). Set explicitly to fix that bug,
-        # but capped well under the full 1,047,576-token window (PBI: Address
+        # but capped well under the model's full context window (PBI: Address
         # Remaining Review Follow-ups from feat/phase0implementation) -- Azure
         # OpenAI bills per input token, and re-sending a huge context on every
         # turn as a chat grows is a large, mostly-unnecessary cost driver.
         # Lowered 128000 -> 64000 (PBI: Lower Context Cap to 64k & Verify
         # Summarization Headroom) -- ~halves the worst-case per-turn input cost
-        # (~$0.26/msg at 128k -> ~$0.12/msg at 64k on gpt-4.1) now that
-        # summarization (below) carries recall past the cap instead of silent
+        # (current gpt-5 per-token rates: ChatGptForEmployees.docs/Azure_Pricing.md)
+        # now that summarization (below) carries recall past the cap instead of silent
         # truncation, so the smaller cap no longer costs earlier-turn context.
         # 64k tokens (~225-250k characters) still comfortably retains dozens of
         # turns of typical internal chat/document-review use; only unusually
@@ -206,16 +206,19 @@ modelSpecs:
           - Responses are AI-generated and may contain errors. Always verify important information before acting on it.
           - This assistant cannot access ROMTech's internal systems, browse the internet, send messages, or take actions on your behalf.
 
+    # default: true — Fast (gpt-5-mini) is the default model for new chats / on
+    # sign-in. Cheaper + faster for everyday productivity; users can still switch
+    # to Standard via the enforced Standard/Fast buttons for harder tasks.
     - name: "romtech-ai-fast"
       label: "ROMTech AI Fast"
+      default: true
       preset:
         endpoint: "LiteLLM Gateway"
         model: "ROMTech AI Fast"
-        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-4.1-mini (2025-04-14),
-        # which shares the gpt-4.1 family's 1,047,576-token context window (see
-        # aiFoundry.bicep). Same fallback-to-4095 bug as the standard preset above;
-        # same fix, and the same 64000 cost/recall cap -- see the rationale on
-        # the Standard preset above.
+        # "ROMTech AI Fast" is a LiteLLM alias for Azure gpt-5-mini (2025-08-07; see
+        # aiFoundry.bicep for the deployed model + version). Same fallback-to-4095
+        # bug as the standard preset above; same fix, and the same 64000 cost/recall
+        # cap -- see the rationale on the Standard preset above.
         maxContextTokens: 64000
         promptPrefix: |
           You are ROMTech AI, an internal productivity assistant for ROMTech employees. Your responses are powered by Azure OpenAI through ROMTech's secure AI infrastructure.
