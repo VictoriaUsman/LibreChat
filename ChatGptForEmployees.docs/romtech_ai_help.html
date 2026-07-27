@@ -74,6 +74,34 @@
   .grid h3 { margin: 0 0 4px; font-size: 1rem; }
   .grid small { color: var(--muted); }
   .bottomline { margin-top: 12px; font-weight: 600; }
+  /* Collapsible questions: the answer stays hidden until the question is clicked.
+     Fonts and spacing are deliberately unchanged — the h2 keeps its own rule above,
+     and the 12px question-to-answer gap is re-applied only while open. */
+  details.card > summary {
+    list-style: none;
+    cursor: pointer;
+    position: relative;
+    padding-right: 28px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary > h2 { margin: 0; }
+  details.card[open] > summary { margin-bottom: 12px; }
+  details.card > summary::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: translateY(-75%) rotate(45deg);
+    transition: transform 0.15s ease;
+  }
+  details.card[open] > summary::after { transform: translateY(-25%) rotate(225deg); }
+  details.card > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
   footer { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 30px; }
   a { color: var(--accent); }
   @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
@@ -93,18 +121,18 @@
     common questions. If you're ever stuck, you can also just ask the assistant directly in a chat.
   </div>
 
-  <div class="card">
-    <h2>Is it safe to put sensitive information in?</h2>
+  <details class="card">
+    <summary><h2>Is it safe to put sensitive information in?</h2></summary>
     <p>
       <span class="yes">Yes.</span> ROMChat runs on ROMTech's approved, secure
       infrastructure — it's built for confidential and sensitive work. You should use it
       <strong>instead of</strong> public tools like ChatGPT or Claude for anything confidential,
       because those public tools are not approved for ROMTech information.
     </p>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>What can ROMChat help me with?</h2>
+  <details class="card">
+    <summary><h2>What can ROMChat help me with?</h2></summary>
     <ul>
       <li>Drafting emails, documents, reports, and templates</li>
       <li>Summarizing documents, meeting notes, and long content</li>
@@ -114,10 +142,10 @@
       <li>Writing, reviewing, and explaining code</li>
       <li>Creating simple diagrams, web pages, and code you can preview (see below)</li>
     </ul>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>How do I ask questions about a document?</h2>
+  <details class="card">
+    <summary><h2>How do I ask questions about a document?</h2></summary>
     <p>To have the assistant read a file and answer questions about it, use <strong>File Search</strong>:</p>
     <ol>
       <li>Click the <span class="pill">tools</span> button next to the message box and switch on <strong>File Search</strong>.</li>
@@ -129,10 +157,10 @@
       <strong>Tip:</strong> turn on File Search <em>before</em> you upload. File Search covers
       the documents you've added in <em>this</em> conversation.
     </div>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>What's the difference between the upload options?</h2>
+  <details class="card">
+    <summary><h2>What's the difference between the upload options?</h2></summary>
     <p>When you attach a file you may see a few choices. Here's when to use each:</p>
     <ul class="opts">
       <li>
@@ -154,25 +182,25 @@
       </li>
     </ul>
     <p class="bottomline">Bottom line: for documents, choose <strong>Upload for File Search</strong>.</p>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>What kinds of files can I upload?</h2>
+  <details class="card">
+    <summary><h2>What kinds of files can I upload?</h2></summary>
     <p><strong>Supported:</strong> PDF, Word, PowerPoint, Excel, and plain-text files.</p>
     <p><strong>Not supported:</strong> images and photos (JPG, PNG, etc.).</p>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>I uploaded a document but it didn't seem to read it</h2>
+  <details class="card">
+    <summary><h2>I uploaded a document but it didn't seem to read it</h2></summary>
     <ul>
       <li>Make sure <strong>File Search is turned on</strong> before uploading (step 1 above).</li>
       <li>When attaching, choose <strong>“Upload for File Search.”</strong></li>
       <li>Scanned or photo-based PDFs (no selectable text) may not be readable.</li>
     </ul>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>Which model should I use — Fast or Standard?</h2>
+  <details class="card">
+    <summary><h2>Which model should I use — Fast or Standard?</h2></summary>
     <div class="grid">
       <div>
         <h3>ROMChat Fast</h3>
@@ -184,10 +212,10 @@
       </div>
     </div>
     <p>Switch anytime using the <strong>Fast / Standard</strong> buttons above the message box. New chats start on Fast.</p>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>Can I create diagrams, web pages, or code?</h2>
+  <details class="card">
+    <summary><h2>Can I create diagrams, web pages, or code?</h2></summary>
     <p>
       Yes. ROMChat can generate things like flowcharts, simple web pages, and code, and show
       them in a live preview next to your chat.
@@ -201,23 +229,23 @@
       <strong>Tip:</strong> Artifacts only appears when you ask for something it can build (like a
       diagram or a page). A normal question just gives you a normal answer.
     </div>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>Can I have a private, one-off chat?</h2>
+  <details class="card">
+    <summary><h2>Can I have a private, one-off chat?</h2></summary>
     <p>
       Yes. Use <strong>Temporary Chat</strong> for a conversation you don't want kept in your
       history — handy for quick, throwaway questions. Temporary chats aren't saved.
     </p>
-  </div>
+  </details>
 
-  <div class="card">
-    <h2>Are my conversations saved?</h2>
+  <details class="card">
+    <summary><h2>Are my conversations saved?</h2></summary>
     <p>
       Yes. Your past conversations are listed in the left sidebar, so you can return to them any
       time. (Temporary chats are the exception — those aren't saved.)
     </p>
-  </div>
+  </details>
 
   <div class="card">
     <h2>Good to know</h2>
