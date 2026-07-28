@@ -1,0 +1,64 @@
+# ROMChat — LibreChat fork image build.
+#
+# Builds THIS fork's source into a container image and pushes it to the dev ACR
+# (acrcgfedev), server-side via `az acr build` (ACR Tasks) — no Docker agent needed,
+# mirroring the infra repo's BuildJobsImage stage (ChatGptForEmployees.pipelines/dev.yml).
+#
+# The image is pinned for deployment BY DIGEST: this pipeline prints the sha256 digest
+# at the end; that digest goes into ChatGptForEmployees main.<env>.bicepparam
+# (libreChatImage) to deploy. We never deploy a mutable tag.
+#
+# SCOPE (Stage 1.3): dev ACR only. Promotion to test/prod ACRs (acrcgfetest/-prod) is a
+# later step — either build there too or `az acr import` the same digest across registries.
+
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: acrName
+    value: acrcgfedev
+  - name: imageRepo
+    value: librechat
+  - name: serviceConnection
+    value: ChatGptForEmployeesDevSC
+
+name: ROMChatLibreFork_$(Build.SourceBranch)_$(Date:yyyyMMdd).$(Rev:r)
+
+stages:
+  - stage: BuildImage
+    displayName: 'Build & push LibreChat fork image'
+    jobs:
+      - job: AcrBuild
+        displayName: 'az acr build -> acrcgfedev/librechat'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Build & push image (server-side in ACR)'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                # Build the fork root (context = ".", Dockerfile at root). Tag by build id
+                # as a human-readable handle; the immutable digest below is the deploy pin.
+                az acr build \
+                  --registry $(acrName) \
+                  --image $(imageRepo):$(Build.BuildId) \
+                  --file Dockerfile \
+                  .
+
+                # Resolve the immutable digest to paste into main.<env>.bicepparam.
+                DIGEST=$(az acr repository show \
+                  --name $(acrName) \
+                  --image $(imageRepo):$(Build.BuildId) \
+                  --query digest -o tsv)
+
+                echo ""
+                echo "=================================================================="
+                echo "Image pushed. Deploy by DIGEST (put this in libreChatImage):"
+                echo "  $(acrName).azurecr.io/$(imageRepo)@${DIGEST}"
+                echo "=================================================================="
