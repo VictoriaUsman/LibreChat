@@ -12,7 +12,15 @@
 # later step — either build there too or `az acr import` the same digest across registries.
 
 trigger:
-  - main
+  branches:
+    include:
+      - main
+  # Doc-only commits (PATCHES.md, READMEs, any *.md) don't change the image, so they must
+  # NOT trigger a full ~10-min build. Any non-.md change (source, Dockerfile, deps) still
+  # builds: ADO fires the trigger when a commit touches at least one non-excluded path.
+  paths:
+    exclude:
+      - '**/*.md'
 
 pool:
   vmImage: ubuntu-latest
@@ -43,11 +51,23 @@ stages:
               inlineScript: |
                 set -euo pipefail
 
-                # Build the fork root (context = ".", Dockerfile at root). Tag by build id
-                # as a human-readable handle; the immutable digest below is the deploy pin.
+                # Provenance stamped into the image (surfaced in Settings -> About): lets us
+                # map a running digest back to the exact fork commit — important for a
+                # PHI-adjacent app deployed by opaque digest. The Dockerfile declares these
+                # args AFTER the heavy layers, so setting them does NOT bust the build cache.
+                BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+                # Build the fork root (context = ".", Dockerfile at root). Tag by build id as
+                # a human-readable handle; the immutable digest below is the deploy pin.
+                # --platform pins linux/amd64 (what Azure Container Apps runs) so a future
+                # agent/default change can't silently produce a different arch.
                 az acr build \
                   --registry $(acrName) \
                   --image $(imageRepo):$(Build.BuildId) \
+                  --platform linux/amd64 \
+                  --build-arg BUILD_COMMIT=$(Build.SourceVersion) \
+                  --build-arg BUILD_BRANCH=$(Build.SourceBranchName) \
+                  --build-arg BUILD_DATE=$BUILD_DATE \
                   --file Dockerfile \
                   .
 
