@@ -3,6 +3,8 @@ param location string = 'eastus'
 param environmentId string
 param defaultDomain string
 param libreChatImage string
+// Per-env ACR (acrcgfe<env>) that now hosts the LibreChat image. Wired from main.bicep.
+param acrName string
 param minReplicas int = 0
 param appInsightsConnectionString string
 param liteLlmInternalUrl string
@@ -36,6 +38,12 @@ var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
 var libreChatUrl = 'https://${appName}.${defaultDomain}'
 
+// The LibreChat image lives in our per-env ACR (acrcgfe<env>); reference it to read the
+// registry's admin credentials at deploy time for the image pull below (mirrors jobs.bicep).
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: acrName
+}
+
 resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
   location: location
@@ -64,6 +72,19 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-client-secret', value: openIdClientSecret }
         { name: 'openid-session-secret', value: openIdSessionSecret }
         { name: 'azure-storage-connection-string', value: storageConnectionString }
+        // ACR admin password (read at deploy time) so the app can pull its image from
+        // acrcgfe<env>. Mirrors jobs.bicep: the deploy SP can read a registry's own creds
+        // but can't assign an AcrPull role, so we pull with admin creds (WI 12306 hardens).
+        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
+      ]
+      // Pull the LibreChat image from our ACR using the admin credentials above. (No
+      // registries block was needed while the image came from public ghcr.io.)
+      registries: [
+        {
+          server: acr.properties.loginServer
+          username: acr.listCredentials().username
+          passwordSecretRef: 'acr-password'
+        }
       ]
     }
     template: {

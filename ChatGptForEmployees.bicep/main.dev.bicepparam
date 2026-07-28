@@ -6,7 +6,11 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
+// LibreChat now runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from
+// our ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
+// run the fork's build pipeline, copy the digest it prints, and paste it here. This digest =
+// the ZERO-PATCH v0.8.6 parity build (fork commit 566e20b6 = upstream v0.8.6 release).
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:6c97e7f9f4a6f9ced5511be19c5fcb4c8a412a09f7e6a42928ade66154051d0e'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
