@@ -302,7 +302,15 @@ interface:
 # Local dev: files stored in LibreChat's default uploads directory.
 fileConfig:
   endpoints:
-    custom:
+    # The upload policy below is anchored and re-applied to `agents` and `default`
+    # further down. It MUST be scoped to every endpoint an upload can arrive on:
+    # getEndpointFileConfig() falls back to LibreChat's built-in defaults (which
+    # DO allow image/*) for any endpoint not listed here, so scoping the allowlist
+    # to `custom` alone left image uploads accepted on the agents/File Search path
+    # and on new conversations (useFileHandling.ts falls back to endpoint 'default'
+    # when conversation.endpoint is unset). Anchor + aliases keep the three in sync;
+    # editing the list below changes all of them.
+    custom: &romtechUploadPolicy
       disabled: false
       fileLimit: 5
       fileSizeLimit: 10
@@ -322,5 +330,12 @@ fileConfig:
         - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         - "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         - "application/msword"
+    # Same policy on the agents endpoint: File Search uploads pass
+    # endpointOverride and fall back to `agents` when no provider is set.
+    agents: *romtechUploadPolicy
+    # Same policy as the catch-all: useFileHandling.ts resolves
+    # `endpointOverride ?? conversation?.endpoint ?? 'default'`, so an upload on a
+    # conversation with no endpoint yet arrives as `default`.
+    default: *romtechUploadPolicy
   serverFileSizeLimit: 100
   avatarSizeLimit: 2
