@@ -103,7 +103,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `name: 'LibreChat'` / `theme_color: '#009688'`. Mobile/PWA home-screen icons are out of scope
   (ROMChat is a browser-at-work tool reached through Okta; nothing is meant to live on phones), so
   that is a known, accepted divergence from the branding — not an oversight.
-  The favicons landed separately — see the next entry. `logo.svg` is still blocked on an SVG master.
+  The favicons and `logo.svg` landed separately — see the following entries.
 
 ### ROMChat branding — favicons
 
@@ -126,8 +126,11 @@ Keep the patch set as small as possible. Add entries below as patches land.
   approved mark; 77% `#1F6FEB` / 17% white). The master is **not** committed here — get it from the
   brand owner. Geometry measured from that file: bubble bbox `x 104..407, y 132..380`; RC glyph bbox
   `x 164..357, y 169..283` (the tail occupies `y 319..380` and must be excluded, or the crop picks it
-  up as stray bars). 16px = glyphs at 80% width, centred on `#1F6FEB`; 32px = bubble bbox + 14px
-  margin. Both get rounded corners at radius 16% of the side, matching the master. Lanczos resampling.
+  up as stray bars). 16px = glyphs at 80% width, centred on `#1F6FEB`; 32px = a square crop of 72% of
+  the master's width, centred on the bubble bbox. That 72% figure was tuned by eye: a tighter crop
+  (62%) reads as legible but pushes the bubble to the tile edges and no longer looks like the mark;
+  no crop at all keeps fidelity but leaves the RC soft. Both sizes get rounded corners at radius 16%
+  of the side, matching the master. Lanczos resampling throughout.
 - **How to verify:** Hard refresh with cache disabled. The tab icon is the ROMChat mark at both 16px
   and 32px (browsers pick by DPI/zoom, so check at 100% and 200%). At 16px the "RC" must be readable
   as two distinct letters, not a smear. No 404s for `assets/favicon-*.png` in the network tab.
@@ -136,6 +139,31 @@ Keep the patch set as small as possible. Add entries below as patches land.
   Resolution is always `git checkout --ours` — upstream changing its own favicon is irrelevant to us.
   If the brand owner ever supplies a redrawn mark optimised for small sizes, the 16px special-case
   may become unnecessary; re-measure the stroke width before assuming so.
+
+### ROMChat branding — login-screen logo
+
+- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # TBD)
+- **Added:** 2026-07-30 by Ian Tristan
+- **Files touched:** `client/public/assets/logo.svg`
+- **What:** Replaced LibreChat's logo with the ROMChat bubble monogram. Rendered on the login screen
+  at `AuthLayout.tsx:65`. Upstream's file is `viewBox="0 0 512 512"`, and the ROMChat master is
+  512x512, so the replacement is a drop-in with no layout change.
+- **⚠️ This is a raster embedded in an SVG wrapper, not a true vector.** The approved mark was only
+  ever supplied as a 512x512 PNG; no vector master exists yet. Rather than hand-trace the "RC"
+  letterforms — which would approximate the brand typography and risk distorting it — the PNG is
+  embedded verbatim as a base64 data URI inside an SVG with the correct viewBox. The embedded bytes
+  are identical to the master (sha256-verified), so there is no recompression loss.
+- **Why this is acceptable here:** `AuthLayout.tsx:65` renders the logo inside `h-10` (40px tall)
+  with `object-contain`, so the displayed size is ~40px — 512px of source is ample even at 3x DPI
+  (120px). The file is 30KB vs upstream's 5.8KB, loaded on the login page only.
+- **When a real vector arrives, replace this file.** Nothing else needs to change: same path, same
+  filename, same viewBox. That swap is the entire follow-up.
+- **How to verify:** Open `/login`. The ROMChat bubble monogram appears above the login card, not
+  LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`.
+- **Upstream status:** not submitted — ROMTech-specific, permanent.
+- **Merge notes:** Upstream rarely touches this file, but if it does, resolution is
+  `git checkout --ours` — their logo is never what we want. Do not "fix" the embedded data URI by
+  converting it to `<path>` data unless you have the genuine vector artwork; a trace is not the mark.
 
 <!-- new entries go here -->
 
