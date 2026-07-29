@@ -104,21 +104,26 @@ endpoints:
   # File Search (RAG) is surfaced via an ephemeral `file_search` capability on the
   # agents endpoint — NOT the agent builder. interface.agents:false + disableBuilder
   # keep the builder hidden, and the agents endpoint stays out of the model picker
-  # (endpointsMenu:false / modelSelect:false / modelSpecs.enforce:true). `context`
-  # is listed so the existing "Upload as Text" option is preserved, and `artifacts`
-  # so the Artifacts tool toggle is preserved (each maps to a feature: context ->
-  # "Upload as Text" in the paperclip, artifacts -> the Artifacts toggle in the
-  # tools dropdown, file_search -> File Search toggle + "Upload for File Search").
+  # (endpointsMenu:false / modelSelect:false / modelSpecs.enforce:true). `artifacts`
+  # is listed so the Artifacts tool toggle is preserved (each maps to a feature:
+  # artifacts -> the Artifacts toggle in the tools dropdown, file_search -> File
+  # Search toggle + "Upload for File Search").
   # NOTE: declaring capabilities explicitly REPLACES the default set — anything
   # omitted is turned OFF, so this list must contain everything we want kept.
   # (code/web_search are intentionally omitted; they're already off via interface
   # runCode/webSearch flags.) This also makes the server-side file_search upload
   # gate deterministic (checkCapability).
+  # `context` was removed (previously listed here): it backed the "Upload as Text"
+  # option in the paperclip, which inlined a document's full text straight into the
+  # 64k context window. Dropping it leaves File Search as the single upload path, so
+  # documents are embedded to pgvector and retrieved on demand rather than inlined —
+  # the same rationale already documented under interface.fileSearch below. Note this
+  # only affects "Upload as Text"; "Upload for File Search" is governed by
+  # `file_search` and is unchanged.
   agents:
     disableBuilder: true
     capabilities:
       - file_search
-      - context
       - artifacts
   custom:
     - name: "LiteLLM Gateway"
