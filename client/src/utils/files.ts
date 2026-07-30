@@ -13,6 +13,7 @@ import {
   excelMimeTypes,
   EToolResources,
   fileConfig as defaultFileConfig,
+  fileSearchDocumentMimeTypes,
 } from 'librechat-data-provider';
 import type { TFile, EndpointFileConfig, FileConfig } from 'librechat-data-provider';
 import type { QueryClient } from '@tanstack/react-query';
@@ -279,6 +280,8 @@ export const validateFiles = ({
         ...(fileConfig?.ocr?.supportedMimeTypes || []),
         ...(fileConfig?.stt?.supportedMimeTypes || []),
       ];
+    } else if (toolResource === EToolResources.file_search) {
+      mimeTypesToCheck = fileSearchDocumentMimeTypes;
     }
 
     if (!checkType(originalFile.type, mimeTypesToCheck)) {

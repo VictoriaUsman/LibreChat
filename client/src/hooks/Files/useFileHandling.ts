@@ -168,6 +168,11 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             ...prev,
             [EToolResources.execute_code]: false,
           }));
+        } else if (tool_resource === EToolResources.file_search) {
+          setEphemeralAgent((prev) => ({
+            ...prev,
+            [EToolResources.file_search]: false,
+          }));
         }
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);
