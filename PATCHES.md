@@ -165,6 +165,53 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `git checkout --ours` — their logo is never what we want. Do not "fix" the embedded data URI by
   converting it to `<path>` data unless you have the genuine vector artwork; a trace is not the mark.
 
+### Artifacts control — developer sub-options stripped, core toggle kept (default off)
+
+- **Added:** 2026-07-30 by Ian Tristan
+- **Files touched:** `client/src/components/Chat/Input/Artifacts.tsx` (badge),
+  `client/src/components/Chat/Input/ArtifactsSubMenu.tsx` (Tools-dropdown row),
+  `client/src/components/Chat/Input/ToolsDropdown.tsx` (handlers + props),
+  `client/src/components/Chat/Input/__tests__/Artifacts.spec.tsx` (new).
+- **What:** Removed the two developer-oriented Artifacts sub-options — "Include shadcn/ui"
+  (`ArtifactModes.SHADCNUI`) and "Custom Prompt Mode" (`ArtifactModes.CUSTOM`) — from both places the
+  Artifacts control appears: the badge above the composer and the "Artifacts" row inside the Tools
+  dropdown. Both are now a plain on/off toggle writing `ArtifactModes.DEFAULT` or `''`, unchanged.
+- **Why:** Neither option means anything to an employee audience, and `CUSTOM` is an outright
+  correctness trap: `generateArtifactsPrompt()` returns `null` for that mode
+  (`packages/api/src/prompts/artifacts/index.ts:412-413`), so the model gets **no** artifact
+  instructions while the badge still reads "on". Artifacts silently stop rendering and the user has no
+  way to tell why.
+- **Default off — no code change was needed.** `useToolToggle` reads
+  `ephemeralAgent?.[toolKey] ?? false` (`client/src/hooks/Plugins/useToolToggle.ts:59`) and the
+  `ephemeralAgentByConvoId` atom defaults to `null`, so a fresh browser profile already starts off.
+  Artifacts costs roughly 1.5–2k prompt tokens per message when enabled, so it stays opt-in. Locked by
+  a regression test rather than left implicit.
+- **The ROMTech system prompt is untouched in both states.** It ships as `promptPrefix` inside each
+  `modelSpecs` preset in the deployment's `librechat.yaml` (separate repo, not this one). Artifact
+  instructions are *appended* to `agent.additional_instructions`, and only when the mode is a
+  non-empty string (`packages/api/src/agents/initialize.ts:961`) — so with Artifacts off, zero
+  artifact tokens are added and `instructions` is never rewritten in either state.
+- **Kept deliberately:** the pin button on the Tools-dropdown row; and the `SHADCNUI`/`CUSTOM` enum
+  members with their server-side prompt branches, so agents and conversations already persisted with
+  those modes keep working. This patch narrows the *chat* UI only — nothing in
+  `client/src/components/Artifacts/*` (the render path) was touched.
+- **Known gap — deliberately out of scope:** the Agent Builder panel
+  (`client/src/components/SidePanel/Agents/Artifacts.tsx:63,71`) still offers both options, including
+  the `CUSTOM` trap. It is a builder-only surface today; strip it there too if agent creation is ever
+  opened to general employees.
+- **How to verify:** Fresh browser profile → Artifacts badge is off. Enable it, ask for a small HTML
+  page, confirm the artifact panel renders. Open the Tools dropdown → the "Artifacts" row toggles on
+  click with no submenu arrow and no flyout. Tab to the badge and press Space → it toggles and
+  announces state via `role="checkbox"` + `aria-checked`. Existing conversations containing artifacts
+  still open and render.
+- **Upstream status:** not submitted — ROMTech product decision, permanent.
+- **Merge notes:** Removal-only in `Artifacts.tsx` and `ToolsDropdown.tsx`, so upstream edits inside
+  the deleted blocks arrive as delete/modify conflicts — keep the deletion. If upstream adds a *third*
+  sub-option, delete that too rather than accepting the hunk. `ArtifactsSubMenu.tsx` is the one
+  exception to `--ours`: it also lost its `Ariakit.MenuProvider`/`MenuButton` wrapper (there is no
+  submenu left to anchor) and gained `role="menuitemcheckbox"` + `aria-checked` on the row, so
+  conflicts there need re-applying by hand.
+
 <!-- new entries go here -->
 
 ---

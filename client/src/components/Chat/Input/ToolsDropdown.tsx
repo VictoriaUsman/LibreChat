@@ -108,24 +108,6 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
     }
   }, [artifacts]);
 
-  const handleShadcnToggle = useCallback(() => {
-    const currentState = artifacts?.toggleState;
-    if (currentState === ArtifactModes.SHADCNUI) {
-      artifacts?.debouncedChange({ value: ArtifactModes.DEFAULT });
-    } else {
-      artifacts?.debouncedChange({ value: ArtifactModes.SHADCNUI });
-    }
-  }, [artifacts]);
-
-  const handleCustomToggle = useCallback(() => {
-    const currentState = artifacts?.toggleState;
-    if (currentState === ArtifactModes.CUSTOM) {
-      artifacts?.debouncedChange({ value: ArtifactModes.DEFAULT });
-    } else {
-      artifacts?.debouncedChange({ value: ArtifactModes.CUSTOM });
-    }
-  }, [artifacts]);
-
   const handleSkillsToggle = useCallback(() => {
     const newValue = !skills?.toggleState;
     skills?.debouncedChange({ value: newValue });
@@ -297,8 +279,6 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
           setIsArtifactsPinned={setIsArtifactsPinned}
           artifactsMode={artifacts?.toggleState as string}
           handleArtifactsToggle={handleArtifactsToggle}
-          handleShadcnToggle={handleShadcnToggle}
-          handleCustomToggle={handleCustomToggle}
         />
       ),
     });
