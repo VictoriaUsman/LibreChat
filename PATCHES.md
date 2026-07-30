@@ -182,11 +182,26 @@ build/deploy path before taking on any source risk.
   repo's `librechat.yaml` allowlist had been authored independently and disagreed in both
   directions) — fixed in place rather than tracked as separate patches, since they're corrections to
   what this same patch does, not new features.
+  - **PBI 12688 closed the reconciliation loop** (2026-07-31): once the client derived its allowlist
+    straight from `endpointFileConfig.supportedMimeTypes` (above), the only remaining divergence was
+    the *contents* of the infra repo's `librechat.yaml` list itself. Per rule 2 above (config over
+    patching), that's a config-only change — no new fork source patch, so no new entry here. The
+    canonical list (and the reasoning for each inclusion/exclusion, verified against `rag_api`'s
+    `document_loader.py`) is documented directly in `fileConfig.endpoints.custom.supportedMimeTypes`'s
+    surrounding comment in the infra repo's `config/librechat.yaml` — that comment block is the
+    owning source of truth, not this file. Net change: added `application/vnd.ms-excel` (legacy
+    `.xls` — confirmed working, same Excel loader as `.xlsx`); removed `application/msword` (legacy
+    `.doc` — was already broken for genuine OLE-format `.doc` files, a pre-existing "permitted but
+    unreachable" bug this PBI's investigation surfaced, unrelated to the excel/powerpoint types the
+    PBI named); left `application/vnd.ms-powerpoint` (legacy `.ppt`) out — it would hit the same
+    loader as `.pptx` but that loader shells out to LibreOffice for the legacy format, which isn't
+    installed in the `rag_api` container, so adding it today would recreate the exact bug this PBI
+    exists to fix.
 - **How to verify:** Click the paperclip — the OS file picker opens immediately (no dropdown),
   tooltip reads "Upload a document (PDF, Word, Excel, PowerPoint, text)", and the recommended-types
   list matches the endpoint's configured `supportedMimeTypes` exactly (e.g. `text/plain`, `text/csv`,
-  `text/markdown`, `application/pdf`, docx/xlsx/pptx, `application/msword` for this deployment's
-  actual config) — no more, no less. Upload a `.pdf`/`.csv`/`.md` and ask a question about its
+  `text/markdown`, `application/pdf`, docx/xlsx/pptx, legacy `.xls` for this deployment's actual
+  config) — no more, no less. Upload a `.pdf`/`.csv`/`.md` and ask a question about its
   contents in the same conversation without touching any other control — expect a grounded answer.
   Open the "+" tools menu — no File Search toggle appears. Pick an unsupported type (e.g. `.png` via
   "All files") — expect a toast error and nothing attached. Upload two documents where the second
@@ -195,6 +210,29 @@ build/deploy path before taking on any source risk.
   off). Tab to the paperclip and press Enter — it opens the picker exactly once, not twice.
   Unit side: `cd client && npx jest src/components/Chat/Input/Files/__tests__/AttachFileMenu.spec.tsx
   src/utils/__tests__/validateFiles.spec.ts src/hooks/Files/__tests__/useFileHandling.test.ts`.
+  - **PBI 12688 per-type dev checklist** (run once the updated `config/librechat.yaml` is deployed to
+    the dev Container App — this needs the real `rag_api`/pgvector/LiteLLM stack, not local-only
+    testing): for each of the 8 types below, upload one real file via the paperclip and ask a
+    question whose answer only exists in that file's content, in a fresh conversation, without
+    touching any other control:
+    1. `.txt` (`text/plain`) — expect a grounded answer.
+    2. `.csv` (`text/csv`) — expect a grounded answer (this is the type the original finding said was
+       configured-but-unreachable from the client; confirms the client can now actually reach it).
+    3. `.md` (`text/markdown`) — expect a grounded answer (same as above).
+    4. `.pdf` (`application/pdf`) — expect a grounded answer.
+    5. `.docx` (modern, saved from current Word/Google Docs) — expect a grounded answer.
+    6. `.xlsx` (modern) — expect a grounded answer.
+    7. `.pptx` (modern) — expect a grounded answer.
+    8. `.xls` (genuine legacy binary format — e.g. save a sheet as "Excel 97-2003 Workbook", not just
+       rename a `.xlsx`) — expect a grounded answer. This is the new addition; confirm it actually
+       works and isn't silently misrouted.
+    Then confirm the negative cases: attempt a `.ppt` (legacy PowerPoint) and a `.doc` (legacy Word)
+    via "All files" in the OS picker — both should be silently absent from the filtered picker view,
+    and if forced through "All files" anyway, client validation should reject them with a visible
+    toast (not a silent no-op) since neither MIME type is in `supportedMimeTypes` anymore. Attempt a
+    `.png` — same expected rejection, confirming images are still blocked on every path (upload API
+    included — try posting a `.png` directly to the upload endpoint with `tool_resource=file_search`
+    if you want to confirm server-side enforcement too, not just the client check).
 - **Upstream status:** not submitted. The derive-from-`endpointFileConfig` allowlist approach and
   `mimeTypesToAcceptString` are generally useful beyond this fork and could be proposed upstream, but
   haven't been.
