@@ -295,6 +295,29 @@ interface:
 # File upload — enabled for v1 (PBI 9563)
 # Restricted to approved MIME types and size limits.
 # Local dev: files stored in LibreChat's default uploads directory.
+#
+# PBI 12688 — canonical document-type list (owning file: THIS file's
+# `supportedMimeTypes` below; the client picker's accept attribute and
+# validateFiles derive from this list at runtime and cannot diverge from it —
+# see PATCHES.md's "Paperclip becomes one-click File Search upload" entry in
+# the fork repo). Every type listed here is verified to parse successfully
+# end-to-end through the rag_api embedding service (app/utils/document_loader.py):
+#   - text/plain, text/csv, text/markdown, application/pdf, docx, xlsx, pptx:
+#     each has a dedicated working loader.
+#   - application/vnd.ms-excel (legacy .xls): added here — routes through the
+#     same Excel loader as .xlsx (xlrd handles the legacy BIFF format).
+# Deliberately EXCLUDED, don't re-add without fixing the underlying gap first:
+#   - application/vnd.ms-powerpoint (legacy .ppt): rag_api's PowerPoint loader
+#     shells out to LibreOffice to convert legacy .ppt, and the rag_api
+#     container does not have LibreOffice installed. Adding this MIME type
+#     without also installing LibreOffice in that image reproduces the exact
+#     "offered in the picker, then rejected on upload" bug this PBI exists to
+#     fix — confirm LibreOffice is present in rag_api first.
+#   - application/msword (legacy .doc): REMOVED here. It was previously listed
+#     but is broken for genuine legacy (OLE/CFB) .doc files — rag_api routes it
+#     through the same docx2txt loader as modern .docx, which unzips the file;
+#     a real legacy .doc isn't a zip and fails with a visible upload error.
+#     Re-add only once rag_api can actually parse legacy .doc.
 fileConfig:
   endpoints:
     custom:
@@ -316,6 +339,6 @@ fileConfig:
         - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         - "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        - "application/msword"
+        - "application/vnd.ms-excel"
   serverFileSizeLimit: 100
   avatarSizeLimit: 2
