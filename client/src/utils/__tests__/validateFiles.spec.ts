@@ -1,7 +1,7 @@
-import { megabyte, fileConfig as defaultFileConfig } from 'librechat-data-provider';
+import { megabyte, EToolResources, fileConfig as defaultFileConfig } from 'librechat-data-provider';
 import type { EndpointFileConfig, FileConfig } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
-import { validateFiles } from '../files';
+import { validateFiles, mimeTypesToAcceptString } from '../files';
 
 const supportedMimeTypes = defaultFileConfig.endpoints.default.supportedMimeTypes;
 
@@ -168,5 +168,62 @@ describe('validateFiles', () => {
     const fileList = [makeFile('huge.pdf', 'application/pdf', limit)];
     validateFiles({ files, fileList, setError, endpointFileConfig, fileConfig });
     expect(setError).toHaveBeenCalledWith('File limit reached: 1 files');
+  });
+
+  describe('toolResource: file_search', () => {
+    // Mirrors a real, admin-configured document-only allowlist (e.g. librechat.yaml's
+    // fileConfig.endpoints.*.supportedMimeTypes) — no dedicated file_search MIME list
+    // exists anymore; file_search is checked against the endpoint's own configured
+    // supportedMimeTypes, same as any other upload on that endpoint.
+    const documentOnlyMimeTypes = ['text/csv', 'text/markdown', 'application/pdf'].map(
+      (type) => new RegExp(type),
+    );
+
+    it('accepts a document type present in the endpoint config', () => {
+      endpointFileConfig = makeEndpointConfig({ supportedMimeTypes: documentOnlyMimeTypes });
+      const fileList = [makeFile('report.csv', 'text/csv', 1024)];
+      const result = validateFiles({
+        files,
+        fileList,
+        setError,
+        endpointFileConfig,
+        fileConfig,
+        toolResource: EToolResources.file_search,
+      });
+      expect(result).toBe(true);
+      expect(setError).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-document type not present in the endpoint config, with a clear error', () => {
+      endpointFileConfig = makeEndpointConfig({ supportedMimeTypes: documentOnlyMimeTypes });
+      const fileList = [makeFile('photo.png', 'image/png', 1024)];
+      const result = validateFiles({
+        files,
+        fileList,
+        setError,
+        endpointFileConfig,
+        fileConfig,
+        toolResource: EToolResources.file_search,
+      });
+      expect(result).toBe(false);
+      expect(setError).toHaveBeenCalledWith('Unsupported file type: image/png');
+    });
+  });
+});
+
+describe('mimeTypesToAcceptString', () => {
+  it('joins literal MIME type regexes into a comma-separated accept string', () => {
+    const types = ['text/plain', 'text/csv', 'application/pdf'].map((type) => new RegExp(type));
+    expect(mimeTypesToAcceptString(types)).toBe('text/plain,text/csv,application/pdf');
+  });
+
+  it('omits bundled alternation regexes that do not reduce to one literal type', () => {
+    const types = [new RegExp('text/plain'), /^application\/(msword|pdf)$/];
+    expect(mimeTypesToAcceptString(types)).toBe('text/plain');
+  });
+
+  it('returns an empty string when no MIME types are provided', () => {
+    expect(mimeTypesToAcceptString(undefined)).toBe('');
+    expect(mimeTypesToAcceptString([])).toBe('');
   });
 });

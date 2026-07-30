@@ -169,10 +169,19 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             [EToolResources.execute_code]: false,
           }));
         } else if (tool_resource === EToolResources.file_search) {
-          setEphemeralAgent((prev) => ({
-            ...prev,
-            [EToolResources.file_search]: false,
-          }));
+          // Only turn File Search off if this was the last file_search file in the
+          // conversation — otherwise a second upload failing would silently disable
+          // File Search for a first upload that already succeeded and is still searchable.
+          const hasOtherFileSearchFiles = Array.from(files.values()).some(
+            (f) =>
+              f.file_id !== (file_id as string) && f.tool_resource === EToolResources.file_search,
+          );
+          if (!hasOtherFileSearchFiles) {
+            setEphemeralAgent((prev) => ({
+              ...prev,
+              [EToolResources.file_search]: false,
+            }));
+          }
         }
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);

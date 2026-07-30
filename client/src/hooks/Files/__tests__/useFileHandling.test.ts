@@ -1,5 +1,11 @@
 import { renderHook, act } from '@testing-library/react';
-import { Constants, EModelEndpoint, getEndpointFileConfig } from 'librechat-data-provider';
+import {
+  Constants,
+  EModelEndpoint,
+  EToolResources,
+  getEndpointFileConfig,
+} from 'librechat-data-provider';
+import type { ExtendedFile } from '~/common';
 
 beforeAll(() => {
   global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
@@ -9,13 +15,15 @@ beforeAll(() => {
 const mockShowToast = jest.fn();
 const mockSetFilesLoading = jest.fn();
 const mockMutate = jest.fn();
+const mockSetEphemeralAgent = jest.fn();
 
 let mockConversation: Record<string, string | null | undefined> = {};
 let mockIsTemporary = false;
+let mockFiles: Map<string, ExtendedFile> = new Map();
 
 jest.mock('~/Providers/ChatContext', () => ({
   useChatContext: jest.fn(() => ({
-    files: new Map(),
+    files: mockFiles,
     setFiles: jest.fn(),
     setFilesLoading: mockSetFilesLoading,
     conversation: mockConversation,
@@ -30,7 +38,7 @@ jest.mock('@librechat/client', () => ({
 
 jest.mock('recoil', () => ({
   ...jest.requireActual('recoil'),
-  useSetRecoilState: jest.fn(() => jest.fn()),
+  useSetRecoilState: jest.fn(() => mockSetEphemeralAgent),
   useRecoilValue: jest.fn(() => mockIsTemporary),
 }));
 
@@ -104,6 +112,7 @@ describe('useFileHandling', () => {
     jest.clearAllMocks();
     mockConversation = {};
     mockIsTemporary = false;
+    mockFiles = new Map();
   });
 
   const loadHook = async () => (await import('../useFileHandling')).default;
@@ -371,6 +380,62 @@ describe('useFileHandling', () => {
       expect(formData.get('agent_id')).toBe('agent-123');
       expect(formData.get('conversationId')).toBeNull();
       expect(formData.get('isTemporary')).toBeNull();
+    });
+  });
+
+  describe('upload failure — file_search ephemeralAgent handling', () => {
+    function getLatestOnError() {
+      const mockUseUploadFileMutation = jest.requireMock('~/data-provider').useUploadFileMutation;
+      const calls = mockUseUploadFileMutation.mock.calls;
+      return calls[calls.length - 1][0].onError as (error: unknown, body: FormData) => void;
+    }
+
+    function makeFailedUploadFormData(fileId: string) {
+      const formData = new FormData();
+      formData.append('file_id', fileId);
+      formData.append('tool_resource', EToolResources.file_search);
+      return formData;
+    }
+
+    it('turns File Search off when the failed file was the only file_search file', async () => {
+      mockFiles = new Map();
+      mockConversation = { conversationId: 'convo-1', endpoint: 'openAI', endpointType: 'custom' };
+
+      const useFileHandling = await loadHook();
+      renderHook(() => useFileHandling());
+
+      act(() => {
+        getLatestOnError()({ message: 'network error' }, makeFailedUploadFormData('failed-file'));
+      });
+
+      expect(mockSetEphemeralAgent).toHaveBeenCalled();
+      const updater =
+        mockSetEphemeralAgent.mock.calls[mockSetEphemeralAgent.mock.calls.length - 1][0];
+      expect(updater({})).toEqual({ [EToolResources.file_search]: false });
+    });
+
+    it('leaves File Search on when another file_search file is still present', async () => {
+      mockFiles = new Map([
+        [
+          'other-file',
+          {
+            file_id: 'other-file',
+            size: 100,
+            progress: 1,
+            tool_resource: EToolResources.file_search,
+          },
+        ],
+      ]);
+      mockConversation = { conversationId: 'convo-1', endpoint: 'openAI', endpointType: 'custom' };
+
+      const useFileHandling = await loadHook();
+      renderHook(() => useFileHandling());
+
+      act(() => {
+        getLatestOnError()({ message: 'network error' }, makeFailedUploadFormData('failed-file'));
+      });
+
+      expect(mockSetEphemeralAgent).not.toHaveBeenCalled();
     });
   });
 });

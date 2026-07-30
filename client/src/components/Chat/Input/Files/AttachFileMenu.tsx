@@ -6,7 +6,6 @@ import {
   PermissionTypes,
   Permissions,
   defaultAgentCapabilities,
-  fileSearchDocumentExtensions,
 } from 'librechat-data-provider';
 import type { EModelEndpoint, EndpointFileConfig, TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
@@ -20,11 +19,10 @@ import {
 } from '~/hooks';
 import { ephemeralAgentByConvoId } from '~/store';
 import { isEphemeralAgent } from '~/common';
-import { cn } from '~/utils';
+import { cn, mimeTypesToAcceptString } from '~/utils';
 
 interface AttachFileMenuProps {
   agentId?: string | null;
-  endpoint?: string | null;
   disabled?: boolean | null;
   conversationId: string;
   endpointType?: EModelEndpoint | string;
@@ -40,6 +38,7 @@ const AttachFileMenu = ({
   agentId,
   disabled,
   conversationId,
+  endpointFileConfig,
   files,
   setFiles,
   setFilesLoading,
@@ -93,24 +92,15 @@ const AttachFileMenu = ({
             className={cn(
               'flex size-9 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-50',
             )}
-            onKeyDownCapture={(e) => {
-              if (!inputRef.current) {
-                return;
-              }
-              if (e.key === 'Enter' || e.key === ' ') {
-                setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }));
-                inputRef.current.value = '';
-                inputRef.current.accept = fileSearchDocumentExtensions;
-                inputRef.current.click();
-              }
-            }}
             onClick={() => {
               if (!inputRef.current) {
                 return;
               }
               setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }));
               inputRef.current.value = '';
-              inputRef.current.accept = fileSearchDocumentExtensions;
+              inputRef.current.accept = mimeTypesToAcceptString(
+                endpointFileConfig?.supportedMimeTypes,
+              );
               inputRef.current.click();
             }}
           >

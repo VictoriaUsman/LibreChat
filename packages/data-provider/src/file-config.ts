@@ -187,21 +187,6 @@ export const textMimeTypes =
 export const applicationMimeTypes =
   /^(application\/(epub\+zip|csv|json|msword|pdf|x-tar|x-sh|typescript|sql|yaml|x-parquet|vnd\.apache\.parquet|vnd\.coffeescript|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet)|vnd\.oasis\.opendocument\.(text|spreadsheet|presentation|graphics)|xml|zip))$/;
 
-/** MIME types accepted for File Search document uploads (PDF, Word, Excel, PowerPoint, text) */
-export const fileSearchDocumentMimeTypes = [
-  /^application\/pdf$/,
-  /^application\/msword$/,
-  /^application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$/,
-  excelMimeTypes,
-  /^application\/vnd\.ms-powerpoint$/,
-  /^application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation$/,
-  /^text\/plain$/,
-];
-
-/** File extensions/MIME types accepted by the File Search document picker (input `accept` attribute) */
-export const fileSearchDocumentExtensions =
-  '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain';
-
 export const imageMimeTypes = /^image\/(jpeg|gif|png|webp|heic|heif)$/;
 
 export const audioMimeTypes =

@@ -107,26 +107,21 @@ build/deploy path before taking on any source risk.
 ### Paperclip becomes one-click File Search upload
 
 - **Work item:** PBI 12627 (depends on PBI 12626, above — both touch `AttachFileMenu.tsx`)
-- **Added:** 2026-07-30 by Andrea Tiamson
+- **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-07-31 (code review follow-ups)
 - **Files touched:** `packages/data-provider/src/file-config.ts`, `client/src/utils/files.ts`,
   `client/src/hooks/Files/useFileHandling.ts`,
   `client/src/components/Chat/Input/Files/AttachFileMenu.tsx`,
+  `client/src/components/Chat/Input/Files/AttachFileChat.tsx`,
   `client/src/components/Chat/Input/ToolsDropdown.tsx`, `client/src/locales/en/translation.json`,
-  `client/src/components/Chat/Input/Files/__tests__/AttachFileMenu.spec.tsx`
+  `client/src/components/Chat/Input/Files/__tests__/AttachFileMenu.spec.tsx`,
+  `client/src/utils/__tests__/validateFiles.spec.ts`,
+  `client/src/hooks/Files/__tests__/useFileHandling.test.ts`
 - **What:** Collapsed the paperclip from a dropdown (Upload Image / OCR text / code environment /
   File Search / SharePoint) into a single one-click File Search uploader — no other upload modes
-  remain on the paperclip. Clicking it directly opens the OS file picker pre-filtered to PDF/Word/
-  Excel/PowerPoint/text (new `fileSearchDocumentExtensions` constant in `file-config.ts`), always
-  tags the upload with `EToolResources.file_search`, and sets
-  `ephemeralAgent[file_search] = true` itself — removing the need to pre-toggle File Search in the
-  "+" tools menu first. Added a matching `fileSearchDocumentMimeTypes` allowlist and a new branch in
-  `validateFiles()` (`client/src/utils/files.ts`) so a file that slips past the OS filter (e.g. a
-  `.png` picked via "All files") is validated against the document-only list, not the endpoint's
-  broad general allowlist — otherwise it would silently pass and upload as a non-indexed attachment,
-  the same failure mode PBI 12626 already fixed once, just recreated at this new entry point. Added
-  an `onError` reset of `ephemeralAgent[file_search]` back to `false` in `useFileHandling.ts`,
-  mirroring the existing `execute_code` reset, so a failed upload doesn't leave file_search "on" for
-  a turn with no file behind it. Removed the File Search toggle from `ToolsDropdown.tsx` (and its
+  remain on the paperclip. Clicking it directly opens the OS file picker pre-filtered to the
+  endpoint's configured document types, always tags the upload with `EToolResources.file_search`,
+  and sets `ephemeralAgent[file_search] = true` itself — removing the need to pre-toggle File Search
+  in the "+" tools menu first. Removed the File Search toggle from `ToolsDropdown.tsx` (and its
   now-unused `useHasAccess(FILE_SEARCH)`/`VectorIcon`/pin-state plumbing) since the paperclip now
   sets the flag directly; `BadgeRowContext.tsx`/`useToolToggle.ts`/`FileSearch.tsx` (the input-row
   status chip) are untouched — same underlying `ephemeralAgent` flag, still works, still separately
@@ -137,18 +132,72 @@ build/deploy path before taking on any source risk.
   is what sets `fileSearchAllowedByAgent` true in the first place; for a real, saved Agent it only
   shows if that agent's author actually configured `file_search` as one of its tools — the chat UI
   does not override that authoring decision.
+  - **Document allowlist:** the OS picker's `accept` attribute and `validateFiles()`'s file_search
+    check both derive from `endpointFileConfig.supportedMimeTypes` — the same live, admin-configured,
+    per-endpoint allowlist (`librechat.yaml`'s `fileConfig.endpoints.*.supportedMimeTypes`) every
+    other upload path already uses — instead of a separate hardcoded list. `validateFiles()`
+    (`client/src/utils/files.ts`) has no `file_search`-specific branch at all; `toolResource` doesn't
+    change `mimeTypesToCheck` for it, so it validates against whatever the endpoint's own
+    `supportedMimeTypes` already is, same as an unspecified-toolResource upload. `AttachFileMenu.tsx`
+    builds the `accept` string from that same list via a new `mimeTypesToAcceptString()` helper
+    (`client/src/utils/files.ts`), which recovers literal `"type/subtype"` strings from simple,
+    admin-configured regexes via `.source` (undoing the backslash-escaping of `/` that
+    `RegExp.prototype.source` always applies, regardless of how the regex was constructed) and
+    silently omits any regex that doesn't reduce to one literal type (e.g. LibreChat's built-in
+    bundled-alias defaults) from the visible hint — validation is unaffected by what this omits,
+    since it checks the full regex list, not this string. This also finally uses the
+    `endpointFileConfig` prop the component always accepted but never read.
+  - **Keyboard activation:** the button has no `onKeyDown`/`onKeyDownCapture` handler. A native
+    `<button>` already synthesizes a `click` event on Enter/Space, so a separate handler calling
+    `inputRef.current.click()` again double-fired the file picker and the `ephemeralAgent` update on
+    every keypress. `AttachFileMenu.spec.tsx`'s keyboard test uses `userEvent.keyboard('{Enter}')`
+    (not `fireEvent.keyDown`, which doesn't synthesize the click a real browser fires) and asserts
+    the underlying `.click()` fired exactly once, so a regression here fails loudly instead of
+    passing silently.
+  - **Upload failure and File Search state:** `useFileHandling.ts`'s upload `onError` only turns
+    `ephemeralAgent[file_search]` off when the failed file was the *last* file_search file in the
+    conversation (checks `files` — the existing `Map<string, ExtendedFile>` state — for any other
+    entry with `tool_resource === 'file_search'` before disabling). Previously it unconditionally set
+    the flag to `false` on any file_search upload failure: uploading two PDFs where the second fails
+    would silently stop the first, already-embedded, successfully-searchable document from being
+    searched on the next turn, with the UI still showing it attached — the same silent-no-op failure
+    class PBI 12626 exists to remove, reintroduced by copying `execute_code`'s reset pattern without
+    noticing it doesn't generalize (`execute_code` is a single on/off capability; file_search can have
+    multiple files). `execute_code`'s reset is left as-is (matches upstream; not this patch's concern).
+  - **Unused props (partial):** `AttachFileMenuProps` no longer declares `endpoint` — it was passed
+    from `AttachFileChat.tsx` but never read inside `AttachFileMenu`. `endpointType` and
+    `useResponsesApi` are still declared and still passed, and are still unused inside
+    `AttachFileMenu` itself — removing those two would force removing them from
+    `AttachFileChat.tsx`'s JSX as well (TS excess-property checking), which in turn would gut the
+    ~15 existing `AttachFileChat.spec.tsx` assertions that use the mocked `AttachFileMenu` purely to
+    observe `AttachFileChat`'s own `endpointType`/`useResponsesApi` resolution logic (which still
+    runs and is still meaningful — it just no longer needs to reach `AttachFileMenu`). Deliberately
+    left in place rather than rewriting that test coverage for what was flagged as a minor,
+    cosmetic finding.
 - **Why:** Enabling File Search required two separate, easy-to-miss decisions (toggle in "+" menu,
   then the right dropdown item) before any upload did what the user expected. No
   `librechat.yaml`/env-var toggle governs individual attach-menu behavior, so this required a source
-  change.
+  change. The document-allowlist, keyboard, and upload-failure behaviors above were code-review
+  findings against the first version of this patch (this fork's client allowlist and the infra
+  repo's `librechat.yaml` allowlist had been authored independently and disagreed in both
+  directions) — fixed in place rather than tracked as separate patches, since they're corrections to
+  what this same patch does, not new features.
 - **How to verify:** Click the paperclip — the OS file picker opens immediately (no dropdown),
-  tooltip reads "Upload a document (PDF, Word, Excel, PowerPoint, text)", and the file type filter is
-  restricted to those types. Upload a `.pdf`/`.docx` and ask a question about its contents in the
-  same conversation without touching any other control — expect a grounded answer. Open the "+"
-  tools menu — no File Search toggle appears. Pick a `.png` via "All files" in the OS dialog — expect
-  a toast error and nothing attached. Disconnect network mid-upload — expect a toast error and no
-  partial file left in the composer. Tab to the paperclip and press Enter/Space — it activates.
-- **Upstream status:** not submitted
+  tooltip reads "Upload a document (PDF, Word, Excel, PowerPoint, text)", and the recommended-types
+  list matches the endpoint's configured `supportedMimeTypes` exactly (e.g. `text/plain`, `text/csv`,
+  `text/markdown`, `application/pdf`, docx/xlsx/pptx, `application/msword` for this deployment's
+  actual config) — no more, no less. Upload a `.pdf`/`.csv`/`.md` and ask a question about its
+  contents in the same conversation without touching any other control — expect a grounded answer.
+  Open the "+" tools menu — no File Search toggle appears. Pick an unsupported type (e.g. `.png` via
+  "All files") — expect a toast error and nothing attached. Upload two documents where the second
+  upload fails (e.g. disconnect network mid-upload) — expect a toast error, no partial file left in
+  the composer, and the *first* document to remain searchable (File Search doesn't silently turn
+  off). Tab to the paperclip and press Enter — it opens the picker exactly once, not twice.
+  Unit side: `cd client && npx jest src/components/Chat/Input/Files/__tests__/AttachFileMenu.spec.tsx
+  src/utils/__tests__/validateFiles.spec.ts src/hooks/Files/__tests__/useFileHandling.test.ts`.
+- **Upstream status:** not submitted. The derive-from-`endpointFileConfig` allowlist approach and
+  `mimeTypesToAcceptString` are generally useful beyond this fork and could be proposed upstream, but
+  haven't been.
 - **Merge notes:** This patch depends on the PBI 12626 patch above landing first in the same file
   (`AttachFileMenu.tsx`) to avoid a guaranteed conflict; resolve 12626 first, then re-apply this one.
   Upstream's `AttachFileMenu.tsx` will still have the full dropdown (Upload Image/OCR/code/File
@@ -157,7 +206,66 @@ build/deploy path before taking on any source risk.
   removal in `ToolsDropdown.tsx`, unless upstream has shipped an equivalent one-click file-search
   entry point, in which case this patch (and possibly the SharePoint/OCR/code-upload removal
   specifically) should be reconsidered — this fork traded those modes away deliberately for
-  simplicity, which upstream may not have.
+  simplicity, which upstream may not have. If upstream ever ships its own File-Search-specific
+  document allowlist, compare it against this derive-from-`endpointFileConfig` approach before
+  assuming a conflict means "keep ours."
+
+### First-run guided tour, once per browser
+
+- **Work item:** PBI 12633
+- **Added:** 2026-07-30 by Andrea Tiamson
+- **Dependency deviation (read this first):** the PBI names #12626, #12627, and **#12631** as hard
+  prerequisites — "building this before ... land guarantees rework." #12626 and #12627 are the two
+  patches directly above. **#12631 was not available when this was built and was explicitly skipped
+  by request** rather than blocking. This is a known, deliberate risk: if #12631 changes the tour's
+  anchor elements (paperclip, tools menu, new-chat button, or account menu), the steps in
+  `client/src/components/Onboarding/tourSteps.ts` will need updating to match. Whoever picks up
+  #12631 should check this file's anchors against the post-#12631 UI before considering this patch
+  done.
+- **Files touched:** `packages/data-provider/src/config.ts` (one `LocalStorageKeys` member),
+  `client/src/routes/Root.tsx` (one mount line), `client/src/locales/en/translation.json` (new
+  `com_onboarding_tour_*` keys), and everything new under `client/src/components/Onboarding/`:
+  `tourSteps.ts`, `useTourSeen.ts`, `useGuidedTour.ts`, `TourPopover.tsx`, `GuidedTour.tsx`, and
+  `__tests__/GuidedTour.spec.tsx`.
+- **What:** A 4-step tour (document upload, tools/Artifacts, conversations, Settings/My Files) shown
+  once per browser via a new `LocalStorageKeys.GUIDED_TOUR_SEEN` flag, mounted as a sibling of
+  `TermsAndConditionsModal` in `Root.tsx` (structurally mirrors that modal's mount pattern — a
+  boolean-gated component in the same spot — though the ToS modal itself is actually server-side
+  gated, not localStorage; this tour is localStorage-only per the PBI). Each step anchors to a
+  stable, always-in-DOM outer trigger (`#attach-file-menu-button`, `#tools-dropdown-button`,
+  `[data-testid="new-chat-button"]`, `[data-testid="nav-user"]`) via Radix Popper's `virtualRef`
+  anchor mechanism, rather than the deeper nested items (Artifacts toggle, Settings menu item) that
+  don't exist in the DOM until their parent menu is opened — a scope decision confirmed before
+  building, since forcing those menus open programmatically would couple the tour to two unrelated
+  menu systems (Ariakit for the account menu, the tools dropdown's own state). If an anchor is
+  missing at runtime (e.g. RBAC hid that button), the step is skipped automatically instead of
+  showing a popover pointing at nothing; if literally none of the four anchors are ever found, the
+  tour is not marked seen, so it retries next load instead of silently burning its one shot on a
+  broken render. No new dependency — reuses `@radix-ui/react-popover` (already a client dependency)
+  and `framer-motion` (matching the fade/scale timing already used in
+  `TwoFactorAuthentication.tsx`). `Popover.Content` is kept as one persistent node across steps, with
+  only the inner `motion.div` re-keyed per step inside `AnimatePresence` — re-keying `Popover.Content`
+  itself conflicts with `AnimatePresence`'s ref requirements (produced a real React ref warning
+  during development; fixed by not re-mounting the Radix primitive on every step). The tour is
+  mounted in `Root.tsx` only once we're certain the Terms modal won't also be showing (ToS feature
+  disabled, or `termsData` has resolved as already-accepted), rather than merely checking the
+  current `showTerms` boolean, to avoid a race where the tour could flash on before the ToS query
+  resolves.
+- **Why:** New users have no way to discover document upload, tools/Artifacts, conversation
+  management, or Settings except by accident. No `librechat.yaml`/env-var can add a client-side
+  onboarding overlay, so this required new source files.
+- **How to verify:** Clear `localStorage`, reload — the tour appears, pointing at the paperclip, then
+  the "+" tools button, then the new-chat button, then the account-menu button, in that order.
+  Reload again — it does not reappear. Clear `localStorage` again — it reappears. Press Escape at any
+  step — it closes and does not come back on reload. Tab through a step — focus cycles only among
+  that step's Back/Skip/Next buttons, and Escape/Shift+Tab/Tab all work without a mouse. If ToS
+  modal-acceptance is enabled in this environment, confirm the tour never appears until after Terms
+  is accepted, and that dismissing/accepting Terms doesn't also silently dismiss the tour.
+- **Upstream status:** not submitted — fork-only feature, not a candidate for upstreaming.
+- **Merge notes:** Purely additive (new directory, one enum member, one mount line) — should not
+  conflict on an upstream merge. The one thing to re-check after any merge: confirm the four anchor
+  selectors in `tourSteps.ts` still match real elements in whatever `AttachFileMenu.tsx`,
+  `ToolsDropdown.tsx`, `NewChat.tsx`, and `AccountSettings.tsx` look like post-merge.
 
 <!-- new entries go here -->
 

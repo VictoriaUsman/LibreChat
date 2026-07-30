@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { RecoilRoot, useRecoilValue } from 'recoil';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EToolResources } from 'librechat-data-provider';
@@ -48,6 +49,20 @@ const mockUseLocalize = jest.requireMock('~/hooks').useLocalize;
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 const TOOLTIP_TEXT = 'Upload a document (PDF, Word, Excel, PowerPoint, text)';
+
+// Mirrors the shape of a real, admin-configured endpoint allowlist (e.g. librechat.yaml's
+// fileConfig.endpoints.*.supportedMimeTypes) once converted to RegExp — one literal MIME
+// type per entry, not the bundled multi-alias regexes used for LibreChat's built-in defaults.
+const documentEndpointFileConfig = {
+  supportedMimeTypes: [
+    'text/plain',
+    'text/csv',
+    'text/markdown',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+  ].map((type) => new RegExp(type)),
+};
 
 function setupMocks(
   overrides: {
@@ -152,7 +167,7 @@ describe('AttachFileMenu (one-click File Search upload)', () => {
   });
 
   describe('Upload behavior', () => {
-    it('sets the input accept to document types and uploads with EToolResources.file_search on click', () => {
+    it('sets the input accept from endpointFileConfig.supportedMimeTypes and uploads with EToolResources.file_search on click', () => {
       setupMocks();
       const handleFileChange = jest.fn();
       mockUseFileHandlingNoChatContext.mockReturnValue({ handleFileChange });
@@ -160,12 +175,29 @@ describe('AttachFileMenu (one-click File Search upload)', () => {
 
       const originalClick = HTMLInputElement.prototype.click;
       HTMLInputElement.prototype.click = function click() {
-        expect(this.accept).toContain('.pdf');
-        expect(this.accept).toContain('.docx');
-        expect(this.accept).toContain('.xlsx');
-        expect(this.accept).toContain('.pptx');
+        expect(this.accept).toBe(
+          'text/plain,text/csv,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
+        );
         Object.defineProperty(this, 'files', { configurable: true, value: [file] });
         fireEvent.change(this);
+      };
+
+      try {
+        renderMenu({ endpointFileConfig: documentEndpointFileConfig });
+        fireEvent.click(screen.getByRole('button', { name: TOOLTIP_TEXT }));
+      } finally {
+        HTMLInputElement.prototype.click = originalClick;
+      }
+
+      expect(handleFileChange).toHaveBeenCalledWith(expect.any(Object), EToolResources.file_search);
+    });
+
+    it('falls back to an unrestricted accept when endpointFileConfig is not provided', () => {
+      setupMocks();
+      let capturedAccept: string | undefined;
+      const originalClick = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function click() {
+        capturedAccept = this.accept;
       };
 
       try {
@@ -175,7 +207,7 @@ describe('AttachFileMenu (one-click File Search upload)', () => {
         HTMLInputElement.prototype.click = originalClick;
       }
 
-      expect(handleFileChange).toHaveBeenCalledWith(expect.any(Object), EToolResources.file_search);
+      expect(capturedAccept).toBe('');
     });
 
     it('sets ephemeralAgent[file_search] to true on click', () => {
@@ -188,8 +220,15 @@ describe('AttachFileMenu (one-click File Search upload)', () => {
       );
     });
 
-    it('activates on Enter key press', () => {
+    // Uses userEvent (not fireEvent.keyDown) because jsdom's fireEvent.keyDown does not
+    // synthesize the click a real browser fires for a native <button> on Enter/Space — a
+    // fireEvent-based version of this test would pass even if the button had no working
+    // keyboard path at all. There is deliberately no onKeyDown handler on the button: native
+    // <button> activation already covers Enter/Space, and duplicating it there previously
+    // caused the file picker (and the ephemeralAgent update) to fire twice per keypress.
+    it('activates on Enter key press via native button semantics', async () => {
       setupMocks();
+      const user = userEvent.setup();
       const handleFileChange = jest.fn();
       mockUseFileHandlingNoChatContext.mockReturnValue({ handleFileChange });
       const file = new File(['data'], 'report.docx', {
@@ -197,17 +236,23 @@ describe('AttachFileMenu (one-click File Search upload)', () => {
       });
 
       const originalClick = HTMLInputElement.prototype.click;
+      let clickCount = 0;
       HTMLInputElement.prototype.click = function click() {
+        clickCount += 1;
         Object.defineProperty(this, 'files', { configurable: true, value: [file] });
         fireEvent.change(this);
       };
 
       try {
         renderMenu();
-        fireEvent.keyDown(screen.getByRole('button', { name: TOOLTIP_TEXT }), { key: 'Enter' });
+        const button = screen.getByRole('button', { name: TOOLTIP_TEXT });
+        button.focus();
+        await user.keyboard('{Enter}');
       } finally {
         HTMLInputElement.prototype.click = originalClick;
       }
+
+      expect(clickCount).toBe(1);
 
       expect(handleFileChange).toHaveBeenCalledWith(expect.any(Object), EToolResources.file_search);
     });
