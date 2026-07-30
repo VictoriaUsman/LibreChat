@@ -157,7 +157,10 @@ Keep the patch set as small as possible. Add entries below as patches land.
   with `object-contain`, so the displayed size is ~40px — 512px of source is ample even at 3x DPI
   (120px). The file is 30KB vs upstream's 5.8KB, loaded on the login page only.
 - **When a real vector arrives, replace this file.** Nothing else needs to change: same path, same
-  filename, same viewBox. That swap is the entire follow-up.
+  filename, same viewBox. That swap is the entire follow-up, tracked as
+  **ADO WI # 12687** (*Replace the raster ROMChat logo with a true vector master*), which is blocked
+  on the owner supplying a vector master — it cannot be derived from the 512x512 PNG. Closing 12687
+  also means deleting this bullet and the raster-debt warning above it.
 - **How to verify:** Open `/login`. The ROMChat bubble monogram appears above the login card, not
   LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`.
 - **Upstream status:** not submitted — ROMTech-specific, permanent.
