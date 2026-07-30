@@ -339,3 +339,69 @@ fileConfig:
     default: *romtechUploadPolicy
   serverFileSizeLimit: 100
   avatarSizeLimit: 2
+
+# -----------------------------------------------------------------------
+# Read-aloud (text-to-speech) — Azure OpenAI
+# -----------------------------------------------------------------------
+# PBI: Natural Text-to-Speech via Azure OpenAI TTS.
+#
+# Without this block LibreChat's read-aloud button falls back to the browser's
+# Web Speech API, which is the robotic voice users hear today. Configuring
+# `speech.tts.azureOpenAI` moves synthesis to Azure OpenAI, which is covered by
+# the Microsoft BAA and therefore PHI-safe. No non-BAA provider is configured in
+# any environment: OpenAI and ElevenLabs are forbidden here, and LibreChat rejects
+# a second provider at runtime ("Multiple providers are set"), so adding one would
+# mean deleting this block rather than sitting quietly alongside it.
+#
+# Cost: audio output is effectively the whole bill ($12.00/1M audio tokens,
+# GlobalStandard, eastus2; text input rounds to nothing at $0.60/1M). A ~800
+# character reply is roughly a minute of audio ≈ $0.015. Read-aloud is opt-in per
+# message, so 2K-20K plays/month lands at ~$30-$300 — immaterial next to chat
+# spend. Verify actual spend in Azure Cost Management after a week in dev before
+# the Prod pipeline runs.
+#
+# TTS calls go DIRECTLY to Azure OpenAI, not through the LiteLLM Gateway, so this
+# usage will not appear in per-department spend reporting. Known and accepted.
+#
+# All three ${TTS_*} values are injected per environment by libreChat.bicep, so
+# this single shared file stays env-agnostic:
+#   TTS_INSTANCE_NAME   bare Azure OpenAI account name (ais<app><env>);
+#                       LibreChat's genAzureEndpoint appends `.openai.azure.com`
+#                       and the /openai/deployments/<name>/audio/speech path
+#   TTS_DEPLOYMENT_NAME `romtech-tts` (aiFoundry.bicep)
+#   TTS_API_KEY         Key Vault secret ChatGptForEmployees<Env>-TtsApiKey,
+#                       delivered as a Container App secret — never in this file
+#
+# `model` is gpt-4o-mini-tts, the only TTS model our Azure OpenAI resource offers
+# (the older character-billed tts / tts-hd models are not available to deploy).
+# On the deployment-scoped path the deployment already selects the model; this
+# field is required by the config schema and kept accurate for the record.
+#
+# apiVersion 2025-04-01-preview is the version Microsoft documents for
+# /openai/deployments/<name>/audio/speech. There is no dated GA api-version for
+# this endpoint; the GA alternative is the /openai/v1/ path, which LibreChat does
+# not build. Re-check on any LibreChat major version bump.
+#
+# `voices` is the list offered in Settings -> Speech, and its FIRST entry is what
+# every user gets by default (client/src/hooks/Audio/useTTSExternal.ts auto-selects
+# voices[0] when nothing is stored). One voice = one consistent ROMChat voice.
+#
+# ⚠️ Do NOT add `speech.speechTab.textToSpeech.engineTTS` here to switch users off
+# the browser engine. That key exists in the schema but only accepts provider names
+# ('openai' | 'azureOpenAI' | ...), while the client's engine atom accepts only
+# 'browser' | 'external'. Setting it writes an unmatched value: the read-aloud button
+# then renders nothing, and the first time that user opens Settings -> Speech a
+# sanitizing effect rewrites the value to 'browser' AND persists it to localStorage —
+# permanently opting them out of Azure TTS. The engine default is flipped to 'external'
+# in the fork instead (client/src/store/settings.ts; see PATCHES.md in the fork repo).
+# -----------------------------------------------------------------------
+speech:
+  tts:
+    azureOpenAI:
+      instanceName: "${TTS_INSTANCE_NAME}"
+      deploymentName: "${TTS_DEPLOYMENT_NAME}"
+      apiVersion: "2025-04-01-preview"
+      apiKey: "${TTS_API_KEY}"
+      model: "gpt-4o-mini-tts"
+      voices:
+        - "nova"

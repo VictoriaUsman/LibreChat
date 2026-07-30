@@ -33,6 +33,14 @@ param blobContainerName string
 // Static Web App defaultHostname (from staticSite.bicep via main.bicep) — the user
 // Help/FAQ page. Used for the footer link + the account-menu Help & FAQ link below.
 param helpUrl string
+// Read-aloud (text-to-speech) via Azure OpenAI. All three are consumed by the
+// speech.tts.azureOpenAI block in config/librechat.yaml, which references them as
+// ${TTS_*} placeholders — that keeps the single shared librechat.yaml env-agnostic
+// while each Container App points at its own Azure OpenAI account and deployment.
+@secure()
+param ttsApiKey string
+param ttsInstanceName string
+param ttsDeploymentName string
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
@@ -72,6 +80,7 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-client-secret', value: openIdClientSecret }
         { name: 'openid-session-secret', value: openIdSessionSecret }
         { name: 'azure-storage-connection-string', value: storageConnectionString }
+        { name: 'tts-api-key', value: ttsApiKey }
         // ACR admin password (read at deploy time) so the app can pull its image from
         // acrcgfe<env>. Mirrors jobs.bicep: the deploy SP can read a registry's own creds
         // but can't assign an AcrPull role, so we pull with admin creds (WI 12306 hardens).
@@ -139,6 +148,14 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_STORAGE_CONNECTION_STRING', secretRef: 'azure-storage-connection-string' }
             { name: 'AZURE_CONTAINER_NAME', value: blobContainerName }
             { name: 'AZURE_STORAGE_PUBLIC_ACCESS', value: 'false' }
+            // Read-aloud TTS (speech.tts.azureOpenAI in librechat.yaml). The instance
+            // name is the bare Azure OpenAI account name — LibreChat's genAzureEndpoint
+            // appends `.openai.azure.com` and the /openai/deployments/... path itself.
+            // Azure OpenAI TTS is covered by the Microsoft BAA, so it is PHI-safe; no
+            // non-BAA provider (OpenAI, ElevenLabs) is configured in any environment.
+            { name: 'TTS_INSTANCE_NAME', value: ttsInstanceName }
+            { name: 'TTS_DEPLOYMENT_NAME', value: ttsDeploymentName }
+            { name: 'TTS_API_KEY', secretRef: 'tts-api-key' }
           ]
           volumeMounts: [
             {

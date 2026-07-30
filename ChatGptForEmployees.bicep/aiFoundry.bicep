@@ -18,12 +18,25 @@ param fastBackupModelVersion string = '2026-03-17'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 
+// Text-to-speech — backs LibreChat's read-aloud button. The `romtech-tts` deployment
+// name below is what speech.tts.azureOpenAI in config/librechat.yaml resolves to (the
+// app receives it as TTS_DEPLOYMENT_NAME; see libreChat.bicep).
+// gpt-4o-mini-tts is the ONLY TTS model offered in this Azure OpenAI resource — the
+// older character-billed tts / tts-hd models are not available to deploy, so this is
+// settled rather than a preference. Confirm the version against the AI Foundry model
+// catalog before deploying a new environment; a newer revision (2025-12-15) exists.
+// TTS does NOT route through LiteLLM (LibreChat calls Azure OpenAI directly), so this
+// deployment's spend will not appear in per-department reporting — known and accepted.
+param ttsModelName string = 'gpt-4o-mini-tts'
+param ttsModelVersion string = '2025-03-20'
+
 // Capacity values are driven by ternaries in main.bicep — defaults here are never used directly.
 param flagshipCapacity int
 param flagshipBackupCapacity int
 param fastCapacity int
 param fastBackupCapacity int
 param embeddingsCapacity int
+param ttsCapacity int
 
 var accountName = 'ais${toLower(appName)}${toLower(envName)}'
 
@@ -129,6 +142,23 @@ resource embeddingsDeployment 'Microsoft.CognitiveServices/accounts/deployments@
   }
 }
 
+resource ttsDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
+  parent: aiFoundryAccount
+  name: 'romtech-tts'
+  dependsOn: [embeddingsDeployment]
+  sku: {
+    name: 'GlobalStandard'
+    capacity: ttsCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: ttsModelName
+      version: ttsModelVersion
+    }
+  }
+}
+
 resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
   parent: aiFoundryAccount
   name: 'proj-default'
@@ -146,3 +176,9 @@ output apiKey string = aiFoundryAccount.listKeys().key1
 output flagshipDeploymentName string = flagshipDeployment.name
 output fastDeploymentName string = fastDeployment.name
 output embeddingsDeploymentName string = embeddingsDeployment.name
+output ttsDeploymentName string = ttsDeployment.name
+// Bare account name (no scheme, no suffix). LibreChat's genAzureEndpoint appends
+// `.openai.azure.com` when the configured instanceName carries no domain, which is the
+// host Microsoft documents for the deployment-scoped /audio/speech path. The account
+// sets customSubDomainName, so that hostname resolves alongside the services.ai one.
+output accountName string = aiFoundryAccount.name

@@ -52,6 +52,10 @@ param fastModelName string = 'gpt-5-mini'
 param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
+// Read-aloud TTS. gpt-4o-mini-tts is the only TTS model available in our Azure OpenAI
+// resource; see aiFoundry.bicep for the version caveat.
+param ttsModelName string = 'gpt-4o-mini-tts'
+param ttsModelVersion string = '2025-03-20'
 
 // capacity = TPM / 1000 (GlobalStandard). Quota in eastus2 is SHARED across all
 // three envs: gpt-5 / gpt-5-mini / gpt-5.1 each have a 1M-TPM pool (fully consumed);
@@ -69,6 +73,13 @@ var fastBackupCapacity = environmentName == 'Prod' ? 950 : 25
 // raised independently — no deploy-order constraint, unlike the 1M-quota chat models.
 // Prod=500K for launch-day file-upload / RAG-ingestion headroom; dev/test stay 120K.
 var embeddingsCapacity = environmentName == 'Prod' ? 500 : 120
+// gpt-4o-mini-tts sits on its own quota pool, independent of the chat and embeddings
+// models, so there is no deploy-order constraint here either. Read-aloud is opt-in per
+// message and the audio-token volume is tiny next to chat: a ~1-minute reply is ~1.5K
+// audio tokens, so even a heavy 20K-read-alouds/month Prod month averages under 3K
+// tokens/min across a working day. Prod=100K TPM leaves ~35x headroom for bursts;
+// dev/test sit at 25K, matching the nonprod floor used above.
+var ttsCapacity = environmentName == 'Prod' ? 100 : 25
 
 // Backup models — LiteLLM falls back to these on 429 or transient error.
 // Versions verified in AI Foundry model catalog.
@@ -99,6 +110,13 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+// API key for the Azure OpenAI TTS deployment (read-aloud). Sourced from Key Vault in
+// each env's bicepparam and surfaced to LibreChat as TTS_API_KEY — never in source,
+// config, or pipeline logs. Deliberately a Key Vault secret rather than
+// aiFoundry.outputs.apiKey (which liteLlm/ragApi use) so the read-aloud credential can
+// be rotated or repointed at a different resource without touching the chat path.
+@secure()
+param ttsApiKey string
 @secure()
 // Defaulted empty so the deployment doesn't require it when deployJobs=false
 // (the env bicepparam supplies the real Key Vault value only when enabling the job).
@@ -161,6 +179,9 @@ module aiFoundry 'aiFoundry.bicep' = {
     fastBackupModelVersion: fastBackupModelVersion
     fastBackupCapacity: fastBackupCapacity
     embeddingsCapacity: embeddingsCapacity
+    ttsModelName: ttsModelName
+    ttsModelVersion: ttsModelVersion
+    ttsCapacity: ttsCapacity
   }
 }
 
@@ -296,6 +317,9 @@ module libreChat 'libreChat.bicep' = {
     storageConnectionString: storage.outputs.blobConnectionString
     blobContainerName: storage.outputs.blobContainerName
     helpUrl: staticSite.outputs.defaultHostname
+    ttsApiKey: ttsApiKey
+    ttsInstanceName: aiFoundry.outputs.accountName
+    ttsDeploymentName: aiFoundry.outputs.ttsDeploymentName
   }
 }
 

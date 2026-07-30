@@ -32,6 +32,9 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OpenIdSessionSecret')
+// Read-aloud TTS key. Set it to a key from the ais<app><env> Azure OpenAI account
+// (Keys and Endpoint -> KEY1); the deploy fails loudly if the secret is absent.
+param ttsApiKey                = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-TtsApiKey')
 // --- Okta department-sync ACA Job ---
 // The ACR + image build/push + AcrPull/KV-role assignments are now all in-repo
 // (WI 11711); the image ref is derived from the ACR automatically (no jobsImage
