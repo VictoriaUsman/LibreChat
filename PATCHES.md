@@ -73,7 +73,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ### ROMChat branding — static tags in `client/index.html`
 
-- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # TBD)
+- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # 12628)
 - **Added:** 2026-07-30 by Ian Tristan
 - **Files touched:** `client/index.html`
 - **What:** Three static tags in the document head: `<title>` `LibreChat` → `ROMChat`,
@@ -107,7 +107,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ### ROMChat branding — favicons
 
-- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # TBD)
+- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # 12628)
 - **Added:** 2026-07-30 by Ian Tristan
 - **Files touched:** `client/public/assets/favicon-16x16.png`, `client/public/assets/favicon-32x32.png`
 - **What:** Both favicons replaced with the ROMChat mark. Filenames are unchanged, so `index.html`
@@ -142,7 +142,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ### ROMChat branding — login-screen logo
 
-- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # TBD)
+- **Work item:** *Apply ROMChat Branding to the Browser Tab and Login Screen* (ADO WI # 12628)
 - **Added:** 2026-07-30 by Ian Tristan
 - **Files touched:** `client/public/assets/logo.svg`
 - **What:** Replaced LibreChat's logo with the ROMChat bubble monogram. Rendered on the login screen
@@ -167,6 +167,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ### Artifacts control — developer sub-options stripped, core toggle kept (default off)
 
+- **Work item:** *Strip Artifacts Sub-Options, Keep the Core Toggle Off by Default* (ADO WI # 12631)
 - **Added:** 2026-07-30 by Ian Tristan
 - **Files touched:** `client/src/components/Chat/Input/Artifacts.tsx` (badge),
   `client/src/components/Chat/Input/ArtifactsSubMenu.tsx` (Tools-dropdown row),
@@ -214,7 +215,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ### Speech engine default — `browser` → `external` (Azure OpenAI read-aloud)
 
-- **Work item:** *Natural Text-to-Speech via Azure OpenAI TTS (Config + Infra)* (ADO WI # TBD)
+- **Work item:** *Natural Text-to-Speech via Azure OpenAI TTS (Config + Infra)* (ADO WI # 12632)
 - **Added:** 2026-07-30 by Ian Tristan
 - **Files touched:** `client/src/store/settings.ts`,
   `client/src/store/__tests__/settings.spec.tsx` (new)
