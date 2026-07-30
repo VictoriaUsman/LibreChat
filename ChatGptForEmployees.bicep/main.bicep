@@ -53,9 +53,9 @@ param fastModelVersion string = '2025-08-07'
 param embeddingsModelName string = 'text-embedding-3-small'
 param embeddingsModelVersion string = '1'
 // Read-aloud TTS. gpt-4o-mini-tts is the only TTS model available in our Azure OpenAI
-// resource; see aiFoundry.bicep for the version caveat.
+// resource; see aiFoundry.bicep for why this version tracks the AI Foundry default.
 param ttsModelName string = 'gpt-4o-mini-tts'
-param ttsModelVersion string = '2025-03-20'
+param ttsModelVersion string = '2025-12-15'
 
 // capacity = TPM / 1000 (GlobalStandard). Quota in eastus2 is SHARED across all
 // three envs: gpt-5 / gpt-5-mini / gpt-5.1 each have a 1M-TPM pool (fully consumed);
@@ -110,13 +110,6 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
-// API key for the Azure OpenAI TTS deployment (read-aloud). Sourced from Key Vault in
-// each env's bicepparam and surfaced to LibreChat as TTS_API_KEY — never in source,
-// config, or pipeline logs. Deliberately a Key Vault secret rather than
-// aiFoundry.outputs.apiKey (which liteLlm/ragApi use) so the read-aloud credential can
-// be rotated or repointed at a different resource without touching the chat path.
-@secure()
-param ttsApiKey string
 @secure()
 // Defaulted empty so the deployment doesn't require it when deployJobs=false
 // (the env bicepparam supplies the real Key Vault value only when enabling the job).
@@ -317,7 +310,12 @@ module libreChat 'libreChat.bicep' = {
     storageConnectionString: storage.outputs.blobConnectionString
     blobContainerName: storage.outputs.blobContainerName
     helpUrl: staticSite.outputs.defaultHostname
-    ttsApiKey: ttsApiKey
+    // romtech-tts is a deployment on the same Foundry account as the chat and
+    // embeddings deployments, and Azure OpenAI keys are account-scoped rather than
+    // deployment-scoped. A separate Key Vault secret would hold a byte-identical copy
+    // of this key, so it buys no isolation and would break read-aloud silently on
+    // rotation. Same source liteLlm and ragApi use.
+    ttsApiKey: aiFoundry.outputs.apiKey
     ttsInstanceName: aiFoundry.outputs.accountName
     ttsDeploymentName: aiFoundry.outputs.ttsDeploymentName
   }

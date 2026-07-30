@@ -23,12 +23,16 @@ param embeddingsModelVersion string = '1'
 // app receives it as TTS_DEPLOYMENT_NAME; see libreChat.bicep).
 // gpt-4o-mini-tts is the ONLY TTS model offered in this Azure OpenAI resource — the
 // older character-billed tts / tts-hd models are not available to deploy, so this is
-// settled rather than a preference. Confirm the version against the AI Foundry model
-// catalog before deploying a new environment; a newer revision (2025-12-15) exists.
+// settled rather than a preference.
+// Version matches the manually validated deployment. Like the five deployments above,
+// this one omits versionUpgradeOption and so inherits ARM's default of
+// OnceNewDefaultVersionAvailable — pinning an older revision here would fight the
+// auto-upgrade on every redeploy. Re-check this against the AI Foundry catalog when
+// Azure promotes a new default.
 // TTS does NOT route through LiteLLM (LibreChat calls Azure OpenAI directly), so this
 // deployment's spend will not appear in per-department reporting — known and accepted.
 param ttsModelName string = 'gpt-4o-mini-tts'
-param ttsModelVersion string = '2025-03-20'
+param ttsModelVersion string = '2025-12-15'
 
 // Capacity values are driven by ternaries in main.bicep — defaults here are never used directly.
 param flagshipCapacity int

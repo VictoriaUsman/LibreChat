@@ -369,8 +369,10 @@ fileConfig:
 #                       LibreChat's genAzureEndpoint appends `.openai.azure.com`
 #                       and the /openai/deployments/<name>/audio/speech path
 #   TTS_DEPLOYMENT_NAME `romtech-tts` (aiFoundry.bicep)
-#   TTS_API_KEY         Key Vault secret ChatGptForEmployees<Env>-TtsApiKey,
-#                       delivered as a Container App secret — never in this file
+#   TTS_API_KEY         the shared Foundry account key (aiFoundry.outputs.apiKey),
+#                       delivered as a Container App secret — never in this file.
+#                       Azure OpenAI keys are account-scoped, not deployment-scoped,
+#                       so a separate secret would just duplicate this one.
 #
 # `model` is gpt-4o-mini-tts, the only TTS model our Azure OpenAI resource offers
 # (the older character-billed tts / tts-hd models are not available to deploy).

@@ -7,7 +7,7 @@
 | romtech-standard | gpt-4o | GlobalStandard | 10K TPM | 20K TPM | 50K TPM |
 | romtech-fast | gpt-4o-mini | GlobalStandard | 20K TPM | 40K TPM | 100K TPM |
 | romtech-embeddings | text-embedding-3-small | GlobalStandard | 20K TPM | 20K TPM | 50K TPM |
-| romtech-tts | gpt-4o-mini-tts (2025-03-20) | GlobalStandard | 25K TPM | 25K TPM | 100K TPM |
+| romtech-tts | gpt-4o-mini-tts (2025-12-15) | GlobalStandard | 25K TPM | 25K TPM | 100K TPM |
 
 > **TPM = Tokens Per Minute.** Determines how many concurrent requests the service can handle.
 >
