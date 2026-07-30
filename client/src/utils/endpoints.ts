@@ -11,6 +11,7 @@ import {
 } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { LocalizeFunction, IconsRecord } from '~/common';
+import { normalizeArtifactsMode } from './artifactMode';
 import { getTimestampedValue } from './timestamps';
 
 /**
@@ -244,7 +245,14 @@ export function applyModelSpecEphemeralAgent({
       const raw = getTimestampedValue(`${storagePrefix}${key}`);
       if (raw !== null) {
         try {
-          agent[toolKey] = JSON.parse(raw) as never;
+          const parsed = JSON.parse(raw);
+          /* Stale `shadcnui`/`custom` values persist in localStorage from before the
+           * Artifacts sub-options were removed. This restore path has to fold them the
+           * same way BadgeRowContext does, or navigating into an existing conversation
+           * reintroduces the badge-on-but-nothing-renders state. */
+          agent[toolKey] = (
+            toolKey === 'artifacts' ? normalizeArtifactsMode(parsed) : parsed
+          ) as never;
         } catch {
           // ignore parse errors
         }

@@ -8,6 +8,7 @@ import {
   useGetAgentsConfig,
   useToolToggle,
 } from '~/hooks';
+import { normalizeArtifactsMode } from '~/utils/artifactMode';
 import { getTimestampedValue } from '~/utils/timestamps';
 import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
@@ -135,7 +136,9 @@ export default function BadgeRowProvider({
 
       if (artifactsToggleValue !== null) {
         try {
-          initialValues[AgentCapabilities.artifacts] = JSON.parse(artifactsToggleValue);
+          initialValues[AgentCapabilities.artifacts] = normalizeArtifactsMode(
+            JSON.parse(artifactsToggleValue),
+          );
         } catch (e) {
           console.error('Failed to parse artifacts toggle value:', e);
         }

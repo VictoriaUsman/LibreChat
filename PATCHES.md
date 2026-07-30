@@ -175,7 +175,11 @@ Keep the patch set as small as possible. Add entries below as patches land.
 - **Files touched:** `client/src/components/Chat/Input/Artifacts.tsx` (badge),
   `client/src/components/Chat/Input/ArtifactsSubMenu.tsx` (Tools-dropdown row),
   `client/src/components/Chat/Input/ToolsDropdown.tsx` (handlers + props),
-  `client/src/components/Chat/Input/__tests__/Artifacts.spec.tsx` (new).
+  `client/src/components/Chat/Input/__tests__/Artifacts.spec.tsx` (new),
+  `client/src/utils/artifactMode.ts` (new, stale-value migration),
+  `client/src/utils/__tests__/artifactMode.spec.ts` (new),
+  `client/src/Providers/BadgeRowContext.tsx` (restore path),
+  `client/src/utils/endpoints.ts` (restore path).
 - **What:** Removed the two developer-oriented Artifacts sub-options — "Include shadcn/ui"
   (`ArtifactModes.SHADCNUI`) and "Custom Prompt Mode" (`ArtifactModes.CUSTOM`) — from both places the
   Artifacts control appears: the badge above the composer and the "Artifacts" row inside the Tools
@@ -199,6 +203,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
   members with their server-side prompt branches, so agents and conversations already persisted with
   those modes keep working. This patch narrows the *chat* UI only — nothing in
   `client/src/components/Artifacts/*` (the render path) was touched.
+- **Stale-value migration (review finding F8).** Removing the sub-options stranded anyone who had
+  already picked one: `shadcnui`/`custom` persist in localStorage under
+  `LAST_ARTIFACTS_TOGGLE_<convo>`, and restoring one verbatim leaves the badge reading *on* while
+  nothing renders — `useToolToggle` counts any non-empty string as enabled
+  (`useToolToggle.ts:62-67`), while `generateArtifactsPrompt` returns null for `CUSTOM`, so no
+  artifact instructions are ever appended. With the sub-menu gone there is no way to clear it; it
+  self-heals only if the user happens to toggle off and back on. `normalizeArtifactsMode`
+  (`client/src/utils/artifactMode.ts`) folds both stale values to `DEFAULT`, and is applied at **both**
+  restore paths: `BadgeRowContext.tsx:136` (badge row init) and `endpoints.ts:243` (the
+  `applyModelSpecEphemeralAgent` override layer for existing conversations). Fixing only the first
+  leaves the bug reachable by navigating into an existing conversation. `''` (off) and the boolean
+  shape used by the other toggles pass through untouched, so this cannot switch Artifacts *on* for
+  anyone.
 - **Known gap — deliberately out of scope:** the Agent Builder panel
   (`client/src/components/SidePanel/Agents/Artifacts.tsx:63,71`) still offers both options, including
   the `CUSTOM` trap. It is a builder-only surface today; strip it there too if agent creation is ever
