@@ -212,6 +212,64 @@ Keep the patch set as small as possible. Add entries below as patches land.
   submenu left to anchor) and gained `role="menuitemcheckbox"` + `aria-checked` on the row, so
   conflicts there need re-applying by hand.
 
+### Speech engine default — `browser` → `external` (Azure OpenAI read-aloud)
+
+- **Work item:** *Natural Text-to-Speech via Azure OpenAI TTS (Config + Infra)* (ADO WI # TBD)
+- **Added:** 2026-07-30 by Ian Tristan
+- **Files touched:** `client/src/store/settings.ts`,
+  `client/src/store/__tests__/settings.spec.tsx` (new)
+- **What:** One line. The `engineTTS` atom's default changes from `'browser'` to `'external'`
+  (`settings.ts:67`), so read-aloud synthesizes through the server-configured TTS provider —
+  `speech.tts.azureOpenAI` in the deployment's `librechat.yaml` (separate repo), pointed at the
+  `romtech-tts` / `gpt-4o-mini-tts` deployment — instead of the browser's Web Speech API. Azure
+  OpenAI TTS is covered by the Microsoft BAA, so it is PHI-safe; OpenAI and ElevenLabs are not and
+  are configured in no environment.
+- **Why:** The robotic voice users complain about *is* `'browser'` — Web Speech API synthesis. The
+  Azure deployment and the `librechat.yaml` block change nothing anyone hears until this default
+  flips, and **no server config can flip it.** There is a config key that looks like it should
+  (`speech.speechTab.textToSpeech.engineTTS`, plumbed through `getCustomConfigSpeech.js` →
+  `useSpeechSettingsInit.ts`, which does set the atom and does respect existing localStorage), but
+  its zod enum only accepts *provider* names — `'openai' | 'azureOpenAI' | 'elevenlabs' | 'localai'`
+  (`packages/data-provider/src/config.ts:815`) — while the client atom accepts only
+  `'browser' | 'external'` (`TTSEndpoints`, `client/src/common/types.ts:40-43`). Setting it writes an
+  unmatched value, `MessageAudio.tsx:16` resolves `TTSComponents[engineTTS]` to `undefined`, and the
+  read-aloud button renders nothing — and worse, the sanitizing effect at
+  `Speech.tsx:142-147` rewrites the value to `'browser'` *and persists it* the first time that user
+  opens Settings → Speech, permanently opting them out. So the upstream config surface for this is
+  broken, not merely absent, and the one-line default is the correct lever.
+- **Why the default reaches everyone without asking employees to change a setting**
+  (verified in `client/src/store/utils.ts:4-31`): `atomWithLocalStorage` persists only inside
+  `onSet` — i.e. only when a user actively changes the setting. On startup it applies a stored value
+  *only if one exists*. Every user who has never opened Settings → Speech has no stored `engineTTS`
+  and picks up the new default on next load; anyone who deliberately chose `browser` keeps it, which
+  is the behavior we want. Locked by the new spec (all three cases: default, stored value wins, and
+  "not written until changed"), rather than left implicit.
+- **No voice needs picking, either:** `useTTSExternal.ts:45-57` auto-selects `voices[0]` from the
+  server's list when nothing is stored, and the server-side `getVoice()`
+  (`api/server/services/Files/Audio/TTSService.js:71-78`) falls back to a configured voice if the
+  request carries none. `voices` is `["nova"]`, so a clean profile gets nova with no Settings visit.
+- **Failure behavior is upstream's and is already graceful** — no patch needed: a TTS error surfaces
+  as the `com_nav_audio_process_error` toast from `useTextToSpeechExternal.ts`'s `onError`, and the
+  chat view is unaffected. An invalid/missing key is an Azure 401 down that same path.
+- **How to verify:** In a **clean browser profile** (or with `engineTTS` absent from localStorage),
+  open a conversation and click read-aloud on an assistant message. You should hear the Azure nova
+  voice, not the OS voice, having visited no settings page. DevTools → Network shows
+  `GET /api/files/speech/tts/voices` returning `["nova"]` and `POST /api/files/speech/tts/manual`
+  returning `audio/mpeg`; Settings → Speech → Engine reads "External". Then set Engine to "Browser"
+  by hand, reload, and confirm it stays
+  Browser — the stored value still wins. `localStorage.removeItem('engineTTS')` + reload returns to
+  the Azure voice. Unit side: `cd client && npx jest src/store/__tests__/settings.spec.tsx`.
+- **Upstream status:** not submitted. Upstream's `'browser'` default is defensible for them (it is
+  the only engine that works with no server config), so this is a deployment choice, not a bug fix —
+  expect to re-apply it on every merge.
+- **Merge notes:** A one-token change on a line upstream rarely touches; if it conflicts, keep
+  `'external'`. **The one thing that would obsolete this patch:** upstream widening
+  `speechTab.textToSpeech.engineTTS` to accept `'browser' | 'external'` (or otherwise letting server
+  config set the engine). If that lands, **drop this patch** and set the engine in `librechat.yaml`
+  instead — re-check `config.ts`'s `speechTab` schema against `TTSEndpoints` at each merge. Also
+  re-check `useSpeechSettingsInit.ts`: it only applies server defaults when the localStorage key is
+  absent, and this patch depends on that ordering staying intact.
+
 <!-- new entries go here -->
 
 ---
