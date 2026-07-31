@@ -26,6 +26,11 @@ param liteLlmVirtualKey        = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param openIdClientId           = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdClientId')
 param openIdClientSecret       = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdClientSecret')
 param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OpenIdSessionSecret')
+// ⚠️ Read-aloud TTS needs no key here — it reuses the shared Foundry account key via
+// aiFoundry.outputs.apiKey (see main.bicep). The cost gate still applies: do NOT run the
+// Prod pipeline with speech.tts enabled until a week of real dev audio-output spend has
+// been checked in Azure Cost Management against the ~$0.015-per-response estimate
+// recorded in config/librechat.yaml's speech block.
 
 // Okta department-sync ACA Job — enabled for Prod. Deploys only when the Prod
 // pipeline runs (i.e. when we promote test -> prod). See main.dev.bicepparam for notes.
