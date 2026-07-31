@@ -272,6 +272,12 @@ export const validateFiles = ({
       fileList[i] = newFile;
     }
 
+    // Note: file_search intentionally has no dedicated branch here — it uses the
+    // endpoint's own `supportedMimeTypes` (the same admin-configured allowlist every
+    // other upload on this endpoint is checked against), so client validation can
+    // never diverge from what the server actually accepts. This assumes the endpoint's
+    // configured supportedMimeTypes excludes non-document types (images/video/audio);
+    // see the "MUST be scoped" comment on fileConfig.endpoints in librechat.yaml.
     let mimeTypesToCheck = supportedMimeTypes;
     if (toolResource === EToolResources.context) {
       mimeTypesToCheck = [
@@ -316,6 +322,31 @@ export const validateFiles = ({
   }
 
   return true;
+};
+
+const literalMimeTypePattern = /^[\w.+-]+\/[\w.+-]+$/;
+
+/**
+ * Best-effort conversion of a `supportedMimeTypes` regex list back into a literal,
+ * comma-separated string for an `<input accept>` attribute. Only regexes that reduce to
+ * a single literal "type/subtype" (as produced for admin-configured, one-type-per-entry
+ * `librechat.yaml` lists) are included; bundled alternation regexes (e.g. the built-in
+ * defaults covering many legacy MIME aliases at once) don't cleanly reduce to one literal
+ * type and are skipped here. This only narrows the OS picker's hint — `validateFiles` is
+ * the real enforcement and checks the full regex list regardless of what this omits.
+ */
+export const mimeTypesToAcceptString = (mimeTypes?: RegExp[]): string => {
+  if (!mimeTypes || mimeTypes.length === 0) {
+    return '';
+  }
+  return (
+    mimeTypes
+      // `.source` always renders "/" as "\/" (regardless of how the RegExp was
+      // constructed), so undo that before checking for a plain "type/subtype" literal.
+      .map((regex) => regex.source.replace(/\\\//g, '/'))
+      .filter((source) => literalMimeTypePattern.test(source))
+      .join(',')
+  );
 };
 
 export function sortPagesByRelevance(

@@ -18,8 +18,17 @@ trigger:
   # Doc-only commits (PATCHES.md, READMEs, any *.md) don't change the image, so they must
   # NOT trigger a full ~10-min build. Any non-.md change (source, Dockerfile, deps) still
   # builds: ADO fires the trigger when a commit touches at least one non-excluded path.
+  #
+  # BOTH patterns are required. `**/*.md` matches only .md files at least one directory
+  # deep — it does NOT match root-level files, so `*.md` covers PATCHES.md,
+  # ROMCHAT_DEV_GUIDE.md, README.md, etc. Verified the hard way on 2026-07-29: a push of
+  # two root-level .md files triggered a full build when only `**/*.md` was listed.
+  #
+  # Belt and braces: `[skip ci]` in a commit message suppresses the trigger regardless of
+  # path filters. Use it for any push that can't affect the image.
   paths:
     exclude:
+      - '*.md'
       - '**/*.md'
 
 pool:

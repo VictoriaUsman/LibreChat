@@ -20,6 +20,7 @@ import {
 import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
 import { UnifiedSidebar } from '~/components/UnifiedSidebar';
 import { TermsAndConditionsModal } from '~/components/ui';
+import GuidedTour from '~/components/Onboarding/GuidedTour';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
 
@@ -98,6 +99,8 @@ export default function Root() {
               modalContent={config.interface.termsOfService.modalContent}
             />
           )}
+          {(config?.interface?.termsOfService?.modalAcceptance !== true ||
+            termsData?.termsAccepted === true) && <GuidedTour />}
         </AssistantsMapContext.Provider>
       </FileMapContext.Provider>
     </SetConvoProvider>
