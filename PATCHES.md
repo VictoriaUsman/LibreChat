@@ -148,25 +148,31 @@ Keep the patch set as small as possible. Add entries below as patches land.
 - **What:** Replaced LibreChat's logo with the ROMChat bubble monogram. Rendered on the login screen
   at `AuthLayout.tsx:65`. Upstream's file is `viewBox="0 0 512 512"`, and the ROMChat master is
   512x512, so the replacement is a drop-in with no layout change.
-- **⚠️ This is a raster embedded in an SVG wrapper, not a true vector.** The approved mark was only
-  ever supplied as a 512x512 PNG; no vector master exists yet. Rather than hand-trace the "RC"
-  letterforms — which would approximate the brand typography and risk distorting it — the PNG is
-  embedded verbatim as a base64 data URI inside an SVG with the correct viewBox. The embedded bytes
-  are identical to the master (sha256-verified), so there is no recompression loss.
-- **Why this is acceptable here:** `AuthLayout.tsx:65` renders the logo inside `h-10` (40px tall)
-  with `object-contain`, so the displayed size is ~40px — 512px of source is ample even at 3x DPI
-  (120px). The file is 30KB vs upstream's 5.8KB, loaded on the login page only.
-- **When a real vector arrives, replace this file.** Nothing else needs to change: same path, same
-  filename, same viewBox. That swap is the entire follow-up, tracked as
-  **ADO WI # 12687** (*Replace the raster ROMChat logo with a true vector master*), which is blocked
-  on the owner supplying a vector master — it cannot be derived from the 512x512 PNG. Closing 12687
-  also means deleting this bullet and the raster-debt warning above it.
+- **True vector, 737 bytes.** Four `<path>` elements — rounded-square container, speech bubble with
+  tail, and the `R`/`C` glyphs (the `R` uses `fill-rule="evenodd"` for its counter). No embedded
+  raster, no base64. Two colours: `#1F6FEB` (brand blue) and `#fff`. Carries `role="img"`,
+  `aria-label="ROMChat"` and a `<title>`, so the login screen announces the mark to screen readers.
+- **⚠️ Reconstructed geometry, not the brand's vector master (ADO WI # 12687).** The first cut of
+  this patch shipped the approved 512x512 PNG as a base64 data URI because no vector master existed.
+  No master was ever supplied; instead, on 2026-08-01 the reviewer approved rebuilding the mark as
+  vector geometry. The container, bubble and tail are exact primitives and match the raster closely.
+  **The `R` and `C` are geometric constructions — stems, arcs and an `evenodd` counter — not the
+  original typeface.** A real font's letterforms carry optical corrections and specific terminals
+  that this does not reproduce, so the monogram is a close likeness rather than the authored mark.
+  737 bytes against the 30KB raster, and smaller than upstream's own 5.8KB logo.
+- **What would retire this caveat:** the actual source file the PNG was exported from (`.ai`, `.svg`,
+  `.eps`, `.pdf`, Figma), or the typeface name used for the "RC" so the glyphs can be set rather than
+  approximated. Either replaces paths 3 and 4 and lets this bullet be deleted. Until then, do not
+  reuse this file as a brand asset outside the login screen — at 40px the difference is invisible,
+  on a business card it would not be.
 - **How to verify:** Open `/login`. The ROMChat bubble monogram appears above the login card, not
-  LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`.
+  LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`. Zoom to 300% or use
+  a 2x/3x DPI display — edges stay crisp, which the raster version could not do.
 - **Upstream status:** not submitted — ROMTech-specific, permanent.
 - **Merge notes:** Upstream rarely touches this file, but if it does, resolution is
-  `git checkout --ours` — their logo is never what we want. Do not "fix" the embedded data URI by
-  converting it to `<path>` data unless you have the genuine vector artwork; a trace is not the mark.
+  `git checkout --ours` — their logo is never what we want. Never regenerate this file by tracing a
+  raster export of the mark; the paths here come from the supplied vector master, and a trace is not
+  the mark.
 
 ### Artifacts control — developer sub-options stripped, core toggle kept (default off)
 
