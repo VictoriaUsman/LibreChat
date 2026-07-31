@@ -251,59 +251,126 @@ build/deploy path before taking on any source risk.
 ### First-run guided tour, once per browser
 
 - **Work item:** PBI 12633
-- **Added:** 2026-07-30 by Andrea Tiamson
+- **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-08-01 (dev-testing follow-ups, `ChatGptForEmployees.docs/local/Launch_Feedback_2026-07-31.md`)
 - **Dependency deviation (read this first):** the PBI names #12626, #12627, and **#12631** as hard
   prerequisites — "building this before ... land guarantees rework." #12626 and #12627 are the two
-  patches directly above. **#12631 was not available when this was built and was explicitly skipped
-  by request** rather than blocking. This is a known, deliberate risk: if #12631 changes the tour's
-  anchor elements (paperclip, tools menu, new-chat button, or account menu), the steps in
+  patches above. **#12631 was not available when this was built and was explicitly skipped by
+  request** rather than blocking. This is a known, deliberate risk: if #12631 changes the tour's
+  anchor elements (paperclip, tools menu, sidebar rail, or account menu), the steps in
   `client/src/components/Onboarding/tourSteps.ts` will need updating to match. Whoever picks up
   #12631 should check this file's anchors against the post-#12631 UI before considering this patch
   done.
 - **Files touched:** `packages/data-provider/src/config.ts` (one `LocalStorageKeys` member),
   `client/src/routes/Root.tsx` (one mount line), `client/src/locales/en/translation.json` (new
-  `com_onboarding_tour_*` keys), and everything new under `client/src/components/Onboarding/`:
+  `com_onboarding_tour_*` keys), `client/src/components/UnifiedSidebar/ExpandedPanel.tsx` (one new
+  `data-testid` per rail icon), and everything new under `client/src/components/Onboarding/`:
   `tourSteps.ts`, `useTourSeen.ts`, `useGuidedTour.ts`, `TourPopover.tsx`, `GuidedTour.tsx`, and
   `__tests__/GuidedTour.spec.tsx`.
-- **What:** A 4-step tour (document upload, tools/Artifacts, conversations, Settings/My Files) shown
-  once per browser via a new `LocalStorageKeys.GUIDED_TOUR_SEEN` flag, mounted as a sibling of
+- **What:** A 4-step tour (document upload, Artifacts, sidebar rail, Settings/My Files) shown once
+  per browser via a new `LocalStorageKeys.GUIDED_TOUR_SEEN` flag, mounted as a sibling of
   `TermsAndConditionsModal` in `Root.tsx` (structurally mirrors that modal's mount pattern — a
   boolean-gated component in the same spot — though the ToS modal itself is actually server-side
   gated, not localStorage; this tour is localStorage-only per the PBI). Each step anchors to a
-  stable, always-in-DOM outer trigger (`#attach-file-menu-button`, `#tools-dropdown-button`,
-  `[data-testid="new-chat-button"]`, `[data-testid="nav-user"]`) via Radix Popper's `virtualRef`
-  anchor mechanism, rather than the deeper nested items (Artifacts toggle, Settings menu item) that
-  don't exist in the DOM until their parent menu is opened — a scope decision confirmed before
-  building, since forcing those menus open programmatically would couple the tour to two unrelated
-  menu systems (Ariakit for the account menu, the tools dropdown's own state). If an anchor is
+  stable, always-in-DOM outer trigger via Radix Popper's `virtualRef` anchor mechanism, rather than
+  deeper nested items (Settings menu item, individual sidebar icons) that don't exist in the DOM
+  until their parent menu is opened — a scope decision confirmed before building, since forcing
+  those menus open programmatically would couple the tour to unrelated menu systems. If an anchor is
   missing at runtime (e.g. RBAC hid that button), the step is skipped automatically instead of
   showing a popover pointing at nothing; if literally none of the four anchors are ever found, the
   tour is not marked seen, so it retries next load instead of silently burning its one shot on a
   broken render. No new dependency — reuses `@radix-ui/react-popover` (already a client dependency)
   and `framer-motion` (matching the fade/scale timing already used in
-  `TwoFactorAuthentication.tsx`). `Popover.Content` is kept as one persistent node across steps, with
-  only the inner `motion.div` re-keyed per step inside `AnimatePresence` — re-keying `Popover.Content`
-  itself conflicts with `AnimatePresence`'s ref requirements (produced a real React ref warning
-  during development; fixed by not re-mounting the Radix primitive on every step). The tour is
-  mounted in `Root.tsx` only once we're certain the Terms modal won't also be showing (ToS feature
-  disabled, or `termsData` has resolved as already-accepted), rather than merely checking the
-  current `showTerms` boolean, to avoid a race where the tour could flash on before the ToS query
-  resolves.
-- **Why:** New users have no way to discover document upload, tools/Artifacts, conversation
-  management, or Settings except by accident. No `librechat.yaml`/env-var can add a client-side
-  onboarding overlay, so this required new source files.
-- **How to verify:** Clear `localStorage`, reload — the tour appears, pointing at the paperclip, then
-  the "+" tools button, then the new-chat button, then the account-menu button, in that order.
-  Reload again — it does not reappear. Clear `localStorage` again — it reappears. Press Escape at any
-  step — it closes and does not come back on reload. Tab through a step — focus cycles only among
-  that step's Back/Skip/Next buttons, and Escape/Shift+Tab/Tab all work without a mouse. If ToS
-  modal-acceptance is enabled in this environment, confirm the tour never appears until after Terms
-  is accepted, and that dismissing/accepting Terms doesn't also silently dismiss the tour.
+  `TwoFactorAuthentication.tsx`). The tour is mounted in `Root.tsx` only once we're certain the Terms
+  modal won't also be showing (ToS feature disabled, or `termsData` has resolved as already-accepted),
+  rather than merely checking the current `showTerms` boolean, to avoid a race where the tour could
+  flash on before the ToS query resolves.
+  - **Dev-testing follow-ups (2026-08-01):**
+    - **Step 2 copy corrected, not just reworded.** The dropdown this step anchors to
+      (`ToolsDropdown.tsx`, `#tools-dropdown-button`) had its Web Search/Code Interpreter toggles
+      removed entirely by PBI 12627/upstream config, and its File Search toggle was removed by
+      PBI 12627 specifically (the paperclip sets File Search directly now — see that entry above).
+      Given ROMChat's actual `librechat.yaml` (`agents.capabilities: [file_search, artifacts]`,
+      everything else off), that menu offers **Artifacts only** today. The original copy named all
+      three removed/never-present tools; the dev-testing note's own suggested fix (name Artifacts
+      *and* File Search) would have been equally inaccurate, since File Search isn't in this menu
+      either. Rewrote to name only what's actually there (`com_onboarding_tour_step_tools_title`/
+      `_body`), plus a one-line definition of what an Artifact is, since the term is internal
+      jargon.
+    - **Step 3 rebuilt as a single "sidebar" step** covering all four icons in the
+      `ExpandedPanel.tsx` rail (Close Sidebar, New Chat, Chat History, Attach Files) instead of only
+      "New Chat" with vague copy — kept as one step per the decision to avoid a 4→7-step tour.
+      Re-anchored from `[data-testid="new-chat-button"]` to `#close-sidebar-button` (top of the
+      rail, already had both an `id` and a `data-testid`; assumes the sidebar starts expanded, the
+      default state). Two of the four icons (`Chat History`, `Attach Files`) had **no** stable
+      selector at all before this patch — only a localized `aria-label`, which breaks under any
+      non-English locale. Added `data-testid={\`nav-icon-${link.id}\`}` to every rail icon in
+      `NavIconButton` (`ExpandedPanel.tsx`) — not just the two the tour needed, since the whole rail
+      had the same gap and this is cheap, generically useful test/automation infrastructure, not a
+      tour-specific hack.
+    - **Fixed a visible flash on "Next"** (`TourPopover.tsx`). Traced the actual mechanism: contrary
+      to the dev-testing note's literal description, `currentStep` doesn't pass through `null`
+      between two valid steps (`useGuidedTour.ts`'s layout effect sets it directly from step N to
+      step N+1 in one update). The real cause: `Popover.Content` repositions to the new anchor the
+      instant the anchor ref updates, but the outgoing content was still mid-fade-out (300ms) at
+      that moment — so it visually teleported to the new position while still fading, instead of
+      fading out in place. Fixed by making the exit instant (`duration: 0`, no visible fade-out) and
+      only animating the entry, at the already-correct new position — avoids the reposition-while-
+      visible window entirely without restructuring the mount lifecycle. Also added a defensive
+      `lastStepRef` fallback (`displayStep = step ?? lastStepRef.current`) so that if `step` ever is
+      transiently `null` between valid steps via some timing path not covered by the analysis above,
+      the popover keeps rendering the last real step instead of unmounting — belt-and-suspenders,
+      not required by the confirmed mechanism, but cheap insurance. Full "smoothly slide between
+      anchors" treatment (a persistent backdrop, a pointer tail) is out of scope here — tracked in
+      #12746, which this note says is likely the more complete version of the same fix; coordinate
+      before #12746 lands so the two don't fight each other structurally.
+    - **Fixed a critical anchor-detection timing bug** (`useGuidedTour.ts`, discovered during this
+      round of testing, not in the original dev-testing note). The original implementation checked
+      `document.querySelector(anchorSelector)` exactly once, in a `useLayoutEffect` keyed on the
+      current step. On a real page load this is wrong: the sidebar's anchors mount well before the
+      composer's (`#attach-file-menu-button`, `#tools-dropdown-button`) resolve, since the composer
+      waits on conversation/config data the sidebar doesn't need — measured 3-5s apart in practice
+      via a Playwright timing script. The one-shot check ran before the composer anchors existed, so
+      steps 1 and 2 were silently and permanently skipped for essentially every real user on a fresh
+      load; the bug was invisible in manual testing because by the time a developer paused to look,
+      the anchors had already mounted. Fixed by replacing the single check with a retrying
+      `setTimeout` poll (`ANCHOR_RETRY_INTERVAL_MS = 250`, `ANCHOR_RETRY_MAX_ATTEMPTS = 40`, ~10s
+      total) — a step is only treated as genuinely absent (e.g. RBAC-hidden) after exhausting the
+      retry window, not after a single premature check. This also let `GuidedTour.tsx` drop its
+      redundant rAF-based two-frame "ready" delay, since the retry loop itself is now the readiness
+      signal. Verified both via a new unit test (`GuidedTour.spec.tsx`, "retries a not-yet-rendered
+      anchor instead of skipping it immediately" — mounts the anchor via direct DOM mutation
+      mid-test rather than `rerender()`, since inserting a new sibling ahead of `GuidedTour` in an
+      unkeyed children array shifts its position and causes React to unmount+remount it, invalidating
+      a `rerender()`-based version of this test) and live against the running dev server, confirming
+      the tour now starts at step 1 instead of skipping to step 3.
+- **Why:** New users have no way to discover document upload, Artifacts, the sidebar rail, or
+  Settings except by accident. No `librechat.yaml`/env-var can add a client-side onboarding overlay,
+  so this required new source files. The dev-testing follow-ups exist because the first version
+  named features that don't exist in this deployment, described the sidebar too vaguely to be
+  useful, and had a rendering artifact — QA testing this "as a new user would" is exactly the kind
+  of check a tour needs before it reaches real employees.
+- **How to verify:** Clear `localStorage`, reload on a genuinely fresh page load (not a hot-reloaded
+  dev session, which masks the timing bug above) — the tour appears, pointing at the paperclip
+  ("Upload documents"), then the "+" tools button ("Artifacts" — singular, no Web Search/Code
+  Interpreter/File Search mentioned), then the top of the sidebar rail ("Your sidebar", naming all
+  four icons), then the account-menu button ("Settings & files"), in that order. Reload again — it
+  does not reappear. Clear `localStorage` again — it reappears. Click Next repeatedly — no visible
+  flash/jump as the popover moves between anchors. Press Escape at any step — it closes and does not
+  come back on reload. Tab through a step — focus cycles only among that step's Back/Skip/Next
+  buttons. If ToS modal-acceptance is enabled in this environment, confirm the tour never appears
+  until after Terms is accepted.
+- **Not changing (decided, don't re-raise):** tour completion stays in `localStorage` (per browser,
+  per device) — no cross-device/account-linked "seen" state. No "replay tour" affordance — Help &
+  FAQ covers this.
 - **Upstream status:** not submitted — fork-only feature, not a candidate for upstreaming.
-- **Merge notes:** Purely additive (new directory, one enum member, one mount line) — should not
-  conflict on an upstream merge. The one thing to re-check after any merge: confirm the four anchor
-  selectors in `tourSteps.ts` still match real elements in whatever `AttachFileMenu.tsx`,
-  `ToolsDropdown.tsx`, `NewChat.tsx`, and `AccountSettings.tsx` look like post-merge.
+- **Merge notes:** Mostly additive (new directory, one enum member, one mount line, one new
+  `data-testid` prop on an existing sidebar component) — should not conflict on an upstream merge
+  beyond a possible one-line conflict on `NavIconButton`'s `<Button>` props in `ExpandedPanel.tsx`.
+  The main thing to re-check after any merge: confirm the four anchor selectors in `tourSteps.ts`
+  still match real elements in whatever `AttachFileMenu.tsx`, `ToolsDropdown.tsx`,
+  `ExpandedPanel.tsx`, and `AccountSettings.tsx` look like post-merge — this fork's sidebar was
+  already redesigned once (`ExpandedPanel.tsx`, unified icon-strip layout) since this tour was first
+  built, which is exactly the kind of drift these anchors are most exposed to.
 
 <!-- new entries go here -->
 

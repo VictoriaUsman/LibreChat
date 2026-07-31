@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { RecoilRoot } from 'recoil';
 import GuidedTour from '../GuidedTour';
+import { ANCHOR_RETRY_INTERVAL_MS, ANCHOR_RETRY_MAX_ATTEMPTS } from '../useGuidedTour';
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,7 +18,7 @@ function renderTour({ includeToolsAnchor = true }: { includeToolsAnchor?: boolea
         <button id="tools-dropdown-button">tools</button>
       )}
       {/* eslint-disable-next-line i18next/no-literal-string */}
-      <button data-testid="new-chat-button">new chat</button>
+      <button id="close-sidebar-button">close sidebar</button>
       {/* eslint-disable-next-line i18next/no-literal-string */}
       <button data-testid="nav-user">account</button>
       <GuidedTour />
@@ -84,11 +85,11 @@ describe('GuidedTour', () => {
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Artifacts')).toBeInTheDocument());
     expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Your conversations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Your sidebar')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Settings & files')).toBeInTheDocument());
@@ -108,7 +109,7 @@ describe('GuidedTour', () => {
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Artifacts')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Back'));
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
@@ -133,13 +134,66 @@ describe('GuidedTour', () => {
   });
 
   it('skips a step whose anchor element is missing from the DOM', async () => {
-    renderTour({ includeToolsAnchor: false });
-    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+    jest.useFakeTimers();
+    try {
+      renderTour({ includeToolsAnchor: false });
 
-    fireEvent.click(screen.getByText('Next'));
+      // Step 1's anchor already exists, so it resolves on the very first (synchronous) check —
+      // no retry/timer advance needed yet.
+      expect(screen.getByText('Upload documents')).toBeInTheDocument();
 
-    // Step 2's anchor (#tools-dropdown-button) doesn't exist, so it's skipped straight to step 3.
-    await waitFor(() => expect(screen.getByText('Your conversations')).toBeInTheDocument());
-    expect(screen.queryByText('Tools & Artifacts')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText('Next'));
+
+      // Step 2's anchor (#tools-dropdown-button) doesn't exist. Fast-forward through the full
+      // retry window so it's confirmed genuinely absent (not just not-yet-rendered) and
+      // skipped straight to step 3.
+      await act(async () => {
+        jest.advanceTimersByTime((ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS);
+      });
+
+      expect(screen.getByText('Your sidebar')).toBeInTheDocument();
+      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('retries a not-yet-rendered anchor instead of skipping it immediately', async () => {
+    // Simulates a real page load where the anchor mounts slightly after the tour starts
+    // checking for it, rather than being either immediately present or permanently absent.
+    // The anchor is added via direct DOM mutation (not rerender()/new JSX): inserting a new
+    // sibling ahead of GuidedTour in an unkeyed children array shifts its position, which
+    // React's reconciler treats as an unmount+remount of GuidedTour itself — resetting its
+    // internal stepIndex state and invalidating the whole test. Mutating the DOM directly
+    // matches how the real anchor appears in production (document.querySelector doesn't care
+    // how an element got there) without perturbing React's tree at all.
+    jest.useFakeTimers();
+    try {
+      renderTour({ includeToolsAnchor: false });
+
+      expect(screen.getByText('Upload documents')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Next'));
+
+      // Step 2's anchor isn't in the DOM yet — advance through a couple of retries, still
+      // short of the full window, then mount it (as a slow-rendering real page would).
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS * 3);
+      });
+      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+      expect(screen.queryByText('Your sidebar')).not.toBeInTheDocument();
+
+      const toolsButton = document.createElement('button');
+      toolsButton.id = 'tools-dropdown-button';
+      toolsButton.textContent = 'tools';
+      document.body.appendChild(toolsButton);
+
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
+      });
+
+      expect(screen.getByText('Artifacts')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
