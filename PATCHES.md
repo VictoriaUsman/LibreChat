@@ -480,10 +480,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
   endpoints queries resolve, which is network-bound. On a cold load the walk therefore began before
   the composer existed, **skipped the upload step — the whole point of the tour — and a later step
   still marked the tour seen, so it never came back.** It now polls per frame until step 1's anchor is
-  in the DOM, with an 8s backstop. Only step 1 is waited on deliberately: waiting on every anchor
-  would stall the tour for the full timeout whenever a step is legitimately absent (e.g. hidden by
-  permissions). Later steps keep the original skip-if-missing behaviour. Covered by two tests — a
-  late-mounting anchor, and a missing later anchor not delaying startup.
+  in the DOM, and **that flag gates the step walk itself, not merely what renders** —
+  `useGuidedTour(onEnd, enabled)`. This distinction is the whole fix: a first attempt gated only the
+  render, the walk still ran at mount, and the bug survived unchanged. If you ever refactor this,
+  keep the `enabled` gate on the layout effect.
+  Only step 1 is waited on deliberately: waiting on every anchor would stall the tour for the full
+  timeout whenever a step is legitimately absent (e.g. hidden by permissions). Step 1's mount
+  dependencies are a strict superset of step 2's, so waiting on it covers both — incidental, not
+  enforced; see the comment in `GuidedTour.tsx`. Later steps keep the original skip-if-missing
+  behaviour. On the 8s backstop expiring with the anchor still absent the tour **does not start at
+  all**, leaving `seen` unset so it retries next load — starting anyway would skip the upload step and
+  still mark it seen, burning onboarding for a user whose cold load merely ran slow.
+  Covered by three tests — a late-mounting anchor, a missing later anchor not delaying startup, and
+  the pre-existing skip behaviour. Onboarding suite: 11/11 passing.
 - **Dependency deviation (read this first):** the PBI names #12626, #12627, and **#12631** as hard
   prerequisites — "building this before ... land guarantees rework." #12626 and #12627 are the two
   patches directly above. **#12631 was not available when this was built and was explicitly skipped
