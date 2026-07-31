@@ -15,7 +15,15 @@ interface UseGuidedTourResult {
   dismiss: () => void;
 }
 
-export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): UseGuidedTourResult {
+/**
+ * @param enabled Gates the step walk itself, not just what renders. The caller waits for
+ * the first step's anchor to mount before enabling; without this gate the walk would run
+ * at mount, skip past anchors that hadn't painted yet, and park on a later step.
+ */
+export default function useGuidedTour(
+  onEnd: (reason: TourEndReason) => void,
+  enabled = true,
+): UseGuidedTourResult {
   const [stepIndex, setStepIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState<TourStep | null>(null);
   const shownAnyStep = useRef(false);
@@ -25,6 +33,9 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
   // "does the anchor exist" check and the "advance past it" decision never see different,
   // out-of-sync snapshots of state across separate effects.
   useLayoutEffect(() => {
+    if (!enabled) {
+      return;
+    }
     const rawStep = stepIndex < tourSteps.length ? tourSteps[stepIndex] : null;
     if (rawStep == null) {
       return;
@@ -41,7 +52,7 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
       setStepIndex((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex]);
+  }, [stepIndex, enabled]);
 
   const advanceOrEnd = useCallback(
     (reasonIfDone: TourEndReason) => {

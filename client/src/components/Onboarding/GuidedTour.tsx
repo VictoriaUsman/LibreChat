@@ -27,8 +27,17 @@ const GuidedTour = () => {
   //
   // Only step 1 is waited on, deliberately: waiting for *every* anchor would stall the
   // tour for the full timeout whenever a step is legitimately absent (e.g. hidden by
-  // permissions). Later steps keep the existing skip-if-missing behaviour. The timeout
-  // is a backstop so a never-appearing anchor can't block the tour forever.
+  // permissions). Later steps keep the existing skip-if-missing behaviour.
+  //
+  // Why waiting on step 1 alone is sufficient for step 2 — the load-bearing detail:
+  // step 1's anchor (`#attach-file-menu-button`, AttachFileMenu) needs `agentsConfig`
+  // AND `useHasAccess(FILE_SEARCH)` (async roles from AuthContext) AND
+  // `useAgentToolPermissions`; step 2's (`#tools-dropdown-button`, ToolsDropdown) needs
+  // `useAgentCapabilities` (the same `agentsConfig`) and BadgeRowContext, with no roles
+  // query. Step 1's dependencies are a strict superset, so it can never mount before
+  // step 2. ⚠️ That is incidental, not enforced: reordering `tourSteps` or adding an
+  // RBAC gate to the tools dropdown would break the coverage silently. Re-check this if
+  // either changes.
   useEffect(() => {
     if (seen) {
       return;
@@ -41,8 +50,14 @@ const GuidedTour = () => {
     let frame = 0;
     const deadline = Date.now() + ANCHOR_WAIT_TIMEOUT_MS;
     const poll = () => {
-      if (document.querySelector(firstAnchor) != null || Date.now() >= deadline) {
+      if (document.querySelector(firstAnchor) != null) {
         setReady(true);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        // Give up without starting. Starting anyway would skip the upload step and a
+        // later step would still mark the tour seen — permanently burning it for a user
+        // whose cold load merely ran slow. Leaving `seen` unset costs one retry instead.
         return;
       }
       frame = requestAnimationFrame(poll);
@@ -61,8 +76,10 @@ const GuidedTour = () => {
     [markSeen],
   );
 
+  // `ready` gates the walk, not just the render: useGuidedTour's step-walking effect runs
+  // from mount otherwise, and would advance past anchors that haven't painted yet.
   const { currentStep, stepIndex, totalSteps, isFirstStep, isLastStep, next, back, dismiss } =
-    useGuidedTour(handleEnd);
+    useGuidedTour(handleEnd, ready);
 
   if (seen || !ready) {
     return null;
