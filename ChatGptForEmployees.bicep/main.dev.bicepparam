@@ -6,11 +6,16 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-// LibreChat now runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from
-// our ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
-// run the fork's build pipeline, copy the digest it prints, and paste it here. This digest =
-// the ZERO-PATCH v0.8.6 parity build (fork commit 566e20b6 = upstream v0.8.6 release).
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:6c97e7f9f4a6f9ced5511be19c5fcb4c8a412a09f7e6a42928ade66154051d0e'
+// LibreChat runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from our
+// ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
+// run the fork's build pipeline, copy the digest it prints, and paste it here.
+//
+// This digest = the FIRST PATCHED build (fork `main` @ 7e80cac6c, ACR tag 25042, amd64,
+// built 2026-07-31). It carries PBIs 12626/12627/12628/12631/12633 and the `engineTTS`
+// fork patch for 12632 — i.e. the launch UI work, not the zero-patch parity build that
+// preceded it (that was sha256:6c97e7f9…, fork commit 566e20b6 = upstream v0.8.6).
+// Rollback: restore the 6c97e7f9 digest above and redeploy — it is still in the registry.
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:65932ee0fe428d1ac695b6d94dc4228646e5c2b84d42b0a156784ee7f96c7a2f'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
