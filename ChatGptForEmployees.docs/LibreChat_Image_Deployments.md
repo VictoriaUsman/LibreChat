@@ -13,7 +13,7 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:6c97e7f9f4a6f9ced5511be19c5fcb4c8a412a09f7e6a42928ade66154051d0e` | 2026-07-28 | `566e20b6` (= upstream `v0.8.6`) | First fork build. **Zero source patches** — parity build. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:65932ee0fe428d1ac695b6d94dc4228646e5c2b84d42b0a156784ee7f96c7a2f` | 2026-07-31 | `7e80cac6c` | **First patched build** — launch UI work. ACR tag `25042`. |
 | **Test** | `ghcr.io/danny-avila/librechat:v0.8.6` | — | n/a | ⚠️ Still upstream's prebuilt image, by **mutable tag**. Not yet migrated. |
 | **Prod** | `ghcr.io/danny-avila/librechat:v0.8.6` | — | n/a | ⚠️ Still upstream's prebuilt image, by **mutable tag**. Not yet migrated. |
 
@@ -26,6 +26,22 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-07-31 — Dev — `sha256:65932ee0…f96c7a2f`
+
+- **Fork commit:** `7e80cac6c` (fork `main` after PR 11430) · **ACR tag:** `25042` · **arch:** amd64
+- **What's in it:** the first build carrying ROMChat source patches — PBI 12626 (remove "Upload to
+  Provider"), 12627 (paperclip → one-click File Search upload), 12628 (browser-tab + login branding),
+  12631 (Artifacts sub-options stripped), 12633 (first-run guided tour), and the `engineTTS`
+  fork patch that makes 12632's Azure TTS audible.
+- **Paired infra change:** merged separately as PR 11429 (`dev`) — 12629 (`context` capability
+  removed), 12688 (document allowlist reconciled; legacy `.doc` dropped, `.xls` added), 12632's
+  bicep/config half, and the `fileConfig` YAML anchor that closed a **live server-side image-upload
+  hole** on the `agents` and `default` endpoints.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), amd64,
+  tag `25042`.
+- **Rollback:** restore `sha256:6c97e7f9…4051d0e` and redeploy — still in the registry. Note that
+  rolling the image back does **not** roll back the config merged in PR 11429.
 
 ### 2026-07-28 — Dev — `sha256:6c97e7f9…4051d0e`
 
