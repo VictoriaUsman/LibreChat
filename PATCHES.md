@@ -330,7 +330,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 - **Work item:** PBI 12627 (depends on PBI 12626, above — both touch `AttachFileMenu.tsx`)
 - **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-07-31 (code review follow-ups)
-- **Files touched:** `packages/data-provider/src/file-config.ts`, `client/src/utils/files.ts`,
+- **Files touched:** `client/src/utils/files.ts`,
   `client/src/hooks/Files/useFileHandling.ts`,
   `client/src/components/Chat/Input/Files/AttachFileMenu.tsx`,
   `client/src/components/Chat/Input/Files/AttachFileChat.tsx`,
@@ -473,7 +473,17 @@ Keep the patch set as small as possible. Add entries below as patches land.
 ### First-run guided tour, once per browser
 
 - **Work item:** PBI 12633
-- **Added:** 2026-07-30 by Andrea Tiamson
+- **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-07-31 (integration review — anchor timing)
+- **Revision 2026-07-31 — start gating (`GuidedTour.tsx`):** the tour originally started a fixed two
+  `requestAnimationFrame`s after mount. That was not enough. The sidebar anchors (steps 3-4) paint on
+  the first frames, but the composer anchors (steps 1-2) only mount once the startup-config and
+  endpoints queries resolve, which is network-bound. On a cold load the walk therefore began before
+  the composer existed, **skipped the upload step — the whole point of the tour — and a later step
+  still marked the tour seen, so it never came back.** It now polls per frame until step 1's anchor is
+  in the DOM, with an 8s backstop. Only step 1 is waited on deliberately: waiting on every anchor
+  would stall the tour for the full timeout whenever a step is legitimately absent (e.g. hidden by
+  permissions). Later steps keep the original skip-if-missing behaviour. Covered by two tests — a
+  late-mounting anchor, and a missing later anchor not delaying startup.
 - **Dependency deviation (read this first):** the PBI names #12626, #12627, and **#12631** as hard
   prerequisites — "building this before ... land guarantees rework." #12626 and #12627 are the two
   patches directly above. **#12631 was not available when this was built and was explicitly skipped

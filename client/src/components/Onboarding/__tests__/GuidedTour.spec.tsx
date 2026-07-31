@@ -142,4 +142,48 @@ describe('GuidedTour', () => {
     await waitFor(() => expect(screen.getByText('Your conversations')).toBeInTheDocument());
     expect(screen.queryByText('Tools & Artifacts')).not.toBeInTheDocument();
   });
+
+  it('waits for a late-mounting anchor instead of skipping past it', async () => {
+    // The composer anchors mount only after the startup-config/endpoints queries resolve,
+    // so on a cold load they are absent for the first frames. The tour must wait for them
+    // rather than skipping the upload step — which is the whole point of the tour.
+    const { container } = render(
+      <RecoilRoot>
+        {/* eslint-disable-next-line i18next/no-literal-string */}
+        <button data-testid="new-chat-button">new chat</button>
+        {/* eslint-disable-next-line i18next/no-literal-string */}
+        <button data-testid="nav-user">account</button>
+        <GuidedTour />
+      </RecoilRoot>,
+    );
+
+    // Sidebar anchors are present, composer anchors are not — the tour must not start yet.
+    await act(async () => {
+      await sleep(50);
+    });
+    expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your conversations')).not.toBeInTheDocument();
+
+    // Composer paints late.
+    await act(async () => {
+      const paperclip = document.createElement('button');
+      paperclip.id = 'attach-file-menu-button';
+      const tools = document.createElement('button');
+      tools.id = 'tools-dropdown-button';
+      container.append(paperclip, tools);
+      await sleep(50);
+    });
+
+    // Step 1 is now shown rather than having been skipped.
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+  });
+
+  it('still starts promptly when a later step’s anchor is absent', async () => {
+    // Only step 1's anchor is waited on. A missing later anchor must not stall startup
+    // for the full timeout — it is skipped as before.
+    renderTour({ includeToolsAnchor: false });
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+  });
 });

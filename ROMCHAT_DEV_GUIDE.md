@@ -112,7 +112,13 @@ by digest, never by a tag like `:latest`, so a deployment is unambiguous and can
 | Push to a feature branch | **No** |
 | Open / update a PR | **No** *(unless a build-validation policy is enabled on `main`)* |
 | Merge to `main` | **Yes** |
-| Merge a docs-only change (`**/*.md`) to `main` | **No** — excluded, since docs can't change the image |
+| Merge a docs-only change (`*.md`) to `main` | **No** — excluded, since docs can't change the image |
+| Any push whose commit message contains `[skip ci]` | **No** — overrides everything |
+
+> **If you're not certain a change affects the image, put `[skip ci]` in the commit message.** Path
+> filters are easy to get subtly wrong: the exclude list needs **both** `*.md` and `**/*.md`, because
+> `**/*.md` only matches files at least one directory deep and silently misses root-level ones like
+> `PATCHES.md`. `[skip ci]` doesn't depend on getting globs right.
 
 > **Maintainer note:** if you ever want PRs to build before merge, a `pr:` block in
 > `azure-pipelines.yml` **will not work** — Azure Repos silently ignores YAML `pr:` triggers (they're
