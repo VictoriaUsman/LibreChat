@@ -186,4 +186,67 @@ describe('GuidedTour', () => {
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
   });
+
+  it('shows a dimmed backdrop while the tour is open', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+
+    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+  });
+
+  it('announces the popover as a modal dialog to assistive technology', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+
+    const dialog = screen.getByRole('dialog', { name: 'Guided tour' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('keeps the backdrop mounted across a step transition', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Next'));
+
+    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+  });
+
+  it('removes the backdrop completely when dismissed with Escape', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByText('Upload documents')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
+  });
+
+  it('removes the backdrop completely when Skip is clicked', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Skip'));
+
+    await waitFor(() => expect(screen.queryByText('Upload documents')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
+  });
+
+  it('removes the backdrop completely once the tour is finished', async () => {
+    renderTour();
+    await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('Your conversations')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('Settings & files')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Done'));
+
+    await waitFor(() => expect(screen.queryByText('Settings & files')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
+  });
 });

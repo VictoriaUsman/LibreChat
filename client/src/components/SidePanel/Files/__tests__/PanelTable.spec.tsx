@@ -1,8 +1,10 @@
 import React from 'react';
+import { RecoilRoot, useRecoilValue } from 'recoil';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileSources } from 'librechat-data-provider';
 import type { TFile } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
+import { ephemeralAgentByConvoId } from '~/store';
 import DataTable from '../PanelTable';
 import { columns } from '../PanelColumns';
 
@@ -104,8 +106,19 @@ function makeExtendedFile(overrides: Partial<ExtendedFile> = {}): ExtendedFile {
   };
 }
 
-function renderTable(data: TFile[]) {
-  return render(<DataTable columns={columns} data={data} />);
+function EphemeralAgentProbe({ conversationId }: { conversationId: string }) {
+  const ephemeralAgent = useRecoilValue(ephemeralAgentByConvoId(conversationId));
+  return <div data-testid="ephemeral-agent">{JSON.stringify(ephemeralAgent ?? null)}</div>;
+}
+
+function renderTable(data: TFile[], { withProbe = false } = {}) {
+  const conversationId = (mockConversation?.conversationId as string) ?? 'test-convo';
+  return render(
+    <RecoilRoot>
+      <DataTable columns={columns} data={data} />
+      {withProbe && <EphemeralAgentProbe conversationId={conversationId} />}
+    </RecoilRoot>,
+  );
 }
 
 function clickFilenameCell() {
@@ -125,7 +138,7 @@ describe('PanelTable handleFileClick', () => {
     mockShowToast.mockClear();
     mockAddFile.mockClear();
     mockFiles = new Map();
-    mockConversation = { endpoint: 'openAI' };
+    mockConversation = { endpoint: 'openAI', conversationId: 'test-convo' };
     mockRawFileConfig = {
       endpoints: {
         openAI: {
@@ -235,5 +248,36 @@ describe('PanelTable handleFileClick', () => {
     clickFilenameCell();
 
     expect(mockAddFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('enables File Search when attaching a previously uploaded file', () => {
+    const file = makeFile();
+    mockFileMap = { [file.file_id]: file };
+
+    renderTable([file], { withProbe: true });
+    clickFilenameCell();
+
+    expect(mockAddFile).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('ephemeral-agent')).toHaveTextContent(
+      JSON.stringify({ file_search: true }),
+    );
+  });
+
+  it('does not enable File Search when attachment is blocked', () => {
+    const file = makeFile({ file_id: 'new-file', filename: 'new.pdf' });
+    mockFileMap = { [file.file_id]: file };
+
+    mockFiles = new Map(
+      Array.from({ length: 5 }, (_, i) => [
+        `existing-${i}`,
+        makeExtendedFile({ file_id: `existing-${i}` }),
+      ]),
+    );
+
+    renderTable([file], { withProbe: true });
+    clickFilenameCell();
+
+    expect(mockAddFile).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ephemeral-agent')).toHaveTextContent('null');
   });
 });

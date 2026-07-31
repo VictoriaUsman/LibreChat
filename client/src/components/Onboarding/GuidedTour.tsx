@@ -3,6 +3,7 @@ import useTourSeen from './useTourSeen';
 import useGuidedTour from './useGuidedTour';
 import type { TourEndReason } from './useGuidedTour';
 import { tourSteps } from './tourSteps';
+import TourBackdrop from './TourBackdrop';
 import TourPopover from './TourPopover';
 
 /**
@@ -86,16 +87,21 @@ const GuidedTour = () => {
   }
 
   return (
-    <TourPopover
-      step={currentStep}
-      stepIndex={stepIndex}
-      totalSteps={totalSteps}
-      isFirstStep={isFirstStep}
-      isLastStep={isLastStep}
-      onNext={next}
-      onBack={back}
-      onDismiss={dismiss}
-    />
+    <>
+      {/* Mounted here, not inside TourPopover, so it stays up (no dim flicker) across the
+          brief frames where currentStep is null while skipping a missing anchor. */}
+      <TourBackdrop />
+      <TourPopover
+        step={currentStep}
+        stepIndex={stepIndex}
+        totalSteps={totalSteps}
+        isFirstStep={isFirstStep}
+        isLastStep={isLastStep}
+        onNext={next}
+        onBack={back}
+        onDismiss={dismiss}
+      />
+    </>
   );
 };
 
