@@ -85,7 +85,7 @@ describe('GuidedTour', () => {
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
     expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Next'));
@@ -109,7 +109,7 @@ describe('GuidedTour', () => {
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Back'));
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
@@ -152,7 +152,7 @@ describe('GuidedTour', () => {
       });
 
       expect(screen.getByText('Your sidebar')).toBeInTheDocument();
-      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
     } finally {
       jest.useRealTimers();
     }
@@ -179,7 +179,7 @@ describe('GuidedTour', () => {
       await act(async () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS * 3);
       });
-      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
       expect(screen.queryByText('Your sidebar')).not.toBeInTheDocument();
 
       const toolsButton = document.createElement('button');
@@ -191,7 +191,7 @@ describe('GuidedTour', () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
       });
 
-      expect(screen.getByText('Artifacts')).toBeInTheDocument();
+      expect(screen.getByText('Tools')).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
     }
@@ -216,7 +216,7 @@ describe('GuidedTour', () => {
       await sleep(50);
     });
     expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
-    expect(screen.queryByText('Your conversations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your sidebar')).not.toBeInTheDocument();
 
     // Composer paints late.
     await act(async () => {
@@ -263,7 +263,7 @@ describe('GuidedTour', () => {
 
     fireEvent.click(screen.getByText('Next'));
 
-    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
     expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
   });
 
@@ -293,9 +293,9 @@ describe('GuidedTour', () => {
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Tools & Artifacts')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByText('Your conversations')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Your sidebar')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Settings & files')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Done'));
