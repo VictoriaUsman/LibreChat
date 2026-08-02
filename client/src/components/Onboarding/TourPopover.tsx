@@ -92,6 +92,7 @@ const TourPopover = ({
           side={step.placement}
           sideOffset={10}
           align="center"
+          aria-modal="true"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
@@ -99,11 +100,21 @@ const TourPopover = ({
           onInteractOutside={(e) => e.preventDefault()}
           className="z-[9999]"
         >
+          {/* Radix repositions and re-rotates this to keep pointing at the anchor on every
+              side/align it picks (including collision-driven flips at narrow widths), so it
+              doesn't need to be re-derived from `step.placement` by hand. */}
+          <Popover.Arrow
+            width={18}
+            height={9}
+            className="fill-surface-primary stroke-border-medium"
+            strokeWidth={1}
+          />
           <AnimatePresence mode="wait">
             <motion.div
               key={step.id}
               ref={contentRef}
               role="dialog"
+              aria-modal="true"
               aria-label={localize('com_onboarding_tour_label')}
               variants={stepVariants}
               initial="initial"

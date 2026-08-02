@@ -552,6 +552,161 @@ Keep the patch set as small as possible. Add entries below as patches land.
   selectors in `tourSteps.ts` still match real elements in whatever `AttachFileMenu.tsx`,
   `ToolsDropdown.tsx`, `NewChat.tsx`, and `AccountSettings.tsx` look like post-merge.
 
+### File Search toggle restored to tools menu; auto-enabled on every attach path
+
+- **Work item:** PBI 12745
+- **Added:** 2026-08-01 by Andrea Tiamson
+- **Files touched:** `client/src/components/Chat/Input/ToolsDropdown.tsx`,
+  `client/src/components/SidePanel/Files/PanelTable.tsx`,
+  `client/src/hooks/Files/useDragHelpers.ts`
+- **What:** Two independent fixes for the same underlying failure class (a user ends up with File
+  Search silently off and no way back):
+  1. **Re-added the File Search entry to `ToolsDropdown.tsx`** (`VectorIcon`, `useHasAccess(FILE_SEARCH)`,
+     `fileSearchEnabled` from `useAgentCapabilities`, a `handleFileSearchToggle` callback, and a
+     dropdown row with a pin button) — the exact shape PBI 12627 deleted, now sitting next to Skills.
+     `BadgeRowContext.tsx`/`useToolToggle.ts`/`FileSearch.tsx` (the input-row status chip) were never
+     touched by 12627 and needed no changes here; the toggle/pin state they expose was simply
+     unreachable from any UI once the menu row was gone. Restoring the row makes both toggling and
+     pinning reachable again, so the chip in `FileSearch.tsx` (`fileSearchEnabled || isPinned`) can be
+     dismissed and recovered instead of being a one-way door.
+  2. **Attaching an already-uploaded file from the Files side panel now turns File Search on.**
+     `PanelTable.tsx`'s `handleFileClick` calls `addFile({..., attached: true, ...})` but never touched
+     the ephemeral-agent state; it now also calls
+     `setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }))` (same
+     `ephemeralAgentByConvoId` atom family every other toggle/attach path reads and writes,
+     keyed the same way — `conversation?.conversationId ?? Constants.NEW_CONVO`).
+  3. **(Not in the PBI's acceptance criteria, added because it's the same bug class):** drag-and-drop's
+     "Upload for File Search" option in `DragDropModal.tsx` routes through
+     `useDragHelpers.ts`'s `handleOptionSelect`, which had an explicit
+     `toolResource !== EToolResources.file_search` exclusion — comment: *"File search is not
+     automatically enabled to simulate legacy behavior."* That meant picking the option literally
+     labeled "Upload for File Search" did not enable File Search. Removed the exclusion; `file_search`
+     is now enabled the same way `execute_code`/`context` already were on that path.
+- **Why:** File Search's badge (`FileSearch.tsx`) only renders when `fileSearchEnabled || isPinned` —
+  clicking it off makes the badge itself disappear, and pinning was only ever reachable from the
+  tools-menu row PBI 12627 removed. Once both are gone, a user who toggles File Search off has no UI
+  path back to it short of re-uploading a file (which forces it back on via the paperclip, but the
+  paperclip's one-click flow only fires on a *new* upload, not on attaching a file that already
+  exists). The Files-sidebar attach path independently never set `file_search` at all, so attaching
+  a previously uploaded document could leave a conversation with the document attached but not
+  searchable, with no error shown. Same silent-no-op class as PBI 12626, reached through different
+  doors. No `librechat.yaml`/env-var surface governs tools-menu contents or per-attach-path ephemeral
+  state, so this required source changes.
+- **This deliberately reverses part of PBI 12627.** That PBI's acceptance criterion "the File Search
+  toggle no longer appears in the +/tools menu" was reasonable on its own — the paperclip's one-click
+  upload made the menu toggle *redundant for the upload case* — but it missed that the toggle was
+  also the only way to turn File Search back on or pin the badge once it was off, with no other
+  affordance introduced to replace either. Restoring the toggle is an intentional decision recorded
+  here, not unfinished work on #12627; the paperclip still does not require pre-toggling File Search
+  (unaffected by this patch), so #12627's actual goal (one-click upload) stands.
+- **No regression check:** none of the three changes touch file-type validation. `PanelTable.tsx`'s
+  existing `defaultFileConfig.checkType(...)` gate (endpoint `supportedMimeTypes`) runs unchanged
+  before the new `setEphemeralAgent` call is reached; `AttachFileMenu.tsx`'s paperclip flow (already
+  unconditionally setting `file_search: true` on click since the PBI 12627 patch, so it already met
+  this PBI's paperclip acceptance criterion with no changes needed here) and the drag-drop
+  modal's per-endpoint options are both untouched. Images are rejected on every upload path exactly
+  as before.
+- **How to verify:** Open the "+" tools menu — a "File Search" row appears with a checkbox-style
+  toggle and a pin icon; toggling it flips the input-row badge; pinning it keeps the badge visible
+  after toggling off. Upload a document via the paperclip, then use the new tools-menu toggle to turn
+  File Search off, then back on (no re-upload) — ask about the document's contents and confirm a
+  grounded answer. Open the Files side panel, click a previously-uploaded document's filename with
+  File Search off beforehand — the tools-menu toggle (and badge, if pinned) flips on, and asking about
+  that document's contents in the same conversation is grounded in it. Drag a document onto the chat
+  window, choose "Upload for File Search" in the modal — File Search turns on immediately (previously
+  it did not). Attempt to attach/upload a `.png` on each of the three paths — still rejected the same
+  way it was before this patch (paperclip: file-type filter/toast; Files panel: `checkType` toast;
+  drag-drop: image-only branch or rejection), confirming no regression there.
+- **Upstream status:** not submitted — ROMTech-specific product decision (this fork's tools-menu
+  contents and attach-path behavior), reversing another ROMTech-specific patch (#12627). Not a
+  candidate for upstreaming.
+- **Merge notes:** This patch's `ToolsDropdown.tsx` change is layered directly on top of the removal
+  in the PBI 12627 entry above — if upstream's `ToolsDropdown.tsx` diverges further before the next
+  merge, re-apply by re-adding the File Search row (this entry's exact block) rather than assuming
+  the PBI 12627 entry's removal is still verbatim-reversible. `PanelTable.tsx` and `useDragHelpers.ts`
+  are small, additive/removal-only diffs (one new hook call; one deleted `if` condition) and should
+  merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
+  equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
+
+### Guided tour becomes modal — dimmed backdrop, blocked interaction, speech-bubble tail
+
+- **Work item:** PBI 12746 (builds on the "First-run guided tour" patch above, PBI 12633)
+- **Added:** 2026-08-01 by Andrea Tiamson
+- **Files touched:** `client/src/components/Onboarding/TourBackdrop.tsx` (new),
+  `client/src/components/Onboarding/GuidedTour.tsx`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+- **What:** Two fixes to the tour's original non-modal Radix Popover:
+  1. **Dimmed, click-absorbing backdrop.** New `TourBackdrop.tsx` portals a single
+     `fixed inset-0 z-[9998]` dim div (`bg-gray-600/65` / `dark:bg-black/80` — the same tokens
+     `@librechat/client`'s `Dialog.tsx` overlay uses) straight to `document.body`. It is rendered
+     by `GuidedTour.tsx` itself (`ready && !seen`), as a sibling of `TourPopover`, not by
+     `TourPopover` — `TourPopover` unmounts/remounts on the brief frames where `currentStep` goes
+     `null` while `useGuidedTour` skips a step whose anchor is missing, and mounting the backdrop
+     there would flicker it off and back on every such skip. No click handler is needed to
+     "block" anything: the div's z-index puts it above the whole app in the paint order, so the
+     browser's own hit-testing resolves any click inside the viewport to the backdrop, not to
+     whatever app control is under it — including the spotlighted anchor itself, per the decision
+     to block interaction entirely rather than build a click-through cutout. The popover content
+     (`z-[9999]`) stays above the backdrop and remains fully interactive.
+  2. **Speech-bubble tail.** Added `Popover.Arrow` (from `@radix-ui/react-popover`, a sibling of
+     the existing `Popover.Content`) styled `fill-surface-primary stroke-border-medium` to match
+     the bubble's own background/border. Deliberately left to Radix's own positioning rather than
+     derived from `step.placement`: Radix recomputes both the content's side/align *and* the
+     arrow's offset/rotation together whenever its collision detection flips the popover to fit
+     the viewport, so the tail keeps pointing at the true anchor at any width without any
+     width-specific logic here.
+  - **`aria-modal="true"`** added to both `Popover.Content` and the inner `role="dialog"`
+    `motion.div` (kept on both since assistive tech may key off either the Radix-owned outer
+    dialog role or the inner one this component already had). The existing hand-rolled Tab trap
+    (`TourPopover.tsx`'s `handleKeyDown`) was not touched — it already contained keyboard focus;
+    the gap was strictly the mouse/pointer path and the missing modal announcement.
+  - **Not built:** a spotlight cutout around the anchor. Per the PBI's open sub-question, the
+    plain dim was chosen over a cutout that tracks the anchor's box through scroll/resize — the
+    speech-bubble tail already gives the visual connection to the target that a cutout would
+    otherwise provide, at a fraction of the complexity, and the PBI's own guidance was to prefer
+    plain dim unless it tests poorly. Revisit if user feedback says the plain dim doesn't read as
+    clearly as the tail was expected to.
+  - **Not attempted here:** the separate step-transition flash reported as feedback T3 against
+    #12633. Keeping the backdrop mounted across step transitions (rather than remounting per step)
+    removes one possible source of that flash as a side effect of fix #1 above, but this patch
+    does not claim to close T3 — no `#12633`-specific flash reproduction or fix was verified here.
+- **Why:** The tour previously had no overlay at all — `TourPopover.tsx` was a plain non-modal
+  `Popover.Root` with only `onPointerDownOutside`/`onInteractOutside` `preventDefault`s, which stop
+  Radix's own auto-close behavior but never stop a real click from reaching whatever DOM element is
+  under the cursor (Radix's outside-interaction callbacks don't call the clicked element's own
+  handler). A first-time user could click straight through the tour into the live app mid-walk.
+  Separately, the popover floated near its anchor with no visual link to it, so which control a
+  given step described was left to proximity/guesswork. No `librechat.yaml`/env-var surface governs
+  onboarding UI, so this required source changes to fork-only files (not upstream's).
+- **How to verify:** Clear `localStorage`, reload. On step 1: the page behind the tour is visibly
+  dimmed, and clicking any app control behind the dim (e.g. the sidebar, a nav item) does nothing —
+  focus and app state don't change. The popover has a visible triangular tail touching the dimmed
+  page and aimed at the paperclip. Resize the window to a narrow (mobile-width) viewport mid-tour —
+  the tail still visibly touches its anchor (Radix may have flipped the side; the tail follows).
+  Step through all 4 steps (paperclip, tools button, new-chat button, account button) at both a
+  wide and a narrow viewport — the tail points at the correct element every time, and the dim never
+  flickers off/on between steps. Inspect the popover in devtools' accessibility tree: it reports as
+  a dialog with `aria-modal: true`. Tab from the primary button — focus still cycles only within
+  Back/Skip/Next as before (unchanged trap). Press Escape — the tour closes, the dim is completely
+  gone (inspect `document.body` for a stray full-screen div — none should remain), and every app
+  control is immediately clickable. Click Skip — same result. Reload after either — the tour does
+  not reappear; clear `localStorage` — it does. Unit side:
+  `cd client && npx jest src/components/Onboarding/__tests__/GuidedTour.spec.tsx` (17/17, including
+  new backdrop-presence, backdrop-removal, and `aria-modal` assertions). Real-browser/visual checks
+  (dim opacity, tail alignment/rotation at both viewport widths, no residual overlay) were not
+  run against the deployed app as part of this change — do that before sign-off, since Radix's
+  Popper positioning and the arrow's collision-driven rotation aren't meaningfully exercised by
+  jsdom (no real layout/paint), only their DOM structure and ARIA attributes are.
+- **Upstream status:** not submitted — fork-only onboarding feature (same status as the PBI 12633
+  patch it modifies), not a candidate for upstreaming.
+- **Merge notes:** Purely additive/behavioral on top of files that are themselves fork-only
+  (`client/src/components/Onboarding/*` doesn't exist upstream), so this should never conflict with
+  an upstream merge — only re-check it if the PBI 12633 patch's anchor selectors or file layout
+  change first. If `#12633`'s separate step-transition-flash fix (feedback T3) lands and also
+  touches `TourPopover.tsx`/`GuidedTour.tsx`, reconcile rather than assuming a conflict means "keep
+  ours" — the two fixes are explicitly meant to compose (see "Not attempted here" above).
+
 <!-- new entries go here -->
 
 ---
