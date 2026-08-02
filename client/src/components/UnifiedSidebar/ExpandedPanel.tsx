@@ -103,6 +103,7 @@ const NavIconButton = memo(function NavIconButton({
         <Button
           size="icon"
           variant="ghost"
+          data-testid={`nav-icon-${link.id}`}
           aria-label={localize(link.title)}
           aria-pressed={isActive}
           className={cn(
