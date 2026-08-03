@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
+import { useSetRecoilState } from 'recoil';
 import { ArrowUpLeft } from 'lucide-react';
 import {
   Table,
@@ -24,8 +25,10 @@ import {
   type ColumnFiltersState,
 } from '@tanstack/react-table';
 import {
+  Constants,
   megabyte,
   mergeFileConfig,
+  EToolResources,
   checkOpenAIStorage,
   isAssistantsEndpoint,
   getEndpointFileConfig,
@@ -35,6 +38,7 @@ import type { TFile } from 'librechat-data-provider';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import { useFileMapContext, useChatContext } from '~/Providers';
 import { useLocalize, useUpdateFiles } from '~/hooks';
+import { ephemeralAgentByConvoId } from '~/store';
 import { useGetFileConfig } from '~/data-provider';
 
 interface DataTableProps<TData, TValue> {
@@ -91,6 +95,9 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
     select: (data) => mergeFileConfig(data),
   });
   const { addFile } = useUpdateFiles(setFiles);
+  const setEphemeralAgent = useSetRecoilState(
+    ephemeralAgentByConvoId(conversation?.conversationId ?? Constants.NEW_CONVO),
+  );
 
   const handleFileClick = useCallback(
     (file: TFile) => {
@@ -198,8 +205,10 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
         size: fileData.bytes,
         metadata: fileData.metadata,
       });
+
+      setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }));
     },
-    [addFile, files, fileMap, conversation, localize, showToast, fileConfig],
+    [addFile, files, fileMap, conversation, localize, showToast, fileConfig, setEphemeralAgent],
   );
 
   const filenameFilter = table.getColumn('filename')?.getFilterValue() as string;

@@ -148,25 +148,31 @@ Keep the patch set as small as possible. Add entries below as patches land.
 - **What:** Replaced LibreChat's logo with the ROMChat bubble monogram. Rendered on the login screen
   at `AuthLayout.tsx:65`. Upstream's file is `viewBox="0 0 512 512"`, and the ROMChat master is
   512x512, so the replacement is a drop-in with no layout change.
-- **⚠️ This is a raster embedded in an SVG wrapper, not a true vector.** The approved mark was only
-  ever supplied as a 512x512 PNG; no vector master exists yet. Rather than hand-trace the "RC"
-  letterforms — which would approximate the brand typography and risk distorting it — the PNG is
-  embedded verbatim as a base64 data URI inside an SVG with the correct viewBox. The embedded bytes
-  are identical to the master (sha256-verified), so there is no recompression loss.
-- **Why this is acceptable here:** `AuthLayout.tsx:65` renders the logo inside `h-10` (40px tall)
-  with `object-contain`, so the displayed size is ~40px — 512px of source is ample even at 3x DPI
-  (120px). The file is 30KB vs upstream's 5.8KB, loaded on the login page only.
-- **When a real vector arrives, replace this file.** Nothing else needs to change: same path, same
-  filename, same viewBox. That swap is the entire follow-up, tracked as
-  **ADO WI # 12687** (*Replace the raster ROMChat logo with a true vector master*), which is blocked
-  on the owner supplying a vector master — it cannot be derived from the 512x512 PNG. Closing 12687
-  also means deleting this bullet and the raster-debt warning above it.
+- **True vector, 737 bytes.** Four `<path>` elements — rounded-square container, speech bubble with
+  tail, and the `R`/`C` glyphs (the `R` uses `fill-rule="evenodd"` for its counter). No embedded
+  raster, no base64. Two colours: `#1F6FEB` (brand blue) and `#fff`. Carries `role="img"`,
+  `aria-label="ROMChat"` and a `<title>`, so the login screen announces the mark to screen readers.
+- **⚠️ Reconstructed geometry, not the brand's vector master (ADO WI # 12687).** The first cut of
+  this patch shipped the approved 512x512 PNG as a base64 data URI because no vector master existed.
+  No master was ever supplied; instead, on 2026-08-01 the reviewer approved rebuilding the mark as
+  vector geometry. The container, bubble and tail are exact primitives and match the raster closely.
+  **The `R` and `C` are geometric constructions — stems, arcs and an `evenodd` counter — not the
+  original typeface.** A real font's letterforms carry optical corrections and specific terminals
+  that this does not reproduce, so the monogram is a close likeness rather than the authored mark.
+  737 bytes against the 30KB raster, and smaller than upstream's own 5.8KB logo.
+- **What would retire this caveat:** the actual source file the PNG was exported from (`.ai`, `.svg`,
+  `.eps`, `.pdf`, Figma), or the typeface name used for the "RC" so the glyphs can be set rather than
+  approximated. Either replaces paths 3 and 4 and lets this bullet be deleted. Until then, do not
+  reuse this file as a brand asset outside the login screen — at 40px the difference is invisible,
+  on a business card it would not be.
 - **How to verify:** Open `/login`. The ROMChat bubble monogram appears above the login card, not
-  LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`.
+  LibreChat's logo. No 404 for `assets/logo.svg`; it serves as `image/svg+xml`. Zoom to 300% or use
+  a 2x/3x DPI display — edges stay crisp, which the raster version could not do.
 - **Upstream status:** not submitted — ROMTech-specific, permanent.
 - **Merge notes:** Upstream rarely touches this file, but if it does, resolution is
-  `git checkout --ours` — their logo is never what we want. Do not "fix" the embedded data URI by
-  converting it to `<path>` data unless you have the genuine vector artwork; a trace is not the mark.
+  `git checkout --ours` — their logo is never what we want. Never regenerate this file by tracing a
+  raster export of the mark; the paths here come from the supplied vector master, and a trace is not
+  the mark.
 
 ### Artifacts control — developer sub-options stripped, core toggle kept (default off)
 
@@ -473,78 +479,295 @@ Keep the patch set as small as possible. Add entries below as patches land.
 ### First-run guided tour, once per browser
 
 - **Work item:** PBI 12633
-- **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-07-31 (integration review — anchor timing)
-- **Revision 2026-07-31 — start gating (`GuidedTour.tsx`):** the tour originally started a fixed two
-  `requestAnimationFrame`s after mount. That was not enough. The sidebar anchors (steps 3-4) paint on
-  the first frames, but the composer anchors (steps 1-2) only mount once the startup-config and
-  endpoints queries resolve, which is network-bound. On a cold load the walk therefore began before
-  the composer existed, **skipped the upload step — the whole point of the tour — and a later step
-  still marked the tour seen, so it never came back.** It now polls per frame until step 1's anchor is
-  in the DOM, and **that flag gates the step walk itself, not merely what renders** —
-  `useGuidedTour(onEnd, enabled)`. This distinction is the whole fix: a first attempt gated only the
-  render, the walk still ran at mount, and the bug survived unchanged. If you ever refactor this,
-  keep the `enabled` gate on the layout effect.
-  Only step 1 is waited on deliberately: waiting on every anchor would stall the tour for the full
-  timeout whenever a step is legitimately absent (e.g. hidden by permissions). Step 1's mount
-  dependencies are a strict superset of step 2's, so waiting on it covers both — incidental, not
-  enforced; see the comment in `GuidedTour.tsx`. Later steps keep the original skip-if-missing
-  behaviour. On the 8s backstop expiring with the anchor still absent the tour **does not start at
-  all**, leaving `seen` unset so it retries next load — starting anyway would skip the upload step and
-  still mark it seen, burning onboarding for a user whose cold load merely ran slow.
-  Covered by three tests — a late-mounting anchor, a missing later anchor not delaying startup, and
-  the pre-existing skip behaviour. Onboarding suite: 11/11 passing.
+- **Added:** 2026-07-30 by Andrea Tiamson; revised 2026-08-01 (dev-testing follow-ups, `ChatGptForEmployees.docs/local/Launch_Feedback_2026-07-31.md`)
+- **Anchor timing — history worth keeping:** the tour originally started a fixed two
+  `requestAnimationFrame`s after mount, which was not enough. The sidebar anchors paint on the first
+  frames while the composer anchors mount only once the startup-config/endpoints queries resolve. On
+  a cold load the walk therefore began before the composer existed, **skipped the upload step — the
+  whole point of the tour — and a later step still marked the tour seen, so it never came back.**
+  Two fixes were attempted before this one: the first gated only what *rendered* while the walk still
+  ran at mount, so the bug survived unchanged while looking fixed; the second gated the walk but
+  waited on step 1's anchor alone, leaving later steps exposed to the same race. Both are superseded
+  by the current design — `useGuidedTour` retries **each** step's anchor lookup
+  (`ANCHOR_RETRY_INTERVAL_MS` × `ANCHOR_RETRY_MAX_ATTEMPTS`, ~10s), so no step can be lost to a slow
+  mount and no start gate is needed at all.
+  ⚠️ **If you refactor this, verify behaviourally that a late-mounting anchor still shows its step.**
+  A structural read of the code passed for the fix that did not work; only a test that mounts the
+  anchor late catches it.
 - **Dependency deviation (read this first):** the PBI names #12626, #12627, and **#12631** as hard
   prerequisites — "building this before ... land guarantees rework." #12626 and #12627 are the two
-  patches directly above. **#12631 was not available when this was built and was explicitly skipped
-  by request** rather than blocking. This is a known, deliberate risk: if #12631 changes the tour's
-  anchor elements (paperclip, tools menu, new-chat button, or account menu), the steps in
+  patches above. **#12631 was not available when this was built and was explicitly skipped by
+  request** rather than blocking. This is a known, deliberate risk: if #12631 changes the tour's
+  anchor elements (paperclip, tools menu, sidebar rail, or account menu), the steps in
   `client/src/components/Onboarding/tourSteps.ts` will need updating to match. Whoever picks up
   #12631 should check this file's anchors against the post-#12631 UI before considering this patch
   done.
 - **Files touched:** `packages/data-provider/src/config.ts` (one `LocalStorageKeys` member),
   `client/src/routes/Root.tsx` (one mount line), `client/src/locales/en/translation.json` (new
-  `com_onboarding_tour_*` keys), and everything new under `client/src/components/Onboarding/`:
+  `com_onboarding_tour_*` keys), `client/src/components/UnifiedSidebar/ExpandedPanel.tsx` (one new
+  `data-testid` per rail icon), and everything new under `client/src/components/Onboarding/`:
   `tourSteps.ts`, `useTourSeen.ts`, `useGuidedTour.ts`, `TourPopover.tsx`, `GuidedTour.tsx`, and
   `__tests__/GuidedTour.spec.tsx`.
-- **What:** A 4-step tour (document upload, tools/Artifacts, conversations, Settings/My Files) shown
-  once per browser via a new `LocalStorageKeys.GUIDED_TOUR_SEEN` flag, mounted as a sibling of
+- **What:** A 4-step tour (document upload, Artifacts, sidebar rail, Settings/My Files) shown once
+  per browser via a new `LocalStorageKeys.GUIDED_TOUR_SEEN` flag, mounted as a sibling of
   `TermsAndConditionsModal` in `Root.tsx` (structurally mirrors that modal's mount pattern — a
   boolean-gated component in the same spot — though the ToS modal itself is actually server-side
   gated, not localStorage; this tour is localStorage-only per the PBI). Each step anchors to a
-  stable, always-in-DOM outer trigger (`#attach-file-menu-button`, `#tools-dropdown-button`,
-  `[data-testid="new-chat-button"]`, `[data-testid="nav-user"]`) via Radix Popper's `virtualRef`
-  anchor mechanism, rather than the deeper nested items (Artifacts toggle, Settings menu item) that
-  don't exist in the DOM until their parent menu is opened — a scope decision confirmed before
-  building, since forcing those menus open programmatically would couple the tour to two unrelated
-  menu systems (Ariakit for the account menu, the tools dropdown's own state). If an anchor is
+  stable, always-in-DOM outer trigger via Radix Popper's `virtualRef` anchor mechanism, rather than
+  deeper nested items (Settings menu item, individual sidebar icons) that don't exist in the DOM
+  until their parent menu is opened — a scope decision confirmed before building, since forcing
+  those menus open programmatically would couple the tour to unrelated menu systems. If an anchor is
   missing at runtime (e.g. RBAC hid that button), the step is skipped automatically instead of
   showing a popover pointing at nothing; if literally none of the four anchors are ever found, the
   tour is not marked seen, so it retries next load instead of silently burning its one shot on a
   broken render. No new dependency — reuses `@radix-ui/react-popover` (already a client dependency)
   and `framer-motion` (matching the fade/scale timing already used in
-  `TwoFactorAuthentication.tsx`). `Popover.Content` is kept as one persistent node across steps, with
-  only the inner `motion.div` re-keyed per step inside `AnimatePresence` — re-keying `Popover.Content`
-  itself conflicts with `AnimatePresence`'s ref requirements (produced a real React ref warning
-  during development; fixed by not re-mounting the Radix primitive on every step). The tour is
-  mounted in `Root.tsx` only once we're certain the Terms modal won't also be showing (ToS feature
-  disabled, or `termsData` has resolved as already-accepted), rather than merely checking the
-  current `showTerms` boolean, to avoid a race where the tour could flash on before the ToS query
-  resolves.
-- **Why:** New users have no way to discover document upload, tools/Artifacts, conversation
-  management, or Settings except by accident. No `librechat.yaml`/env-var can add a client-side
-  onboarding overlay, so this required new source files.
-- **How to verify:** Clear `localStorage`, reload — the tour appears, pointing at the paperclip, then
-  the "+" tools button, then the new-chat button, then the account-menu button, in that order.
-  Reload again — it does not reappear. Clear `localStorage` again — it reappears. Press Escape at any
-  step — it closes and does not come back on reload. Tab through a step — focus cycles only among
-  that step's Back/Skip/Next buttons, and Escape/Shift+Tab/Tab all work without a mouse. If ToS
-  modal-acceptance is enabled in this environment, confirm the tour never appears until after Terms
-  is accepted, and that dismissing/accepting Terms doesn't also silently dismiss the tour.
+  `TwoFactorAuthentication.tsx`). The tour is mounted in `Root.tsx` only once we're certain the Terms
+  modal won't also be showing (ToS feature disabled, or `termsData` has resolved as already-accepted),
+  rather than merely checking the current `showTerms` boolean, to avoid a race where the tour could
+  flash on before the ToS query resolves.
+  - **Dev-testing follow-ups (2026-08-01):**
+    - **Step 2 copy corrected, not just reworded.** The dropdown this step anchors to
+      (`ToolsDropdown.tsx`, `#tools-dropdown-button`) had its Web Search/Code Interpreter toggles
+      removed entirely by PBI 12627/upstream config, and its File Search toggle was removed by
+      PBI 12627 specifically (the paperclip sets File Search directly now — see that entry above).
+      Given ROMChat's actual `librechat.yaml` (`agents.capabilities: [file_search, artifacts]`,
+      everything else off), that menu offers **Artifacts only** today. The original copy named all
+      three removed/never-present tools; the dev-testing note's own suggested fix (name Artifacts
+      *and* File Search) would have been equally inaccurate, since File Search isn't in this menu
+      either. Rewrote to name only what's actually there (`com_onboarding_tour_step_tools_title`/
+      `_body`), plus a one-line definition of what an Artifact is, since the term is internal
+      jargon.
+    - **Step 3 rebuilt as a single "sidebar" step** covering all four icons in the
+      `ExpandedPanel.tsx` rail (Close Sidebar, New Chat, Chat History, Attach Files) instead of only
+      "New Chat" with vague copy — kept as one step per the decision to avoid a 4→7-step tour.
+      Re-anchored from `[data-testid="new-chat-button"]` to `#close-sidebar-button` (top of the
+      rail, already had both an `id` and a `data-testid`; assumes the sidebar starts expanded, the
+      default state). Two of the four icons (`Chat History`, `Attach Files`) had **no** stable
+      selector at all before this patch — only a localized `aria-label`, which breaks under any
+      non-English locale. Added `data-testid={\`nav-icon-${link.id}\`}` to every rail icon in
+      `NavIconButton` (`ExpandedPanel.tsx`) — not just the two the tour needed, since the whole rail
+      had the same gap and this is cheap, generically useful test/automation infrastructure, not a
+      tour-specific hack.
+    - **Fixed a visible flash on "Next"** (`TourPopover.tsx`). Traced the actual mechanism: contrary
+      to the dev-testing note's literal description, `currentStep` doesn't pass through `null`
+      between two valid steps (`useGuidedTour.ts`'s layout effect sets it directly from step N to
+      step N+1 in one update). The real cause: `Popover.Content` repositions to the new anchor the
+      instant the anchor ref updates, but the outgoing content was still mid-fade-out (300ms) at
+      that moment — so it visually teleported to the new position while still fading, instead of
+      fading out in place. Fixed by making the exit instant (`duration: 0`, no visible fade-out) and
+      only animating the entry, at the already-correct new position — avoids the reposition-while-
+      visible window entirely without restructuring the mount lifecycle. Also added a defensive
+      `lastStepRef` fallback (`displayStep = step ?? lastStepRef.current`) so that if `step` ever is
+      transiently `null` between valid steps via some timing path not covered by the analysis above,
+      the popover keeps rendering the last real step instead of unmounting — belt-and-suspenders,
+      not required by the confirmed mechanism, but cheap insurance. Full "smoothly slide between
+      anchors" treatment (a persistent backdrop, a pointer tail) is out of scope here — tracked in
+      #12746, which this note says is likely the more complete version of the same fix; coordinate
+      before #12746 lands so the two don't fight each other structurally.
+    - **Fixed a critical anchor-detection timing bug** (`useGuidedTour.ts`, discovered during this
+      round of testing, not in the original dev-testing note). The original implementation checked
+      `document.querySelector(anchorSelector)` exactly once, in a `useLayoutEffect` keyed on the
+      current step. On a real page load this is wrong: the sidebar's anchors mount well before the
+      composer's (`#attach-file-menu-button`, `#tools-dropdown-button`) resolve, since the composer
+      waits on conversation/config data the sidebar doesn't need — measured 3-5s apart in practice
+      via a Playwright timing script. The one-shot check ran before the composer anchors existed, so
+      steps 1 and 2 were silently and permanently skipped for essentially every real user on a fresh
+      load; the bug was invisible in manual testing because by the time a developer paused to look,
+      the anchors had already mounted. Fixed by replacing the single check with a retrying
+      `setTimeout` poll (`ANCHOR_RETRY_INTERVAL_MS = 250`, `ANCHOR_RETRY_MAX_ATTEMPTS = 40`, ~10s
+      total) — a step is only treated as genuinely absent (e.g. RBAC-hidden) after exhausting the
+      retry window, not after a single premature check. This also let `GuidedTour.tsx` drop its
+      redundant rAF-based two-frame "ready" delay, since the retry loop itself is now the readiness
+      signal. Verified both via a new unit test (`GuidedTour.spec.tsx`, "retries a not-yet-rendered
+      anchor instead of skipping it immediately" — mounts the anchor via direct DOM mutation
+      mid-test rather than `rerender()`, since inserting a new sibling ahead of `GuidedTour` in an
+      unkeyed children array shifts its position and causes React to unmount+remount it, invalidating
+      a `rerender()`-based version of this test) and live against the running dev server, confirming
+      the tour now starts at step 1 instead of skipping to step 3.
+- **Why:** New users have no way to discover document upload, Artifacts, the sidebar rail, or
+  Settings except by accident. No `librechat.yaml`/env-var can add a client-side onboarding overlay,
+  so this required new source files. The dev-testing follow-ups exist because the first version
+  named features that don't exist in this deployment, described the sidebar too vaguely to be
+  useful, and had a rendering artifact — QA testing this "as a new user would" is exactly the kind
+  of check a tour needs before it reaches real employees.
+- **How to verify:** Clear `localStorage`, reload on a genuinely fresh page load (not a hot-reloaded
+  dev session, which masks the timing bug above) — the tour appears, pointing at the paperclip
+  ("Upload documents"), then the "+" tools button ("Artifacts" — singular, no Web Search/Code
+  Interpreter/File Search mentioned), then the top of the sidebar rail ("Your sidebar", naming all
+  four icons), then the account-menu button ("Settings & files"), in that order. Reload again — it
+  does not reappear. Clear `localStorage` again — it reappears. Click Next repeatedly — no visible
+  flash/jump as the popover moves between anchors. Press Escape at any step — it closes and does not
+  come back on reload. Tab through a step — focus cycles only among that step's Back/Skip/Next
+  buttons. If ToS modal-acceptance is enabled in this environment, confirm the tour never appears
+  until after Terms is accepted.
+- **Not changing (decided, don't re-raise):** tour completion stays in `localStorage` (per browser,
+  per device) — no cross-device/account-linked "seen" state. No "replay tour" affordance — Help &
+  FAQ covers this.
 - **Upstream status:** not submitted — fork-only feature, not a candidate for upstreaming.
-- **Merge notes:** Purely additive (new directory, one enum member, one mount line) — should not
-  conflict on an upstream merge. The one thing to re-check after any merge: confirm the four anchor
-  selectors in `tourSteps.ts` still match real elements in whatever `AttachFileMenu.tsx`,
-  `ToolsDropdown.tsx`, `NewChat.tsx`, and `AccountSettings.tsx` look like post-merge.
+- **Merge notes:** Mostly additive (new directory, one enum member, one mount line, one new
+  `data-testid` prop on an existing sidebar component) — should not conflict on an upstream merge
+  beyond a possible one-line conflict on `NavIconButton`'s `<Button>` props in `ExpandedPanel.tsx`.
+  The main thing to re-check after any merge: confirm the four anchor selectors in `tourSteps.ts`
+  still match real elements in whatever `AttachFileMenu.tsx`, `ToolsDropdown.tsx`,
+  `ExpandedPanel.tsx`, and `AccountSettings.tsx` look like post-merge — this fork's sidebar was
+  already redesigned once (`ExpandedPanel.tsx`, unified icon-strip layout) since this tour was first
+  built, which is exactly the kind of drift these anchors are most exposed to.
+
+### File Search toggle restored to tools menu; auto-enabled on every attach path
+
+- **Work item:** PBI 12745
+- **Added:** 2026-08-01 by Andrea Tiamson
+- **Files touched:** `client/src/components/Chat/Input/ToolsDropdown.tsx`,
+  `client/src/components/SidePanel/Files/PanelTable.tsx`,
+  `client/src/hooks/Files/useDragHelpers.ts`
+- **What:** Two independent fixes for the same underlying failure class (a user ends up with File
+  Search silently off and no way back):
+  1. **Re-added the File Search entry to `ToolsDropdown.tsx`** (`VectorIcon`, `useHasAccess(FILE_SEARCH)`,
+     `fileSearchEnabled` from `useAgentCapabilities`, a `handleFileSearchToggle` callback, and a
+     dropdown row with a pin button) — the exact shape PBI 12627 deleted, now sitting next to Skills.
+     `BadgeRowContext.tsx`/`useToolToggle.ts`/`FileSearch.tsx` (the input-row status chip) were never
+     touched by 12627 and needed no changes here; the toggle/pin state they expose was simply
+     unreachable from any UI once the menu row was gone. Restoring the row makes both toggling and
+     pinning reachable again, so the chip in `FileSearch.tsx` (`fileSearchEnabled || isPinned`) can be
+     dismissed and recovered instead of being a one-way door.
+  2. **Attaching an already-uploaded file from the Files side panel now turns File Search on.**
+     `PanelTable.tsx`'s `handleFileClick` calls `addFile({..., attached: true, ...})` but never touched
+     the ephemeral-agent state; it now also calls
+     `setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }))` (same
+     `ephemeralAgentByConvoId` atom family every other toggle/attach path reads and writes,
+     keyed the same way — `conversation?.conversationId ?? Constants.NEW_CONVO`).
+  3. **(Not in the PBI's acceptance criteria, added because it's the same bug class):** drag-and-drop's
+     "Upload for File Search" option in `DragDropModal.tsx` routes through
+     `useDragHelpers.ts`'s `handleOptionSelect`, which had an explicit
+     `toolResource !== EToolResources.file_search` exclusion — comment: *"File search is not
+     automatically enabled to simulate legacy behavior."* That meant picking the option literally
+     labeled "Upload for File Search" did not enable File Search. Removed the exclusion; `file_search`
+     is now enabled the same way `execute_code`/`context` already were on that path.
+- **Why:** File Search's badge (`FileSearch.tsx`) only renders when `fileSearchEnabled || isPinned` —
+  clicking it off makes the badge itself disappear, and pinning was only ever reachable from the
+  tools-menu row PBI 12627 removed. Once both are gone, a user who toggles File Search off has no UI
+  path back to it short of re-uploading a file (which forces it back on via the paperclip, but the
+  paperclip's one-click flow only fires on a *new* upload, not on attaching a file that already
+  exists). The Files-sidebar attach path independently never set `file_search` at all, so attaching
+  a previously uploaded document could leave a conversation with the document attached but not
+  searchable, with no error shown. Same silent-no-op class as PBI 12626, reached through different
+  doors. No `librechat.yaml`/env-var surface governs tools-menu contents or per-attach-path ephemeral
+  state, so this required source changes.
+- **This deliberately reverses part of PBI 12627.** That PBI's acceptance criterion "the File Search
+  toggle no longer appears in the +/tools menu" was reasonable on its own — the paperclip's one-click
+  upload made the menu toggle *redundant for the upload case* — but it missed that the toggle was
+  also the only way to turn File Search back on or pin the badge once it was off, with no other
+  affordance introduced to replace either. Restoring the toggle is an intentional decision recorded
+  here, not unfinished work on #12627; the paperclip still does not require pre-toggling File Search
+  (unaffected by this patch), so #12627's actual goal (one-click upload) stands.
+- **No regression check:** none of the three changes touch file-type validation. `PanelTable.tsx`'s
+  existing `defaultFileConfig.checkType(...)` gate (endpoint `supportedMimeTypes`) runs unchanged
+  before the new `setEphemeralAgent` call is reached; `AttachFileMenu.tsx`'s paperclip flow (already
+  unconditionally setting `file_search: true` on click since the PBI 12627 patch, so it already met
+  this PBI's paperclip acceptance criterion with no changes needed here) and the drag-drop
+  modal's per-endpoint options are both untouched. Images are rejected on every upload path exactly
+  as before.
+- **How to verify:** Open the "+" tools menu — a "File Search" row appears with a checkbox-style
+  toggle and a pin icon; toggling it flips the input-row badge; pinning it keeps the badge visible
+  after toggling off. Upload a document via the paperclip, then use the new tools-menu toggle to turn
+  File Search off, then back on (no re-upload) — ask about the document's contents and confirm a
+  grounded answer. Open the Files side panel, click a previously-uploaded document's filename with
+  File Search off beforehand — the tools-menu toggle (and badge, if pinned) flips on, and asking about
+  that document's contents in the same conversation is grounded in it. Drag a document onto the chat
+  window, choose "Upload for File Search" in the modal — File Search turns on immediately (previously
+  it did not). Attempt to attach/upload a `.png` on each of the three paths — still rejected the same
+  way it was before this patch (paperclip: file-type filter/toast; Files panel: `checkType` toast;
+  drag-drop: image-only branch or rejection), confirming no regression there.
+- **Upstream status:** not submitted — ROMTech-specific product decision (this fork's tools-menu
+  contents and attach-path behavior), reversing another ROMTech-specific patch (#12627). Not a
+  candidate for upstreaming.
+- **Merge notes:** This patch's `ToolsDropdown.tsx` change is layered directly on top of the removal
+  in the PBI 12627 entry above — if upstream's `ToolsDropdown.tsx` diverges further before the next
+  merge, re-apply by re-adding the File Search row (this entry's exact block) rather than assuming
+  the PBI 12627 entry's removal is still verbatim-reversible. `PanelTable.tsx` and `useDragHelpers.ts`
+  are small, additive/removal-only diffs (one new hook call; one deleted `if` condition) and should
+  merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
+  equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
+
+### Guided tour becomes modal — dimmed backdrop, blocked interaction, speech-bubble tail
+
+- **Work item:** PBI 12746 (builds on the "First-run guided tour" patch above, PBI 12633)
+- **Added:** 2026-08-01 by Andrea Tiamson
+- **Files touched:** `client/src/components/Onboarding/TourBackdrop.tsx` (new),
+  `client/src/components/Onboarding/GuidedTour.tsx`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+- **What:** Two fixes to the tour's original non-modal Radix Popover:
+  1. **Dimmed, click-absorbing backdrop.** New `TourBackdrop.tsx` portals a single
+     `fixed inset-0 z-[9998]` dim div (`bg-gray-600/65` / `dark:bg-black/80` — the same tokens
+     `@librechat/client`'s `Dialog.tsx` overlay uses) straight to `document.body`. It is rendered
+     by `GuidedTour.tsx` itself (`ready && !seen`), as a sibling of `TourPopover`, not by
+     `TourPopover` — `TourPopover` unmounts/remounts on the brief frames where `currentStep` goes
+     `null` while `useGuidedTour` skips a step whose anchor is missing, and mounting the backdrop
+     there would flicker it off and back on every such skip. No click handler is needed to
+     "block" anything: the div's z-index puts it above the whole app in the paint order, so the
+     browser's own hit-testing resolves any click inside the viewport to the backdrop, not to
+     whatever app control is under it — including the spotlighted anchor itself, per the decision
+     to block interaction entirely rather than build a click-through cutout. The popover content
+     (`z-[9999]`) stays above the backdrop and remains fully interactive.
+  2. **Speech-bubble tail.** Added `Popover.Arrow` (from `@radix-ui/react-popover`, a sibling of
+     the existing `Popover.Content`) styled `fill-surface-primary stroke-border-medium` to match
+     the bubble's own background/border. Deliberately left to Radix's own positioning rather than
+     derived from `step.placement`: Radix recomputes both the content's side/align *and* the
+     arrow's offset/rotation together whenever its collision detection flips the popover to fit
+     the viewport, so the tail keeps pointing at the true anchor at any width without any
+     width-specific logic here.
+  - **`aria-modal="true"`** added to both `Popover.Content` and the inner `role="dialog"`
+    `motion.div` (kept on both since assistive tech may key off either the Radix-owned outer
+    dialog role or the inner one this component already had). The existing hand-rolled Tab trap
+    (`TourPopover.tsx`'s `handleKeyDown`) was not touched — it already contained keyboard focus;
+    the gap was strictly the mouse/pointer path and the missing modal announcement.
+  - **Not built:** a spotlight cutout around the anchor. Per the PBI's open sub-question, the
+    plain dim was chosen over a cutout that tracks the anchor's box through scroll/resize — the
+    speech-bubble tail already gives the visual connection to the target that a cutout would
+    otherwise provide, at a fraction of the complexity, and the PBI's own guidance was to prefer
+    plain dim unless it tests poorly. Revisit if user feedback says the plain dim doesn't read as
+    clearly as the tail was expected to.
+  - **Not attempted here:** the separate step-transition flash reported as feedback T3 against
+    #12633. Keeping the backdrop mounted across step transitions (rather than remounting per step)
+    removes one possible source of that flash as a side effect of fix #1 above, but this patch
+    does not claim to close T3 — no `#12633`-specific flash reproduction or fix was verified here.
+- **Why:** The tour previously had no overlay at all — `TourPopover.tsx` was a plain non-modal
+  `Popover.Root` with only `onPointerDownOutside`/`onInteractOutside` `preventDefault`s, which stop
+  Radix's own auto-close behavior but never stop a real click from reaching whatever DOM element is
+  under the cursor (Radix's outside-interaction callbacks don't call the clicked element's own
+  handler). A first-time user could click straight through the tour into the live app mid-walk.
+  Separately, the popover floated near its anchor with no visual link to it, so which control a
+  given step described was left to proximity/guesswork. No `librechat.yaml`/env-var surface governs
+  onboarding UI, so this required source changes to fork-only files (not upstream's).
+- **How to verify:** Clear `localStorage`, reload. On step 1: the page behind the tour is visibly
+  dimmed, and clicking any app control behind the dim (e.g. the sidebar, a nav item) does nothing —
+  focus and app state don't change. The popover has a visible triangular tail touching the dimmed
+  page and aimed at the paperclip. Resize the window to a narrow (mobile-width) viewport mid-tour —
+  the tail still visibly touches its anchor (Radix may have flipped the side; the tail follows).
+  Step through all 4 steps (paperclip, tools button, new-chat button, account button) at both a
+  wide and a narrow viewport — the tail points at the correct element every time, and the dim never
+  flickers off/on between steps. Inspect the popover in devtools' accessibility tree: it reports as
+  a dialog with `aria-modal: true`. Tab from the primary button — focus still cycles only within
+  Back/Skip/Next as before (unchanged trap). Press Escape — the tour closes, the dim is completely
+  gone (inspect `document.body` for a stray full-screen div — none should remain), and every app
+  control is immediately clickable. Click Skip — same result. Reload after either — the tour does
+  not reappear; clear `localStorage` — it does. Unit side:
+  `cd client && npx jest src/components/Onboarding/__tests__/GuidedTour.spec.tsx` (17/17, including
+  new backdrop-presence, backdrop-removal, and `aria-modal` assertions). Real-browser/visual checks
+  (dim opacity, tail alignment/rotation at both viewport widths, no residual overlay) were not
+  run against the deployed app as part of this change — do that before sign-off, since Radix's
+  Popper positioning and the arrow's collision-driven rotation aren't meaningfully exercised by
+  jsdom (no real layout/paint), only their DOM structure and ARIA attributes are.
+- **Upstream status:** not submitted — fork-only onboarding feature (same status as the PBI 12633
+  patch it modifies), not a candidate for upstreaming.
+- **Merge notes:** Purely additive/behavioral on top of files that are themselves fork-only
+  (`client/src/components/Onboarding/*` doesn't exist upstream), so this should never conflict with
+  an upstream merge — only re-check it if the PBI 12633 patch's anchor selectors or file layout
+  change first. If `#12633`'s separate step-transition-flash fix (feedback T3) lands and also
+  touches `TourPopover.tsx`/`GuidedTour.tsx`, reconcile rather than assuming a conflict means "keep
+  ours" — the two fixes are explicitly meant to compose (see "Not attempted here" above).
 
 <!-- new entries go here -->
 

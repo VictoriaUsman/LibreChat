@@ -19,7 +19,12 @@ interface TourPopoverProps {
 const stepVariants = {
   initial: { opacity: 0, scale: 0.95 },
   animate: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
-  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.3, ease: 'easeIn' } },
+  // Instant, not faded: Popper repositions to the next step's anchor the moment `step`
+  // changes, so an animated (visible) exit would show the outgoing content sliding/fading
+  // at the OLD position and then jumping mid-fade to the NEW one — the "flash" on Next.
+  // Removing it outright avoids the reposition-while-visible window entirely; only the
+  // incoming step still animates in, at the correct (already-updated) position.
+  exit: { opacity: 0, transition: { duration: 0 } },
 };
 
 const TourPopover = ({
@@ -36,21 +41,34 @@ const TourPopover = ({
   const anchorRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
+  const lastStepRef = useRef<TourStep | null>(null);
+
+  // Defensive: keep rendering the last real step across any single render where `step`
+  // is transiently null between two valid steps, so the popover (and Radix's mounted
+  // Portal/focus-trap machinery) never has to fully unmount and remount mid-tour. `step`
+  // itself is only null before the very first step resolves or after the tour has
+  // genuinely ended, in which case `GuidedTour` doesn't render this component at all.
+  if (step) {
+    lastStepRef.current = step;
+  }
+  const displayStep = step ?? lastStepRef.current;
 
   // Runs as a layout effect (before Radix Popper's own effect) so the anchor is already
   // up to date by the time Popper reads it for positioning.
   useLayoutEffect(() => {
-    anchorRef.current = step ? document.querySelector<HTMLElement>(step.anchorSelector) : null;
-  }, [step]);
+    anchorRef.current = displayStep
+      ? document.querySelector<HTMLElement>(displayStep.anchorSelector)
+      : null;
+  }, [displayStep]);
 
   useEffect(() => {
-    if (step) {
+    if (displayStep) {
       primaryButtonRef.current?.focus();
     }
-  }, [step]);
+  }, [displayStep]);
 
   useEffect(() => {
-    if (!step) {
+    if (!displayStep) {
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -78,9 +96,9 @@ const TourPopover = ({
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [step, onDismiss]);
+  }, [displayStep, onDismiss]);
 
-  if (!step) {
+  if (!displayStep) {
     return null;
   }
 
@@ -89,9 +107,10 @@ const TourPopover = ({
       <Popover.Anchor virtualRef={anchorRef} />
       <Popover.Portal>
         <Popover.Content
-          side={step.placement}
+          side={displayStep.placement}
           sideOffset={10}
           align="center"
+          aria-modal="true"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
@@ -99,11 +118,21 @@ const TourPopover = ({
           onInteractOutside={(e) => e.preventDefault()}
           className="z-[9999]"
         >
+          {/* Radix repositions and re-rotates this to keep pointing at the anchor on every
+              side/align it picks (including collision-driven flips at narrow widths), so it
+              doesn't need to be re-derived from `step.placement` by hand. */}
+          <Popover.Arrow
+            width={18}
+            height={9}
+            className="fill-surface-primary stroke-border-medium"
+            strokeWidth={1}
+          />
           <AnimatePresence mode="wait">
             <motion.div
-              key={step.id}
+              key={displayStep.id}
               ref={contentRef}
               role="dialog"
+              aria-modal="true"
               aria-label={localize('com_onboarding_tour_label')}
               variants={stepVariants}
               initial="initial"
@@ -118,9 +147,9 @@ const TourPopover = ({
                 {localize('com_onboarding_tour_step_of', { 0: stepIndex + 1, 1: totalSteps })}
               </p>
               <h2 className="mb-1.5 text-base font-semibold text-text-primary">
-                {localize(step.titleKey)}
+                {localize(displayStep.titleKey)}
               </h2>
-              <p className="mb-4 text-sm text-text-secondary">{localize(step.bodyKey)}</p>
+              <p className="mb-4 text-sm text-text-secondary">{localize(displayStep.bodyKey)}</p>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"

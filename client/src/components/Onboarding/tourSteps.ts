@@ -24,10 +24,10 @@ export const tourSteps: TourStep[] = [
     placement: 'top',
   },
   {
-    id: 'conversations',
-    anchorSelector: '[data-testid="new-chat-button"]',
-    titleKey: 'com_onboarding_tour_step_conversations_title',
-    bodyKey: 'com_onboarding_tour_step_conversations_body',
+    id: 'sidebar',
+    anchorSelector: '#close-sidebar-button',
+    titleKey: 'com_onboarding_tour_step_sidebar_title',
+    bodyKey: 'com_onboarding_tour_step_sidebar_body',
     placement: 'right',
   },
   {
