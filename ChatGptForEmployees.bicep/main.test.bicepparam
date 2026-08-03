@@ -6,7 +6,18 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
+// Test migrates off upstream's mutable ghcr tag onto OUR fork build, pinned by digest —
+// the same digest validated in dev (fork `main` @ 0b202deef, ACR tag 25436, amd64).
+//
+// The registry host MUST be acrcgfetest, not acrcgfedev: libreChat.bicep resolves
+// `acrcgfe<env>` and takes the pull credentials from that registry alone (see its
+// `registries` block). A dev host here fails to pull for lack of credentials.
+//
+// The copy into acrcgfetest is automatic: test.yml's ImportLibreChatImage stage reads this
+// value and imports the digest from acrcgfedev before BicepCreate runs. Just set the digest
+// here — promotion is a registry copy, never a rebuild, so test runs the bit-identical image
+// that dev validated.
+param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param flagshipModelName = 'gpt-5'
