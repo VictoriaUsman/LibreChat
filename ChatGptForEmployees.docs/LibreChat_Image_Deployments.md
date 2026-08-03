@@ -13,9 +13,9 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:65932ee0fe428d1ac695b6d94dc4228646e5c2b84d42b0a156784ee7f96c7a2f` | 2026-07-31 | `7e80cac6c` | **First patched build** — launch UI work. ACR tag `25042`. |
-| **Test** | `ghcr.io/danny-avila/librechat:v0.8.6` | — | n/a | ⚠️ Still upstream's prebuilt image, by **mutable tag**. Not yet migrated. |
-| **Prod** | `ghcr.io/danny-avila/librechat:v0.8.6` | — | n/a | ⚠️ Still upstream's prebuilt image, by **mutable tag**. Not yet migrated. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544` | 2026-08-03 | `0b202deef` | Launch review round 2 — logo, File Search, modal tour. ACR tag `25436`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `dev` → `test` promotes.** Needs `az acr import` into `acrcgfetest` first. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `test` → `main` promotes.** Needs `az acr import` into `acrcgfeprod` first. |
 
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
@@ -26,6 +26,28 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-03 — Dev — `sha256:5e198b62…6be19544`
+
+- **Fork commit:** `0b202deef` (fork `main` after PR 11452) · **ACR tag:** `25436` · **arch:** amd64
+- **What's in it:** the second round of launch review work, integrated on the fork's
+  `integration/romchat-launch-v2` branch — PBI 12687 (raster ROMChat logo replaced with a true
+  vector master), 12745 (File Search restored to the tools menu and enabled from every attach
+  path), 12746 (guided tour made modal: dimmed backdrop, blocked interaction, pointer to target),
+  and 12633's tour copy/anchor reconciliation. Three branches had each independently changed the
+  tour; the integration commit resolved the conflicts and fixed a cross-branch defect where the
+  merged tour described the tools menu while omitting File Search.
+- **Paired infra change:** none. This build is source-only — no `librechat.yaml` or bicep change
+  travels with it beyond the digest bump itself.
+- **Test + prod staged in the same commit.** All three `main.<env>.bicepparam` files are authored
+  on `dev` and carried upward by the promotion merges (`dev` → `test` → `main`) — we never edit an
+  env's param on its own branch. Each value is inert until its branch is reached, so the test and
+  prod entries deploy nothing today. **Both still require their `az acr import` before the
+  corresponding promotion completes** (§3) — the digest exists only in `acrcgfedev` right now.
+  This is also the migration of test and prod off upstream's mutable `ghcr.io` tag.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
+  tag `25436`, built 2026-08-03 13:29 UTC.
+- **Rollback:** restore `sha256:65932ee0…f96c7a2f` and redeploy — still in the registry.
 
 ### 2026-07-31 — Dev — `sha256:65932ee0…f96c7a2f`
 
@@ -70,6 +92,17 @@ The infra pipeline **does not build anything.** It deploys an image that must al
 target environment's registry. Order is load-bearing: **build → copy digest → verify → deploy.**
 
 1. Merge the change in the **fork** repo → its pipeline builds and prints the digest.
+
+   ⚠️ **The build log contains two digests. Only one is ours.** `az acr build` emits a summary
+   block listing `image.digest` (the ROMChat image we just built — **this is the one**) and
+   `runtime-dependency.digest` (the `node:20-alpine` base image it pulled from Docker Hub —
+   provenance only, never a deploy target). Take the digest from the pipeline's own
+   `Deploy by DIGEST` banner at the end of the log, which prints only the correct one.
+
+   Deploying the base-image digest wouldn't fail loudly at deploy time: the container would
+   start without ROMChat in it, fail `/health`, and Container Apps would keep the previous
+   revision serving — so the app would look fine while the deploy had actually failed (§4).
+   Step 2 catches this, because the base-image digest doesn't exist in our registry at all.
 2. **Verify the digest exists in the target registry** before deploying:
    ```bash
    az acr repository show --name acrcgfedev \
@@ -101,7 +134,8 @@ az acr import --name acrcgfetest \
 az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --query digest -o tsv
 ```
 
-**Then set `main.test.bicepparam` to that env's OWN registry host:**
+**Then set `main.test.bicepparam` to that env's OWN registry host** — edited on `dev` and carried up
+by the `dev` → `test` promotion, like every other param change. Never edit it on the `test` branch:
 
 ```bicep
 param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:<digest>'
@@ -139,8 +173,11 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
 
 ## 5. Known gaps
 
-- **Test and prod are not yet on our fork** — still pulling `ghcr.io/danny-avila/librechat:v0.8.6` by
-  mutable tag. Migrating them is the outstanding supply-chain hardening.
+- **Test and prod are staged for our fork but not yet running it** — their params now point at
+  `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
+  them, and **neither registry has the image yet**. Until each `az acr import` runs, both
+  environments are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag. The
+  supply-chain hardening isn't done until both promotions have completed and been verified (§4).
 - **ACR pull uses admin credentials** (mirroring the scheduled-jobs pattern) rather than a managed
   identity with `AcrPull`. The password is never exposed in the container environment — it's used by
   the Container Apps platform via `passwordSecretRef` — but identity-based pull is the target state.

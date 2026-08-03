@@ -10,12 +10,17 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
 // run the fork's build pipeline, copy the digest it prints, and paste it here.
 //
-// This digest = the FIRST PATCHED build (fork `main` @ 7e80cac6c, ACR tag 25042, amd64,
-// built 2026-07-31). It carries PBIs 12626/12627/12628/12631/12633 and the `engineTTS`
-// fork patch for 12632 — i.e. the launch UI work, not the zero-patch parity build that
-// preceded it (that was sha256:6c97e7f9…, fork commit 566e20b6 = upstream v0.8.6).
-// Rollback: restore the 6c97e7f9 digest above and redeploy — it is still in the registry.
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:65932ee0fe428d1ac695b6d94dc4228646e5c2b84d42b0a156784ee7f96c7a2f'
+// Take the digest from the pipeline's `Deploy by DIGEST` banner — NOT from the `az acr build`
+// summary block, which also lists the node:20-alpine base-image digest under
+// `runtime-dependency`. That one is provenance, not deployable.
+//
+// This digest = launch review round 2 (fork `main` @ 0b202deef, PR 11452, ACR tag 25436,
+// amd64, built 2026-08-03). It adds PBIs 12687 (vector ROMChat logo), 12745 (File Search
+// restored to the tools menu), 12746 (modal guided tour with backdrop) and 12633's tour
+// reconciliation on top of the first patched build.
+// Rollback: restore sha256:65932ee0… (fork `main` @ 7e80cac6c, tag 25042, 2026-07-31) and
+// redeploy — still in the registry, as is the zero-patch parity build sha256:6c97e7f9….
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
