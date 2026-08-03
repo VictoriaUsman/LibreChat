@@ -13,12 +13,10 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // `acrcgfe<env>` and takes the pull credentials from that registry alone (see its
 // `registries` block). A dev host here fails to pull for lack of credentials.
 //
-// ⚠️ PREREQUISITE — this digest must be imported into acrcgfetest BEFORE this branch
-// reaches `test`, or the deploy can't pull it:
-//   az acr import --name acrcgfetest \
-//     --source acrcgfedev.azurecr.io/librechat@sha256:5e198b62... \
-//     --image librechat@sha256:5e198b62...
-// Promotion is a registry copy, never a rebuild — test runs the bit-identical image dev did.
+// The copy into acrcgfetest is automatic: test.yml's ImportLibreChatImage stage reads this
+// value and imports the digest from acrcgfedev before BicepCreate runs. Just set the digest
+// here — promotion is a registry copy, never a rebuild, so test runs the bit-identical image
+// that dev validated.
 param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 

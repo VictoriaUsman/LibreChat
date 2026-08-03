@@ -15,10 +15,8 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // `acrcgfe<env>` and takes pull credentials from that registry alone. A wrong host here points
 // production at a lower environment's registry.
 //
-// ⚠️ PREREQUISITE — this digest must be imported into acrcgfeprod BEFORE this reaches `main`:
-//   az acr import --name acrcgfeprod \
-//     --source acrcgfedev.azurecr.io/librechat@sha256:5e198b62... \
-//     --image librechat@sha256:5e198b62...
+// The copy into acrcgfeprod is automatic: prod.yml's ImportLibreChatImage stage reads this
+// value and imports the digest from acrcgfedev before BicepCreate runs.
 // This value is inert until the test -> main promotion; it deploys when that PR completes.
 param libreChatImage = 'acrcgfeprod.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'

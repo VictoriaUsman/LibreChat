@@ -14,8 +14,8 @@ it from drifting out of sync with reality.
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
 | **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544` | 2026-08-03 | `0b202deef` | Launch review round 2 — logo, File Search, modal tour. ACR tag `25436`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `dev` → `test` promotes.** Needs `az acr import` into `acrcgfetest` first. |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `test` → `main` promotes.** Needs `az acr import` into `acrcgfeprod` first. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
@@ -42,9 +42,12 @@ Newest first. One entry per image change per environment.
 - **Test + prod staged in the same commit.** All three `main.<env>.bicepparam` files are authored
   on `dev` and carried upward by the promotion merges (`dev` → `test` → `main`) — we never edit an
   env's param on its own branch. Each value is inert until its branch is reached, so the test and
-  prod entries deploy nothing today. **Both still require their `az acr import` before the
-  corresponding promotion completes** (§3) — the digest exists only in `acrcgfedev` right now.
-  This is also the migration of test and prod off upstream's mutable `ghcr.io` tag.
+  prod entries deploy nothing today. This is also the migration of test and prod off upstream's
+  mutable `ghcr.io` tag.
+- **Cross-registry promotion automated in the same change.** Stage 1.3 built only the dev half of
+  the fork pipeline and deferred test/prod promotion as "a later step" — so the first promotion past
+  dev would have needed a hand-run `az acr import`. `test.yml` and `prod.yml` now carry an
+  `ImportLibreChatImage` stage that does it from the param file (§3). Promotion is merge-and-go.
 - **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
   tag `25436`, built 2026-08-03 13:29 UTC.
 - **Rollback:** restore `sha256:65932ee0…f96c7a2f` and redeploy — still in the registry.
@@ -124,6 +127,17 @@ target environment's registry. Order is load-bearing: **build → copy digest �
 Promotion is **not a rebuild.** The same digest is copied into the target environment's registry, so
 test and prod run bit-identical images to what was validated in dev.
 
+**The copy is automatic.** `test.yml` and `prod.yml` each have an `ImportLibreChatImage` stage that
+runs before `BicepCreate`: it reads `libreChatImage` from that environment's bicepparam, imports the
+digest from `acrcgfedev` if it isn't already there, and verifies it landed. Set the digest in the
+param file and promote — nothing else to do.
+
+The stage is idempotent (a redeploy of an unchanged digest is one lookup), and it no-ops on any
+reference that isn't for that environment's own ACR, so it stays harmless on a param still pointing
+at upstream's public `ghcr.io` image.
+
+Doing it by hand — for a one-off, or if you're diagnosing the stage:
+
 ```bash
 # 1. Copy the exact digest into the target env's registry
 az acr import --name acrcgfetest \
@@ -133,6 +147,12 @@ az acr import --name acrcgfetest \
 # 2. Confirm it arrived
 az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --query digest -o tsv
 ```
+
+> **First run only:** the import reads from `acrcgfedev`, which lives in `rg-dev-shared`, while the
+> stage runs as that environment's own service connection (`ChatGptForEmployeesTestSC` /
+> `…ProdSC`). If those principals lack read access to the dev registry, the stage fails with an
+> authorization error and prints the exact grant needed — `AcrPull` on `acrcgfedev`. Same
+> subscription, so it's a role assignment, not a cross-tenant problem.
 
 **Then set `main.test.bicepparam` to that env's OWN registry host** — edited on `dev` and carried up
 by the `dev` → `test` promotion, like every other param change. Never edit it on the `test` branch:
@@ -173,11 +193,14 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
 
 ## 5. Known gaps
 
-- **Test and prod are staged for our fork but not yet running it** — their params now point at
+- **Test and prod are staged for our fork but not yet running it** — their params point at
   `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
-  them, and **neither registry has the image yet**. Until each `az acr import` runs, both
-  environments are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag. The
-  supply-chain hardening isn't done until both promotions have completed and been verified (§4).
+  them. Until then both are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag.
+  The import is automatic now (§3), but the supply-chain hardening isn't done until both
+  promotions have completed and been verified (§4).
+- **`ImportLibreChatImage` has not run yet in either environment.** It ships unexercised. Watch the
+  first `dev` → `test` promotion for an authorization error against `acrcgfedev` — that's the one
+  thing about it that depends on role assignments we haven't confirmed.
 - **ACR pull uses admin credentials** (mirroring the scheduled-jobs pattern) rather than a managed
   identity with `AcrPull`. The password is never exposed in the container environment — it's used by
   the Container Apps platform via `passwordSecretRef` — but identity-based pull is the target state.
