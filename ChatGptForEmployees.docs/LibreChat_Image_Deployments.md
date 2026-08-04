@@ -135,6 +135,14 @@ target environment's registry. Order is load-bearing: **build → copy digest �
    A miss = don't deploy yet.
 3. Update `ChatGptForEmployees.bicep/main.dev.bicepparam` → `libreChatImage`, **and add a History
    entry above, in the same PR.**
+
+   ⚠️ **Also bump `DEPLOY_TRIGGER` at the top of `main.bicep`, in the same PR.** The pipelines
+   gate the deploy on `DetectBicepChanges`, which only counts `.bicep` files — a digest bump
+   edits `.bicepparam` only, so `BicepCreate` is **Skipped** and the image is never applied.
+   The run still goes green, and because the restart stages tolerate a Skipped `BicepCreate`,
+   the app cycles on the **old** image and looks healthy. Bumping the counter touches a
+   `.bicep` file and trips the gate. One counter covers all three envs — it rides the
+   promotion merges. See §5 and `main.bicep`'s header.
 4. Merge to `dev`. `BicepCreate` applies the image; Container Apps rolls a new revision automatically
    because the digest changed.
 5. **Verify what's actually serving** (§4).
@@ -213,6 +221,18 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
 `BUILD_DATE` baked into the image, which maps a running deployment back to an exact fork commit.
 
 ## 5. Known gaps
+
+- **A digest bump alone does not deploy.** `DetectBicepChanges` counts only `.bicep` files, so a
+  `.bicepparam`-only PR leaves `BicepCreate` **Skipped** and the container app keeps its previous
+  image. Nothing fails: the run is green, the restart stages run (they were made to tolerate a
+  Skipped `BicepCreate` in PR 10964), and the app restarts on the old image. Diagnosed
+  2026-08-04 after PR 11547 merged tag `25740` and dev carried on serving `25436` — the app's
+  own `/api/config` `buildInfo` still reported the previous commit, and the resource group had no
+  ARM deployment for the merge. **Mitigation:** the `DEPLOY_TRIGGER` counter in `main.bicep`,
+  bumped in the same PR. **Real fix:** teach `DetectBicepChanges` (in `ROMTech/PipelineTemplates`)
+  that `*.bicepparam` is an infra change, then delete the counter.
+  ⚠️ Unexplained: PR 11458 on 2026-08-03 was also `.bicepparam`-only and *did* deploy. Check what
+  `DetectBicepChanges` logged in each run before assuming the rule is purely "no `.bicep` = skip".
 
 - **Test and prod are staged for our fork but not yet running it** — their params point at
   `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
