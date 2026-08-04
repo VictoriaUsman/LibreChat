@@ -41,20 +41,22 @@ const TourPopover = ({
   const anchorRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
-  const lastStepRef = useRef<TourStep | null>(null);
 
-  // Defensive: keep rendering the last real step across any single render where `step`
-  // is transiently null between two valid steps, so the popover (and Radix's mounted
-  // Portal/focus-trap machinery) never has to fully unmount and remount mid-tour. `step`
-  // itself is only null before the very first step resolves or after the tour has
-  // genuinely ended, in which case `GuidedTour` doesn't render this component at all.
-  if (step) {
-    lastStepRef.current = step;
-  }
-  const displayStep = step ?? lastStepRef.current;
+  // Render exactly the step we were given, or nothing.
+  //
+  // This used to fall back to the last rendered step whenever `step` was null, to spare Radix
+  // an unmount/remount between steps. That fallback was actively harmful: `step` is null for
+  // the entire time `useGuidedTour` is hunting for an anchor that hasn't appeared, so the
+  // fallback rendered the PREVIOUS step's content, pinned to the PREVIOUS step's anchor, under
+  // the incoming step's number. Showing nothing for a moment is recoverable; confidently
+  // showing the wrong step is not. The backdrop is mounted by `GuidedTour`, so it stays put
+  // regardless and there is no dim flicker either way.
+  const displayStep = step;
 
-  // Runs as a layout effect (before Radix Popper's own effect) so the anchor is already
-  // up to date by the time Popper reads it for positioning.
+  // A layout effect so `anchorRef` is current before paint. Note the ordering is *not* "layout
+  // effects beat Radix's" — child layout effects run before a parent's, and this is the child.
+  // It works because Radix's `PopperAnchor` reads `virtualRef.current` in a passive effect, which
+  // runs after every layout effect. Don't "fix" this into a passive effect on that assumption.
   useLayoutEffect(() => {
     anchorRef.current = displayStep
       ? document.querySelector<HTMLElement>(displayStep.anchorSelector)
@@ -67,17 +69,39 @@ const TourPopover = ({
     }
   }, [displayStep]);
 
+  // Deliberately NOT gated on `displayStep`. While `useGuidedTour` is hunting for a step's
+  // anchor there is no popover, but the backdrop is still up and still swallowing clicks — so
+  // if this were gated, Escape would stop dismissing and Tab would stop being trapped for the
+  // length of the retry window. The user could then tab into the blocked app underneath and
+  // activate controls with Enter. Previously the removed `lastStepRef` fallback kept a step
+  // rendered and hid this; the handler simply should never have depended on one.
   useEffect(() => {
-    if (!displayStep) {
-      return;
-    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        // Capture phase, so stopping propagation here keeps the app's own Escape handlers out of
+        // it. `UnifiedSidebar` binds Escape-to-collapse whenever the sidebar is expanded on a
+        // small screen — a state the tour itself creates — so without this, dismissing the tour
+        // also collapsed the sidebar, and the restore then re-expanded it.
+        e.stopPropagation();
         onDismiss();
         return;
       }
-      if (e.key !== 'Tab' || !contentRef.current) {
+      if (e.key !== 'Tab') {
+        return;
+      }
+      // No popover on screen yet: there is nowhere legitimate to tab to, and the app behind
+      // the backdrop must not become keyboard-reachable just because it's pointer-blocked.
+      if (!contentRef.current) {
+        e.preventDefault();
+        return;
+      }
+      // Focus can start outside the popover — the composer textarea autofocuses on load — and a
+      // first/last-only trap never fires from there, so Tab would walk straight into the blocked
+      // app. Pull focus back in instead.
+      if (!contentRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        primaryButtonRef.current?.focus();
         return;
       }
       const focusable = contentRef.current.querySelectorAll<HTMLElement>('button:not([disabled])');
@@ -96,7 +120,7 @@ const TourPopover = ({
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [displayStep, onDismiss]);
+  }, [onDismiss]);
 
   if (!displayStep) {
     return null;
@@ -110,7 +134,9 @@ const TourPopover = ({
           side={displayStep.placement}
           sideOffset={10}
           align="center"
-          aria-modal="true"
+          // No `aria-modal` here: this element carries no dialog role, and `aria-modal` on a
+          // non-dialog is invalid ARIA. It belongs on the inner `role="dialog"` node, which has
+          // it.
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}

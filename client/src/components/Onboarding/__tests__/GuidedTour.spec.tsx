@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RecoilRoot } from 'recoil';
 import GuidedTour from '../GuidedTour';
 import { ANCHOR_RETRY_INTERVAL_MS, ANCHOR_RETRY_MAX_ATTEMPTS } from '../useGuidedTour';
+import { tourSteps } from '../tourSteps';
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -169,7 +170,7 @@ describe('GuidedTour', () => {
     // how an element got there) without perturbing React's tree at all.
     jest.useFakeTimers();
     try {
-      renderTour({ includeToolsAnchor: false });
+      const { container } = renderTour({ includeToolsAnchor: false });
 
       expect(screen.getByText('Upload documents')).toBeInTheDocument();
       fireEvent.click(screen.getByText('Next'));
@@ -185,7 +186,12 @@ describe('GuidedTour', () => {
       const toolsButton = document.createElement('button');
       toolsButton.id = 'tools-dropdown-button';
       toolsButton.textContent = 'tools';
-      document.body.appendChild(toolsButton);
+      // Into RTL's container, not document.body: `cleanup()` only unmounts what it rendered, and
+      // nothing here clears document.body, so a stray #tools-dropdown-button leaks into every
+      // later test and silently satisfies anchor lookups that were meant to fail. Appending to
+      // the container keeps the property this test cares about — a direct DOM mutation that
+      // doesn't perturb React's tree — while getting cleaned up.
+      container.append(toolsButton);
 
       await act(async () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
@@ -241,11 +247,93 @@ describe('GuidedTour', () => {
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
   });
 
-  it('shows a dimmed backdrop while the tour is open', async () => {
+  it('covers the screen with a click-blocking backdrop while the tour is open', async () => {
+    // Deliberately not "dimmed" any more: the backdrop is transparent so the user can see what
+    // the popover is pointing at. It still has to be present and still has to receive pointer
+    // events — `pointer-events-none` here would silently unblock the whole app.
     renderTour();
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
 
-    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+    const backdrop = screen.getByTestId('tour-backdrop');
+    expect(backdrop).toBeInTheDocument();
+    expect(backdrop).not.toHaveClass('pointer-events-none');
+    // Light mode is transparent by design; dark mode keeps a dim, because against a near-black
+    // app the popover has nothing to lift it off the page. Nothing else in the repo pins this
+    // value, so deleting the class would silently regress dark mode with no other signal.
+    expect(backdrop).toHaveClass('dark:bg-black/35');
+  });
+
+  it('shows nothing rather than the previous step while an anchor is pending', async () => {
+    // Regression: `currentStep` used to keep pointing at the outgoing step for the whole retry
+    // window while `stepIndex` had already advanced, and TourPopover fell back to the last
+    // rendered step. Together they rendered step 1's content on step 1's anchor beneath a
+    // "Step 2 of 4" footer — reported in dev as step 3 pointing at the chat toggles.
+    jest.useFakeTimers();
+    try {
+      const { container } = renderTour({ includeToolsAnchor: false });
+
+      expect(screen.getByText('Upload documents')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Next'));
+
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS * 3);
+      });
+
+      // Step 2 can't render yet, but step 1 must not still be on screen under step 2's number.
+      expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+      // The footer assertion is belt-and-braces, not independent evidence: with no popover
+      // mounted there is no footer of any number. The `tourSteps.indexOf(currentStep)` derivation
+      // it guards is unobservable here by construction — that it can't be observed IS the fix.
+      expect(screen.queryByText('Step 2 of 4')).not.toBeInTheDocument();
+
+      // And it must still recover once the anchor turns up, inside the mid-tour window.
+      const toolsButton = document.createElement('button');
+      toolsButton.id = 'tools-dropdown-button';
+      toolsButton.textContent = 'tools';
+      container.append(toolsButton);
+
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
+      });
+
+      expect(screen.getByText('Tools')).toBeInTheDocument();
+      expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops blocking the screen when no anchors are found at all', async () => {
+    // 'no-anchors' deliberately doesn't mark the tour seen, so it can run again on a healthier
+    // load. It must still tear the backdrop down: it is transparent in light mode, so leaving
+    // it mounted swallows every click over an app that looks completely normal.
+    jest.useFakeTimers();
+    try {
+      render(
+        <RecoilRoot>
+          <GuidedTour />
+        </RecoilRoot>,
+      );
+
+      // One step transition per act() block. Timer callbacks queue state updates that React only
+      // flushes when the act scope resolves, so the next step's effect — and the fresh timer it
+      // schedules — doesn't exist until after advanceTimersByTime has returned. A single big
+      // advance multiplied by the step count would silently stall after the first transition.
+      // Looping once per step is more than enough: the whole-tour attempt budget ends the tour
+      // before every step gets its own full window, and extra advances after that are harmless.
+      for (let i = 0; i < tourSteps.length; i++) {
+        await act(async () => {
+          jest.advanceTimersByTime((ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS);
+        });
+      }
+
+      expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
+      // Not marked seen — a later load with a healthy DOM should still get the tour.
+      expect(localStorage.getItem('guidedTourSeen')).not.toBe('true');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('announces the popover as a modal dialog to assistive technology', async () => {

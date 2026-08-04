@@ -538,6 +538,10 @@ Keep the patch set as small as possible. Add entries below as patches land.
       either. Rewrote to name only what's actually there (`com_onboarding_tour_step_tools_title`/
       `_body`), plus a one-line definition of what an Artifact is, since the term is internal
       jargon.
+      ⚠️ **Superseded twice since.** "Artifacts only" stopped being true when the File Search toggle
+      was restored to this menu (see that patch below), and the wording that replaced it was itself
+      rewritten by the plain-language copy pass at the end of this entry. Read that pass for the
+      copy actually shipping.
     - **Step 3 rebuilt as a single "sidebar" step** covering all four icons in the
       `ExpandedPanel.tsx` rail (Close Sidebar, New Chat, Chat History, Attach Files) instead of only
       "New Chat" with vague copy — kept as one step per the decision to avoid a 4→7-step tour.
@@ -585,6 +589,77 @@ Keep the patch set as small as possible. Add entries below as patches land.
       unkeyed children array shifts its position and causes React to unmount+remount it, invalidating
       a `rerender()`-based version of this test) and live against the running dev server, confirming
       the tour now starts at step 1 instead of skipping to step 3.
+  - **Plain-language copy pass (2026-08-04, all four body strings):** reviewed with the product owner
+    after the tour reached dev. Every step was written from the implementation outward and leaked
+    internal vocabulary to an audience of non-technical staff. `client/src/locales/en/translation.json`
+    only — no logic, no step order, no anchors changed.
+    - **Prior finding this builds on — partly wrong, corrected 2026-08-04.** A team-lead spot-check
+      after the v2 merge reported steps 2 and 3 as reading confused. Andrea Tiamson investigated
+      live against a running dev server — normal transitions, frame-by-frame capture, and a rapid
+      double-click on Next to rule out a state race — and concluded there was **no code-level
+      swap**: step index, title and anchor tracked correctly in every case. Her diagnosis of step 2
+      (that it explained step 1's control inside its own paragraph) was right and is carried into
+      the rewrite below.
+      ⚠️ **The "no logic bug" conclusion was wrong**, and this entry previously repeated it. There
+      *was* a logic bug — see the "Step advance could render the previous step" entry below. It
+      only reproduces when a step's anchor is absent, which for step 3 means a collapsed sidebar,
+      which is the default below 768px. On the expanded-sidebar desktop session she tested, step 3
+      works correctly and the fault is invisible. Both the copy and the logic were genuinely
+      broken; fixing the copy first made the remaining symptom look like more copy trouble.
+    - **Step 1 (`_upload_body`)** dropped "It's indexed for File Search automatically." Indexing is a
+      mechanism the user neither controls nor needs a word for; the promise is that questions work
+      immediately, so the copy now says only that.
+    - **Step 2 (`_tools_body`)** dropped "the paperclip turns it on for you," which explained step 1's
+      control inside step 2 and was the main reason the two steps read as blurred together. File
+      Search is now described by what it does — "lets the assistant read and search the documents
+      you've attached to this chat" — rather than by the name of the control. A trailing clause,
+      "uploading a document turns it on for you," restores the one *fact* the removed clause
+      carried: without it the tour promised in step 1 that questions work immediately, then
+      presented File Search in step 2 as something the user operates, with nothing saying they
+      need not touch it.
+      ⚠️ Hedged to "you won't usually need to turn it on yourself" on purpose, after two sharper
+      versions were rejected as overclaiming. The paperclip (`AttachFileMenu.tsx`) and the rail
+      panel (`PanelTable.tsx`) set `EToolResources.file_search` unconditionally, but drag-and-drop
+      routes through `useDragHelpers.ts`'s `handleOptionSelect`, which only sets the resource the
+      user picked in the drop modal — dropping a file and choosing Image or Code leaves File
+      Search off. "Anything you upload" and "uploading a document turns it on" both read as
+      covering that path. The sentence exists to reassure rather than instruct, so the weaker
+      claim is the correct one; don't tighten it back without re-checking `handleOptionSelect`.
+      Also: **"Two options live here," not "switches."** `ToolsDropdown.tsx` rows toggle on
+      row-click and render only a pin button; there is no switch or checkbox drawn, so telling a
+      non-technical user to look for one sends them hunting for a control that doesn't exist.
+    - **Step 3 (`_sidebar_body`)** rewrote the Attach Files clause as a sentence with a verb: "lets
+      you add a document you've already uploaded to the chat you're in." ⚠️ This deliberately keeps
+      the attach capability that the superseded branch `feature/pbi-12626-12627-12633` proposed
+      removing on the grounds that the panel is read-only. It is not read-only:
+      `SidePanel/Files/Panel.tsx` renders `PanelTable.tsx`, whose filename cell is `role="button"`
+      with `tabIndex={0}` and `onClick`/`onKeyDown` handlers calling `handleFileClick` →
+      `addFile({ ..., attached: true })`. That is the same path the File Search patch below hooks to
+      auto-enable `EToolResources.file_search`. Do not "correct" this sentence back.
+    - **Step 4 (`_account_body`)** reframed from "My Files, where every document you've uploaded is
+      listed" to "the full list of everything you've uploaded," and extended to name **Help & FAQ**,
+      which the menu has always had (`AccountSettings.tsx`, rendered unless
+      `startupConfig.helpAndFaqURL === '/'`, which our config never sets) and which is plausibly the
+      most useful item in it for non-technical staff. Items are listed in the order they appear in
+      the menu — My Files, Help & FAQ, Settings — so the sentence can be read top-to-bottom against
+      the open dropdown. Log out is left unnamed as self-evident.
+      Steps 3 and 4 previously made the
+      same claim in different words, which is what made the back half of the tour feel repetitive.
+      The split is **editorial, not functional**: step 3's sentence is about attaching from the rail,
+      step 4's is about reaching the library from the account menu. Do not read it as a difference in
+      what the two surfaces show — `Files/Panel.tsx` and `MyFilesModal.tsx` both list every file
+      (the modal passes a `select` that normalizes fields but drops no rows), calling the same
+      `useGetFiles()`, and `PanelTable.tsx`'s "Manage Files" button opens the very same modal step 4
+      opens. Step 3's copy is accurate only because it never claims to *list* anything.
+    - **These strings are downstream of `librechat.yaml`, and have already been invalidated twice by
+      config changes.** Anything the tour asserts about *what is on screen* is a config-dependent
+      claim, not a source fact. Step 2's "Two options" holds only while
+      `agents.capabilities: [file_search, artifacts]` with `interface.skills`/`webSearch`/`runCode`
+      all false and no `mcpServers` block — `ToolsDropdown.tsx` gates six possible rows and exactly
+      two survive that config. Step 3's four icons hold only while
+      `interface.agents`/`memories`/`bookmarks`/`prompts`/`parameters` are false, which is what
+      leaves `useSideNavLinks` with Chat History and Attach Files. **If you flip any of those keys,
+      re-read these two strings** — nothing in the build will fail, the tour will simply lie.
 - **Why:** New users have no way to discover document upload, Artifacts, the sidebar rail, or
   Settings except by accident. No `librechat.yaml`/env-var can add a client-side onboarding overlay,
   so this required new source files. The dev-testing follow-ups exist because the first version
@@ -625,7 +700,11 @@ Keep the patch set as small as possible. Add entries below as patches land.
   Search silently off and no way back):
   1. **Re-added the File Search entry to `ToolsDropdown.tsx`** (`VectorIcon`, `useHasAccess(FILE_SEARCH)`,
      `fileSearchEnabled` from `useAgentCapabilities`, a `handleFileSearchToggle` callback, and a
-     dropdown row with a pin button) — the exact shape PBI 12627 deleted, now sitting next to Skills.
+     dropdown row with a pin button) — the exact shape PBI 12627 deleted. ⚠️ This originally read
+     "now sitting next to Skills"; there is no Skills row in this deployment (`interface.skills:
+     false` in `librechat.yaml`, and the row is gated on `canUseSkills && skillsEnabled` in
+     `ToolsDropdown.tsx`). In practice File Search sits next to Artifacts, the only other surviving
+     row — corrected 2026-08-04.
      `BadgeRowContext.tsx`/`useToolToggle.ts`/`FileSearch.tsx` (the input-row status chip) were never
      touched by 12627 and needed no changes here; the toggle/pin state they expose was simply
      unreachable from any UI once the menu row was gone. Restoring the row makes both toggling and
@@ -690,6 +769,144 @@ Keep the patch set as small as possible. Add entries below as patches land.
   merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
   equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
 
+### Guided tour: step advance could render the previous step; backdrops stacked
+
+- **Work item:** follow-up to PBI 12633 / 12746, from product-owner testing in dev
+- **Added:** 2026-08-04
+- **Files touched:** `client/src/components/Onboarding/useGuidedTour.ts`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Onboarding/TourBackdrop.tsx`,
+  `client/src/components/Onboarding/GuidedTour.tsx`,
+  `client/src/components/Onboarding/tourState.ts` (new),
+  `client/src/components/UnifiedSidebar/UnifiedSidebar.tsx`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+- **What:** Three faults, all reported as one symptom — *"step 3 points at the toggle options in
+  the chat."*
+  1. **Advancing a step could render the previous step under the new step's number.** `stepIndex`
+     advances the moment Next is clicked, but `currentStep` was only reassigned once the new
+     step's anchor was found in the DOM — and `TourPopover` fell back to `lastStepRef` whenever
+     `step` was null. So while the retry loop hunted for a missing anchor, the popover rendered
+     the *outgoing* step's copy at the *outgoing* step's anchor, while the footer read
+     `stepIndex + 1`. Step 2's popover, sitting on the Tools button, labelled "Step 3 of 4", for
+     up to the full 10s window before the step was skipped. Fixed by clearing `currentStep` when
+     the step changes and deleting the fallback: the popover now shows the right step or nothing.
+     On a normal transition this costs nothing — the anchor resolves in the same synchronous
+     effect, so React batches both updates and no blank frame is committed. That guarantee is
+     narrower than it sounds, though: the click sets `stepIndex` first, so React paints one frame
+     carrying the new number before the effect runs. `GuidedTour` therefore derives the displayed
+     number from the step actually on screen (`tourSteps.indexOf(currentStep)`) rather than from
+     `stepIndex`, closing the remaining single-frame flash outright.
+     Two things the deleted fallback had been covering incidentally, now handled directly:
+     `TourPopover`'s Escape/Tab handler is **no longer gated on having a step** — otherwise the
+     entire retry window ran with no Escape and no focus trap while the backdrop still swallowed
+     clicks, so a keyboard user could tab into the blocked app and activate it. And `GuidedTour`
+     stops rendering once the tour ends **including the `no-anchors` path**, which deliberately
+     doesn't mark the tour seen: that path previously left the backdrop mounted indefinitely,
+     which was a visible grey sheet before and would now be an invisible click-blocker over an
+     app that looks entirely normal.
+  2. **Step 3's anchor doesn't exist when the sidebar is collapsed on desktop.** `ExpandedPanel.tsx`
+     assigns `CLOSE_SIDEBAR_ID` only while `expanded`, and `Sidebar.tsx` passes the real
+     `expanded` through — so a desktop user who has ever collapsed the sidebar has no anchor, and
+     `sidebarExpanded` is sticky in `localStorage`, so it stays that way. `GuidedTour` now expands
+     the sidebar **while the sidebar step is the one being looked for**, then restores.
+     ⚠️ Keyed on the *pending* step (`tourSteps[stepIndex]`), never on `currentStep`. `currentStep`
+     is only assigned once an anchor resolves, so keying off it is circular — the anchor can't
+     exist until the sidebar expands, and the sidebar wouldn't expand until the anchor existed, so
+     the step silently timed out. That circularity shipped briefly and was caught in review; if
+     this ever gets "simplified" back to `currentStep`, step 3 stops appearing for exactly the
+     users it was fixed for.
+     ⚠️ **Below 768px the mechanism is different**, and an earlier version of this entry had it
+     wrong: `UnifiedSidebar.tsx`'s small-screen branch renders `<ExpandedPanel>` with **no**
+     `expanded` prop, and the prop defaults to `true` (`ExpandedPanel.tsx:124`), so the id is
+     always assigned there — collapsed or not, since the panel is merely translated off-screen.
+     On mobile the pre-fix symptom was an anchor that *resolved to an off-screen rect*, so the
+     popover appeared detached rather than absent. Same fix, different cause; don't try to
+     reproduce the desktop mechanism at mobile widths.
+     **The expansion is scoped to that one step deliberately.** Holding it open for the whole
+     walk breaks steps 1 and 2 below 768px, where the sidebar is a `fixed` overlay up to 380px
+     wide that covers the composer controls those steps anchor to.
+     **The stored preference is protected.** `store.sidebarExpanded` is an `atomWithLocalStorage`,
+     so setting it writes `unifiedSidebarExpanded` immediately, and React cleanup cannot undo
+     that on a reload or tab close — anyone quitting mid-tour would have kept a permanently
+     expanded sidebar. The effect rewrites the stored value back on the next tick and lets the
+     in-memory atom carry the expansion, so only the live session is affected. The pre-tour value
+     is captured from `localStorage` rather than from the atom, because a remount mid-step (which
+     `Root.tsx`'s config/terms gating can cause) would otherwise capture the `true` we just set
+     and make the expansion permanent.
+     **Two limits worth knowing.** A user who deliberately collapses the sidebar *during* the
+     sidebar step still gets it restored to the pre-tour value on exit — the tour can't tell that
+     apart from its own expansion. And this only guards the sidebar preference; it is not a
+     general "the tour never writes state" claim.
+  4. **Retry windows: shorter mid-tour, and capped overall.** `ANCHOR_RETRY_MAX_ATTEMPTS` (40,
+     ~10s) exists for the cold-load race, where the composer may still be mounting. Once any step
+     has rendered the app is demonstrably up, so a missing anchor is genuinely missing —
+     `ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR` (12, ~3s) applies from then on, gated on `shownAnyStep`.
+     The windows still compound, though: with nothing on the page, four steps at the cold-start
+     window would hold a full-screen click blocker for ~40s — invisible in light mode, Tab
+     hard-blocked, no popover to explain it, and repeating on every load since `no-anchors`
+     doesn't mark the tour seen. `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour
+     instead. It counts **consecutive** failures and resets on every successful render, or normal
+     use would drain it — see the Back handling below.
+  5. **Back was a one-way valve, and could dismiss the tour for good.** Skipping a never-appearing
+     step always incremented, so pressing Back onto a missing step blanked the popover, then
+     bounced forward to the step just left — no way past it. Worse, each bounce spent 12 of the
+     total budget, so four bounces ended the tour via `onEnd('finished')`, which marks it seen:
+     mashing Back could permanently dismiss it. Skipping now follows the direction of travel
+     (`direction` ref), and the budget resets on success.
+  6. **Step 4's anchor lives inside the sidebar the tour had just closed.** `AccountSettings`
+     (`[data-testid="nav-user"]`) renders inside `ExpandedPanel`. On desktop that stays on screen
+     as a narrow rail when collapsed, but below 768px the whole panel is translated off-screen and
+     `inert`. Scoping the expansion to the sidebar step meant collapsing exactly as step 4 began —
+     and because `document.querySelector` ignores transforms the anchor still *resolved*, so there
+     was no retry and no skip, just a popover pointing at something sliding out of view. Below
+     768px the expansion now covers the account step too.
+  7. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
+     scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
+     compounded to ~0.83 alpha in light and ~0.90 in dark, so the user couldn't see what the
+     popover was pointing at — and fix 2 would have made it worse by expanding the sidebar. The
+     sidebar's scrim is now suppressed while the tour runs (new `tourActiveState` atom — whose
+     effect **must** clear it on unmount, or a logout or route change mid-tour strands it at true
+     for the life of the `RecoilRoot`, which sits above the router; the scrim would then be
+     permanently `pointer-events-none opacity-0`, so on mobile the sidebar opens with no dim and
+     tap-outside-to-close is dead), and the
+     tour's own backdrop drops to the minimum that still reads as modal: **fully transparent in
+     light, `dark:bg-black/35` in dark.** The asymmetry is deliberate — a bright app separates the
+     popover on its own, a near-black one doesn't. Both were picked against the running dev build.
+     Interaction stays blocked either way: an element with no background still receives pointer
+     events, which is why `pointer-events-none` must never be added here.
+     Note this is a first-run-visible surface in **both** themes: `ThemeProvider` defaults to
+     `'system'` (`getInitialTheme`, no stored `color-theme` key), so a user whose OS is in dark
+     mode meets the tour in dark on their first ever load.
+- **Why:** Config can't reach any of this — it's component state and DOM anchoring. Fix 1 is the
+  important one: a tour that confidently shows the wrong step is worse than no tour, and the
+  failure is invisible in the environment most developers test in (desktop, sidebar expanded),
+  which is exactly why it survived a live investigation that concluded "no code-level swap."
+- **How to verify:** Clear `guidedTourSeen` from localStorage each time.
+  1. **Desktop, sidebar collapsed** (the unanchored case): walk the tour. Step 3 shows "Your
+     sidebar" pointing at the sidebar toggle — never step 2's copy on the Tools button. The
+     sidebar opens for step 3 only, and returns to collapsed after Done or Skip.
+  2. **Below 768px**: steps 1 and 2 must point at the composer with the sidebar **not** covering
+     it; the sidebar appears for step 3, with a single backdrop, not two.
+  2b. **Below 768px, step 4**: the sidebar must **stay open** through the account step — its
+     anchor lives inside the panel, so if it collapses on the way in, the popover points at
+     something sliding off-screen rather than failing visibly. Press Back from step 4 too; the
+     sidebar should still be open on step 3.
+  3. **Quit mid-tour on step 3, then reload**: `unifiedSidebarExpanded` in localStorage must
+     still hold whatever it held before the tour.
+  4. **During the anchor-hunt window** (easiest to force by removing `#tools-dropdown-button` in
+     devtools, then pressing Next): Escape must still dismiss, and Tab must not reach the app
+     behind the backdrop. With the same anchor removed, press **Back** repeatedly from step 3 —
+     it must not bounce forward, and repeated presses must not end the tour.
+  4b. **Escape below 768px on the sidebar step**: dismissing must not also collapse the sidebar
+     and leave it in the wrong state.
+  5. **Dark and light**: dark keeps a light dim, light is fully transparent, and clicks are
+     swallowed in both.
+- **Upstream status:** not submitted — `Onboarding/` is entirely ours; only the `UnifiedSidebar.tsx`
+  scrim condition touches an upstream file.
+- **Merge notes:** The `UnifiedSidebar.tsx` change is two lines (a `useRecoilValue` and a condition)
+  and is the only conflict surface. If upstream reworks that scrim, the requirement is simply:
+  don't render a second full-screen overlay while `tourActiveState` is true.
+
 ### Guided tour becomes modal — dimmed backdrop, blocked interaction, speech-bubble tail
 
 - **Work item:** PBI 12746 (builds on the "First-run guided tour" patch above, PBI 12633)
@@ -699,7 +916,9 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `client/src/components/Onboarding/TourPopover.tsx`,
   `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
 - **What:** Two fixes to the tour's original non-modal Radix Popover:
-  1. **Dimmed, click-absorbing backdrop.** New `TourBackdrop.tsx` portals a single
+  1. **Dimmed, click-absorbing backdrop.** ⚠️ *The dim was removed on 2026-08-04 — see the entry
+     above; the backdrop is now transparent and blocks clicks only.* As originally written: new
+     `TourBackdrop.tsx` portals a single
      `fixed inset-0 z-[9998]` dim div (`bg-gray-600/65` / `dark:bg-black/80` — the same tokens
      `@librechat/client`'s `Dialog.tsx` overlay uses) straight to `document.body`. It is rendered
      by `GuidedTour.tsx` itself (`ready && !seen`), as a sibling of `TourPopover`, not by
