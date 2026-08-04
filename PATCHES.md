@@ -620,7 +620,20 @@ Keep the patch set as small as possible. Add entries below as patches land.
     - **Step 4 (`_account_body`)** reframed from "My Files, where every document you've uploaded is
       listed" to "the full list of everything you've uploaded." Steps 3 and 4 previously made the
       same claim in different words, which is what made the back half of the tour feel repetitive.
-      The split is now: **step 3 attaches a file to this chat, step 4 shows everything.**
+      The split is **editorial, not functional**: step 3's sentence is about attaching from the rail,
+      step 4's is about reaching the library from the account menu. Do not read it as a difference in
+      what the two surfaces show — `Files/Panel.tsx` and `MyFilesModal.tsx` both call an unfiltered
+      `useGetFiles()`, and `PanelTable.tsx`'s "Manage Files" button opens the very same modal step 4
+      opens. Step 3's copy is accurate only because it never claims to *list* anything.
+    - **These strings are downstream of `librechat.yaml`, and have already been invalidated twice by
+      config changes.** Anything the tour asserts about *what is on screen* is a config-dependent
+      claim, not a source fact. Step 2's "Two switches" holds only while
+      `agents.capabilities: [file_search, artifacts]` with `interface.skills`/`webSearch`/`runCode`
+      all false and no `mcpServers` block — `ToolsDropdown.tsx` gates six possible rows and exactly
+      two survive that config. Step 3's four icons hold only while
+      `interface.agents`/`memories`/`bookmarks`/`prompts`/`parameters` are false, which is what
+      leaves `useSideNavLinks` with Chat History and Attach Files. **If you flip any of those keys,
+      re-read these two strings** — nothing in the build will fail, the tour will simply lie.
 - **Why:** New users have no way to discover document upload, Artifacts, the sidebar rail, or
   Settings except by accident. No `librechat.yaml`/env-var can add a client-side onboarding overlay,
   so this required new source files. The dev-testing follow-ups exist because the first version
@@ -661,7 +674,11 @@ Keep the patch set as small as possible. Add entries below as patches land.
   Search silently off and no way back):
   1. **Re-added the File Search entry to `ToolsDropdown.tsx`** (`VectorIcon`, `useHasAccess(FILE_SEARCH)`,
      `fileSearchEnabled` from `useAgentCapabilities`, a `handleFileSearchToggle` callback, and a
-     dropdown row with a pin button) — the exact shape PBI 12627 deleted, now sitting next to Skills.
+     dropdown row with a pin button) — the exact shape PBI 12627 deleted. ⚠️ This originally read
+     "now sitting next to Skills"; there is no Skills row in this deployment (`interface.skills:
+     false` in `librechat.yaml`, and the row is gated on `canUseSkills && skillsEnabled` in
+     `ToolsDropdown.tsx`). In practice File Search sits next to Artifacts, the only other surviving
+     row — corrected 2026-08-04.
      `BadgeRowContext.tsx`/`useToolToggle.ts`/`FileSearch.tsx` (the input-row status chip) were never
      touched by 12627 and needed no changes here; the toggle/pin state they expose was simply
      unreachable from any UI once the menu row was gone. Restoring the row makes both toggling and
