@@ -790,11 +790,17 @@ Keep the patch set as small as possible. Add entries below as patches land.
      (including unmount, so navigating away mid-tour doesn't silently change a user preference).
   3. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
      scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
-     compounded to near-black, so the user couldn't see what the popover was pointing at — and
-     fix 2 would have made it worse by expanding the sidebar. The sidebar's scrim is now
-     suppressed while the tour runs (new `tourActiveState` atom), and the tour's own backdrop is
-     **transparent but still click-blocking**: a background-less element still receives pointer
-     events, so interaction stays blocked while the app stays legible.
+     compounded to ~0.83 alpha in light and ~0.90 in dark, so the user couldn't see what the
+     popover was pointing at — and fix 2 would have made it worse by expanding the sidebar. The
+     sidebar's scrim is now suppressed while the tour runs (new `tourActiveState` atom), and the
+     tour's own backdrop drops to the minimum that still reads as modal: **fully transparent in
+     light, `dark:bg-black/35` in dark.** The asymmetry is deliberate — a bright app separates the
+     popover on its own, a near-black one doesn't. Both were picked against the running dev build.
+     Interaction stays blocked either way: an element with no background still receives pointer
+     events, which is why `pointer-events-none` must never be added here.
+     Note this is a first-run-visible surface in **both** themes: `ThemeProvider` defaults to
+     `'system'` (`getInitialTheme`, no stored `color-theme` key), so a user whose OS is in dark
+     mode meets the tour in dark on their first ever load.
 - **Why:** Config can't reach any of this — it's component state and DOM anchoring. Fix 1 is the
   important one: a tour that confidently shows the wrong step is worse than no tour, and the
   failure is invisible in the environment most developers test in (desktop, sidebar expanded),
