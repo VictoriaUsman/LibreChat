@@ -1,81 +1,117 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import store from '~/store';
 import useTourSeen from './useTourSeen';
 import useGuidedTour from './useGuidedTour';
 import type { TourEndReason } from './useGuidedTour';
+import { tourSteps } from './tourSteps';
 import { tourActiveState } from './tourState';
 import TourBackdrop from './TourBackdrop';
 import TourPopover from './TourPopover';
+
+/** The one step that needs the sidebar open. Matched by id, not index, so reordering steps
+ *  can't silently point this at the wrong one. */
+const SIDEBAR_STEP_ID = 'sidebar';
+/** Key `store.sidebarExpanded` persists under (see `atomWithLocalStorage`). */
+const SIDEBAR_STORAGE_KEY = 'unifiedSidebarExpanded';
 
 const GuidedTour = () => {
   const [seen, markSeen] = useTourSeen();
   const [sidebarExpanded, setSidebarExpanded] = useRecoilState(store.sidebarExpanded);
   const setTourActive = useSetRecoilState(tourActiveState);
+  const [ended, setEnded] = useState(false);
   const restoreSidebarTo = useRef<boolean | null>(null);
 
-  // Step 3 anchors on `#close-sidebar-button`, and `ExpandedPanel` only assigns that id while
-  // the sidebar is expanded — so for anyone whose sidebar is collapsed (the default below
-  // 768px, and sticky in localStorage for anyone who has ever collapsed it) the anchor never
-  // exists. The step then can't be shown, and its copy describes four rail icons that aren't
-  // on screen either. Expand for the duration of the walk and put it back afterwards, so the
-  // tour doesn't silently change a preference the user set.
+  const active = !seen && !ended;
+
   useEffect(() => {
-    if (seen) {
+    setTourActive(active);
+  }, [active, setTourActive]);
+
+  const { currentStep, stepIndex, totalSteps, isFirstStep, isLastStep, next, back, dismiss } =
+    useGuidedTour(
+      // Deliberately no start gate. `useGuidedTour` retries each step's anchor lookup instead of
+      // checking once, so a late-mounting composer can no longer cause a step to be skipped.
+      useCallback(
+        (reason: TourEndReason) => {
+          if (reason !== 'no-anchors') {
+            markSeen(true);
+          }
+          // Even on 'no-anchors' the tour is over. Without this the component keeps rendering —
+          // and since the backdrop is now transparent in light mode, that left an invisible
+          // full-screen click-blocker over a normal-looking app until the next reload.
+          setEnded(true);
+        },
+        [markSeen],
+      ),
+    );
+
+  // Only the sidebar step needs the sidebar open, and expanding for the whole walk actively
+  // breaks the earlier steps: below 768px the sidebar is a fixed overlay up to 380px wide
+  // (`UnifiedSidebar.tsx`), so holding it open covers the composer that steps 1 and 2 point at.
+  const needsSidebar = active && currentStep?.id === SIDEBAR_STEP_ID;
+
+  useEffect(() => {
+    if (!needsSidebar) {
       return;
     }
-    setTourActive(true);
     if (restoreSidebarTo.current === null) {
       restoreSidebarTo.current = sidebarExpanded;
     }
     setSidebarExpanded(true);
-    // Only on entering the tour: `sidebarExpanded` is deliberately not a dependency, or
-    // collapsing the sidebar mid-tour would immediately re-expand it and overwrite the
-    // remembered value.
+
+    // `sidebarExpanded` is an `atomWithLocalStorage`, so the line above has already written
+    // `true` to the user's stored preference. React cleanup can't undo that on a reload or a
+    // tab close, which would leave anyone who quit mid-tour with a permanently expanded
+    // sidebar. Put the stored value back immediately and let the in-memory atom carry the
+    // expansion for the rest of the step. Deferred a tick because recoil's `onSet` effect
+    // writes after the set is committed, and this has to land last.
+    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    const timeoutId = setTimeout(() => {
+      if (stored === null) {
+        localStorage.removeItem(SIDEBAR_STORAGE_KEY);
+      } else {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, stored);
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+    // Entering the step only — `sidebarExpanded` is not a dependency, or a collapse during the
+    // step would immediately re-expand and overwrite the remembered value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seen]);
+  }, [needsSidebar]);
 
   const restoreSidebar = useCallback(() => {
-    setTourActive(false);
     if (restoreSidebarTo.current !== null) {
       setSidebarExpanded(restoreSidebarTo.current);
       restoreSidebarTo.current = null;
     }
-  }, [setSidebarExpanded, setTourActive]);
+  }, [setSidebarExpanded]);
 
-  // Covers unmount paths that don't go through `handleEnd` (navigating away mid-tour).
-  useEffect(() => restoreSidebar, [restoreSidebar]);
+  // Leaving the sidebar step — forwards, backwards, or by ending the tour — and any unmount.
+  useEffect(() => {
+    if (needsSidebar) {
+      return restoreSidebar;
+    }
+    restoreSidebar();
+    return undefined;
+  }, [needsSidebar, restoreSidebar]);
 
-  const handleEnd = useCallback(
-    (reason: TourEndReason) => {
-      if (reason !== 'no-anchors') {
-        markSeen(true);
-      }
-      restoreSidebar();
-    },
-    [markSeen, restoreSidebar],
-  );
-
-  // Deliberately no start gate here. `useGuidedTour` retries each step's anchor lookup
-  // (ANCHOR_RETRY_INTERVAL_MS x ANCHOR_RETRY_MAX_ATTEMPTS) instead of checking once, so a
-  // late-mounting composer can no longer cause a step to be skipped. That supersedes the
-  // earlier `ready`/`enabled` gate, which waited only for step 1's anchor and left every
-  // later step exposed to the same race.
-  const { currentStep, stepIndex, totalSteps, isFirstStep, isLastStep, next, back, dismiss } =
-    useGuidedTour(handleEnd);
-
-  if (seen) {
+  if (!active) {
     return null;
   }
 
   return (
     <>
-      {/* Mounted here, not inside TourPopover, so it stays up (no dim flicker) across the
-          brief frames where currentStep is null while skipping a missing anchor. */}
+      {/* Mounted here, not inside TourPopover, so it stays put across the frames where
+          currentStep is null while an anchor is still being looked for. */}
       <TourBackdrop />
       <TourPopover
         step={currentStep}
-        stepIndex={stepIndex}
+        // Derived from the step actually on screen, not from `stepIndex`. `stepIndex` advances
+        // on click and paints before the anchor lookup runs, so feeding it straight through
+        // rendered one frame of the outgoing step's content under the incoming step's number —
+        // a single-frame flash of the exact bug this branch exists to fix.
+        stepIndex={currentStep ? tourSteps.indexOf(currentStep) : stepIndex}
         totalSteps={totalSteps}
         isFirstStep={isFirstStep}
         isLastStep={isLastStep}

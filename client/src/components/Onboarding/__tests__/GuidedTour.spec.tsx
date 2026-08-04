@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RecoilRoot } from 'recoil';
 import GuidedTour from '../GuidedTour';
 import { ANCHOR_RETRY_INTERVAL_MS, ANCHOR_RETRY_MAX_ATTEMPTS } from '../useGuidedTour';
+import { tourSteps } from '../tourSteps';
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -251,6 +252,10 @@ describe('GuidedTour', () => {
     const backdrop = screen.getByTestId('tour-backdrop');
     expect(backdrop).toBeInTheDocument();
     expect(backdrop).not.toHaveClass('pointer-events-none');
+    // Light mode is transparent by design; dark mode keeps a dim, because against a near-black
+    // app the popover has nothing to lift it off the page. Nothing else in the repo pins this
+    // value, so deleting the class would silently regress dark mode with no other signal.
+    expect(backdrop).toHaveClass('dark:bg-black/35');
   });
 
   it('shows nothing rather than the previous step while an anchor is pending', async () => {
@@ -272,6 +277,48 @@ describe('GuidedTour', () => {
       // Step 2 can't render yet, but step 1 must not still be on screen under step 2's number.
       expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
       expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+      // Nor may the footer count ahead of what's rendered — that pairing (old copy, new number)
+      // is the reported bug.
+      expect(screen.queryByText('Step 2 of 4')).not.toBeInTheDocument();
+
+      // And it must still recover once the anchor turns up, inside the mid-tour window.
+      const toolsButton = document.createElement('button');
+      toolsButton.id = 'tools-dropdown-button';
+      toolsButton.textContent = 'tools';
+      document.body.appendChild(toolsButton);
+
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
+      });
+
+      expect(screen.getByText('Tools')).toBeInTheDocument();
+      expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops blocking the screen when no anchors are found at all', async () => {
+    // 'no-anchors' deliberately doesn't mark the tour seen, so it can run again on a healthier
+    // load. It must still tear the backdrop down: it is transparent in light mode, so leaving
+    // it mounted swallows every click over an app that looks completely normal.
+    jest.useFakeTimers();
+    try {
+      render(
+        <RecoilRoot>
+          <GuidedTour />
+        </RecoilRoot>,
+      );
+
+      await act(async () => {
+        jest.advanceTimersByTime(
+          (ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS * tourSteps.length,
+        );
+      });
+
+      expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
+      // Not marked seen — a later load with a healthy DOM should still get the tour.
+      expect(localStorage.getItem('guidedTourSeen')).not.toBe('true');
     } finally {
       jest.useRealTimers();
     }

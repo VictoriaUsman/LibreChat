@@ -67,17 +67,26 @@ const TourPopover = ({
     }
   }, [displayStep]);
 
+  // Deliberately NOT gated on `displayStep`. While `useGuidedTour` is hunting for a step's
+  // anchor there is no popover, but the backdrop is still up and still swallowing clicks — so
+  // if this were gated, Escape would stop dismissing and Tab would stop being trapped for the
+  // length of the retry window. The user could then tab into the blocked app underneath and
+  // activate controls with Enter. Previously the removed `lastStepRef` fallback kept a step
+  // rendered and hid this; the handler simply should never have depended on one.
   useEffect(() => {
-    if (!displayStep) {
-      return;
-    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onDismiss();
         return;
       }
-      if (e.key !== 'Tab' || !contentRef.current) {
+      if (e.key !== 'Tab') {
+        return;
+      }
+      // No popover on screen yet: there is nowhere legitimate to tab to, and the app behind
+      // the backdrop must not become keyboard-reachable just because it's pointer-blocked.
+      if (!contentRef.current) {
+        e.preventDefault();
         return;
       }
       const focusable = contentRef.current.querySelectorAll<HTMLElement>('button:not([disabled])');
@@ -96,7 +105,7 @@ const TourPopover = ({
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [displayStep, onDismiss]);
+  }, [onDismiss]);
 
   if (!displayStep) {
     return null;

@@ -612,13 +612,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
     - **Step 2 (`_tools_body`)** dropped "the paperclip turns it on for you," which explained step 1's
       control inside step 2 and was the main reason the two steps read as blurred together. File
       Search is now described by what it does — "lets the assistant read and search the documents
-      you've attached to this chat" — rather than by the name of the switch. A plain replacement
-      sentence, "It's already on for anything you upload," restores the one *fact* that clause
-      carried: removing it left the tour promising in step 1 that questions work immediately, then
-      presenting File Search in step 2 as a switch the user operates, with nothing saying they need
-      not touch it. True for every attach path — paperclip (`AttachFileMenu.tsx`), drag-drop
-      (`useDragHelpers.ts`) and the rail panel (`PanelTable.tsx`) all set
-      `EToolResources.file_search`.
+      you've attached to this chat" — rather than by the name of the control. A trailing clause,
+      "uploading a document turns it on for you," restores the one *fact* the removed clause
+      carried: without it the tour promised in step 1 that questions work immediately, then
+      presented File Search in step 2 as something the user operates, with nothing saying they
+      need not touch it.
+      ⚠️ Phrased as "uploading a document" rather than "anything you upload" on purpose. The
+      paperclip (`AttachFileMenu.tsx`) and the rail panel (`PanelTable.tsx`) set
+      `EToolResources.file_search` unconditionally, but drag-and-drop routes through
+      `useDragHelpers.ts`'s `handleOptionSelect`, which only sets the resource the user picked in
+      the drop modal — dropping a file and choosing Image or Code leaves File Search off.
+      Also: **"Two options live here," not "switches."** `ToolsDropdown.tsx` rows toggle on
+      row-click and render only a pin button; there is no switch or checkbox drawn, so telling a
+      non-technical user to look for one sends them hunting for a control that doesn't exist.
     - **Step 3 (`_sidebar_body`)** rewrote the Attach Files clause as a sentence with a verb: "lets
       you add a document you've already uploaded to the chat you're in." ⚠️ This deliberately keeps
       the attach capability that the superseded branch `feature/pbi-12626-12627-12633` proposed
@@ -781,13 +787,39 @@ Keep the patch set as small as possible. Add entries below as patches land.
      up to the full 10s window before the step was skipped. Fixed by clearing `currentStep` when
      the step changes and deleting the fallback: the popover now shows the right step or nothing.
      On a normal transition this costs nothing — the anchor resolves in the same synchronous
-     effect, so React batches both updates and no blank frame is committed.
-  2. **Step 3's anchor doesn't exist when the sidebar is collapsed.** `ExpandedPanel.tsx` assigns
-     `CLOSE_SIDEBAR_ID` only while `expanded`, and `sidebarExpanded` defaults to false below 768px
-     and is sticky in `localStorage` for anyone who has ever collapsed it. So step 3 was
-     unanchored *and* its copy described four rail icons that weren't on screen. `GuidedTour` now
-     expands the sidebar for the duration of the walk and restores the previous value on exit
-     (including unmount, so navigating away mid-tour doesn't silently change a user preference).
+     effect, so React batches both updates and no blank frame is committed. That guarantee is
+     narrower than it sounds, though: the click sets `stepIndex` first, so React paints one frame
+     carrying the new number before the effect runs. `GuidedTour` therefore derives the displayed
+     number from the step actually on screen (`tourSteps.indexOf(currentStep)`) rather than from
+     `stepIndex`, closing the remaining single-frame flash outright.
+     Two things the deleted fallback had been covering incidentally, now handled directly:
+     `TourPopover`'s Escape/Tab handler is **no longer gated on having a step** — otherwise the
+     entire retry window ran with no Escape and no focus trap while the backdrop still swallowed
+     clicks, so a keyboard user could tab into the blocked app and activate it. And `GuidedTour`
+     stops rendering once the tour ends **including the `no-anchors` path**, which deliberately
+     doesn't mark the tour seen: that path previously left the backdrop mounted indefinitely,
+     which was a visible grey sheet before and would now be an invisible click-blocker over an
+     app that looks entirely normal.
+  2. **Step 3's anchor doesn't exist when the sidebar is collapsed on desktop.** `ExpandedPanel.tsx`
+     assigns `CLOSE_SIDEBAR_ID` only while `expanded`, and `Sidebar.tsx` passes the real
+     `expanded` through — so a desktop user who has ever collapsed the sidebar has no anchor, and
+     `sidebarExpanded` is sticky in `localStorage`, so it stays that way. `GuidedTour` now expands
+     the sidebar **while the sidebar step is showing**, then restores.
+     ⚠️ **Below 768px the mechanism is different**, and an earlier version of this entry had it
+     wrong: `UnifiedSidebar.tsx`'s small-screen branch renders `<ExpandedPanel>` with **no**
+     `expanded` prop, and the prop defaults to `true` (`ExpandedPanel.tsx:124`), so the id is
+     always assigned there — collapsed or not, since the panel is merely translated off-screen.
+     On mobile the pre-fix symptom was an anchor that *resolved to an off-screen rect*, so the
+     popover appeared detached rather than absent. Same fix, different cause; don't try to
+     reproduce the desktop mechanism at mobile widths.
+     **The expansion is scoped to that one step deliberately.** Holding it open for the whole
+     walk breaks steps 1 and 2 below 768px, where the sidebar is a `fixed` overlay up to 380px
+     wide that covers the composer controls those steps anchor to.
+     **The stored preference is protected.** `store.sidebarExpanded` is an `atomWithLocalStorage`,
+     so setting it writes `unifiedSidebarExpanded` immediately, and React cleanup cannot undo
+     that on a reload or tab close — anyone quitting mid-tour would have kept a permanently
+     expanded sidebar. The effect rewrites the stored value back on the next tick and lets the
+     in-memory atom carry the expansion, so only the live session is affected.
   3. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
      scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
      compounded to ~0.83 alpha in light and ~0.90 in dark, so the user couldn't see what the
@@ -805,11 +837,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
   important one: a tour that confidently shows the wrong step is worse than no tour, and the
   failure is invisible in the environment most developers test in (desktop, sidebar expanded),
   which is exactly why it survived a live investigation that concluded "no code-level swap."
-- **How to verify:** Clear `guidedTourSeen` from localStorage. **Collapse the sidebar**, reload,
-  and walk the tour: step 3 must show "Your sidebar" pointing at the sidebar toggle, never step
-  2's copy on the Tools button, and the app must stay readable behind the popover. Repeat under
-  768px width — only one backdrop should be present. Confirm the sidebar returns to collapsed
-  after Done or Skip.
+- **How to verify:** Clear `guidedTourSeen` from localStorage each time.
+  1. **Desktop, sidebar collapsed** (the unanchored case): walk the tour. Step 3 shows "Your
+     sidebar" pointing at the sidebar toggle — never step 2's copy on the Tools button. The
+     sidebar opens for step 3 only, and returns to collapsed after Done or Skip.
+  2. **Below 768px**: steps 1 and 2 must point at the composer with the sidebar **not** covering
+     it; the sidebar should only appear for step 3, with a single backdrop, not two.
+  3. **Quit mid-tour on step 3, then reload**: `unifiedSidebarExpanded` in localStorage must
+     still hold whatever it held before the tour.
+  4. **During the anchor-hunt window** (easiest to force by removing `#tools-dropdown-button` in
+     devtools, then pressing Next): Escape must still dismiss, and Tab must not reach the app
+     behind the backdrop.
+  5. **Dark and light**: dark keeps a light dim, light is fully transparent, and clicks are
+     swallowed in both.
 - **Upstream status:** not submitted — `Onboarding/` is entirely ours; only the `UnifiedSidebar.tsx`
   scrim condition touches an upstream file.
 - **Merge notes:** The `UnifiedSidebar.tsx` change is two lines (a `useRecoilValue` and a condition)
