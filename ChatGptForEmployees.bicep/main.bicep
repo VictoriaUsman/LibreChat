@@ -1,6 +1,29 @@
-// redeploy trigger (2026-07-21): no-op change to force a fresh pipeline run so the
-// Bicep create stage re-applies after the approval gate and actually creates the
-// now-enabled job-cgfe-okta-sync-<env>. Safe to remove once the deploy has run.
+// ─────────────────────────────────────────────────────────────────────────────────────
+// DEPLOY TRIGGER — bump this number to force BicepCreate to run.
+//
+//   DEPLOY_TRIGGER = 1        (last bumped 2026-08-04 — dev digest 12c7731e / tag 25740)
+//
+// WHY THIS EXISTS. The pipelines gate the whole deploy on `DetectBicepChanges`: if a push
+// touches no `.bicep` file, `BicepCreate` is **Skipped** (WORKING_NOTES §9.2). A digest bump
+// only edits `main.<env>.bicepparam`, which that check does not count — so the image the
+// container app runs is never updated, no new revision is created, and the run still goes
+// green. The restart stages tolerate a Skipped BicepCreate (PR 10964), so the app cycles on
+// the OLD image and looks perfectly healthy. That is exactly what happened on 2026-08-04:
+// PR 11547 merged the digest for tag 25740 and dev carried on serving tag 25436.
+//
+// HOW TO USE IT. **Increment the number above in the same PR as any `.bicepparam`-only
+// change** — digest bumps especially. One counter serves all three environments: this file
+// compiles for every env, and the bump rides the `dev` → `test` → `main` promotion merges,
+// tripping the gate in each. There is deliberately no per-env counter, because the only
+// per-env files are the `.bicepparam`s the detection ignores.
+//
+// It is a comment, so Bicep strips it: the compiled template is byte-identical and `what-if`
+// shows nothing for the bump itself — only the real change alongside it.
+//
+// THIS IS A WORKAROUND. The correct fix is for `DetectBicepChanges` (in the
+// `ROMTech/PipelineTemplates` repo, `insert-stage-bicep-create.yml`) to treat `*.bicepparam`
+// as an infra change, since a digest bump is one. Delete this block when that lands.
+// ─────────────────────────────────────────────────────────────────────────────────────
 param appName string = 'ChatGptForEmployees'
 param location string = 'eastus'
 param subId string = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
