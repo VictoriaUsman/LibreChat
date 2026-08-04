@@ -13,9 +13,9 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:12c7731e5ff2588b6cb30b13260aa27119b16c066195af431a78d2dc9d556942` | 2026-08-04 | `03925623b` | Guided-tour copy + step-advance fixes. ACR tag `25740`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:12c7731e…9d556942` | *staged* | `03925623b` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:12c7731e…9d556942` | *staged* | `03925623b` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:308082f95439a92da27484bf5d0107733c0063ad244f2a7d8ba707091f137468` | 2026-08-04 | `84ad8d651` | Tour overlay + wording corrections. ACR tag `25780`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:308082f9…1f137468` | *staged* | `84ad8d651` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:308082f9…1f137468` | *staged* | `84ad8d651` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
@@ -26,6 +26,23 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-04 — Dev — `sha256:308082f9…1f137468`
+
+- **Fork commit:** `84ad8d651` (fork `main` after PR 11560) · **ACR tag:** `25780` · **arch:** amd64
+- **What's in it:** two corrections after seeing tag `25740` running in dev. The tour backdrop's
+  dim moved from dark mode to light — dimming an already-near-black app only muddied it, while a
+  bright page needs something to separate the popover from it. And step 2's copy was simplified:
+  the "it's already on" clause dropped, and the opener changed to "Open this menu for chat
+  options," which no longer counts the menu's rows and so can't be invalidated by a
+  `librechat.yaml` capability toggle.
+- **Paired infra change:** none beyond this digest bump and the `DEPLOY_TRIGGER` increment.
+- **`DEPLOY_TRIGGER`:** bumped 1 → 2 in the same PR. **Required** — see §5; without it
+  `BicepCreate` is Skipped and this digest never reaches the container app.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
+  tag `25780`, built 2026-08-04 19:45 UTC.
+- **Rollback:** restore `sha256:12c7731e…9d556942` and redeploy — still in the registry. Bump
+  `DEPLOY_TRIGGER` again when doing so, for the same reason.
 
 ### 2026-08-04 — Dev — `sha256:12c7731e…9d556942`
 
