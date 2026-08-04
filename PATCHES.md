@@ -647,12 +647,13 @@ Keep the patch set as small as possible. Add entries below as patches land.
       same claim in different words, which is what made the back half of the tour feel repetitive.
       The split is **editorial, not functional**: step 3's sentence is about attaching from the rail,
       step 4's is about reaching the library from the account menu. Do not read it as a difference in
-      what the two surfaces show — `Files/Panel.tsx` and `MyFilesModal.tsx` both call an unfiltered
+      what the two surfaces show — `Files/Panel.tsx` and `MyFilesModal.tsx` both list every file
+      (the modal passes a `select` that normalizes fields but drops no rows), calling the same
       `useGetFiles()`, and `PanelTable.tsx`'s "Manage Files" button opens the very same modal step 4
       opens. Step 3's copy is accurate only because it never claims to *list* anything.
     - **These strings are downstream of `librechat.yaml`, and have already been invalidated twice by
       config changes.** Anything the tour asserts about *what is on screen* is a config-dependent
-      claim, not a source fact. Step 2's "Two switches" holds only while
+      claim, not a source fact. Step 2's "Two options" holds only while
       `agents.capabilities: [file_search, artifacts]` with `interface.skills`/`webSearch`/`runCode`
       all false and no `mcpServers` block — `ToolsDropdown.tsx` gates six possible rows and exactly
       two survive that config. Step 3's four icons hold only while
@@ -836,12 +837,30 @@ Keep the patch set as small as possible. Add entries below as patches land.
      sidebar step still gets it restored to the pre-tour value on exit — the tour can't tell that
      apart from its own expansion. And this only guards the sidebar preference; it is not a
      general "the tour never writes state" claim.
-  4. **Anchor hunting had no overall ceiling.** The per-step windows are each defensible but they
-     compound: with nothing on the page, four steps at the cold-start window would hold a
-     full-screen click blocker for ~40s — invisible in light mode, Tab hard-blocked, no popover to
-     explain it, and repeating on every load since `no-anchors` doesn't mark the tour seen.
-     `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour instead.
-  3. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
+  4. **Retry windows: shorter mid-tour, and capped overall.** `ANCHOR_RETRY_MAX_ATTEMPTS` (40,
+     ~10s) exists for the cold-load race, where the composer may still be mounting. Once any step
+     has rendered the app is demonstrably up, so a missing anchor is genuinely missing —
+     `ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR` (12, ~3s) applies from then on, gated on `shownAnyStep`.
+     The windows still compound, though: with nothing on the page, four steps at the cold-start
+     window would hold a full-screen click blocker for ~40s — invisible in light mode, Tab
+     hard-blocked, no popover to explain it, and repeating on every load since `no-anchors`
+     doesn't mark the tour seen. `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour
+     instead. It counts **consecutive** failures and resets on every successful render, or normal
+     use would drain it — see the Back handling below.
+  5. **Back was a one-way valve, and could dismiss the tour for good.** Skipping a never-appearing
+     step always incremented, so pressing Back onto a missing step blanked the popover, then
+     bounced forward to the step just left — no way past it. Worse, each bounce spent 12 of the
+     total budget, so four bounces ended the tour via `onEnd('finished')`, which marks it seen:
+     mashing Back could permanently dismiss it. Skipping now follows the direction of travel
+     (`direction` ref), and the budget resets on success.
+  6. **Step 4's anchor lives inside the sidebar the tour had just closed.** `AccountSettings`
+     (`[data-testid="nav-user"]`) renders inside `ExpandedPanel`. On desktop that stays on screen
+     as a narrow rail when collapsed, but below 768px the whole panel is translated off-screen and
+     `inert`. Scoping the expansion to the sidebar step meant collapsing exactly as step 4 began —
+     and because `document.querySelector` ignores transforms the anchor still *resolved*, so there
+     was no retry and no skip, just a popover pointing at something sliding out of view. Below
+     768px the expansion now covers the account step too.
+  7. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
      scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
      compounded to ~0.83 alpha in light and ~0.90 in dark, so the user couldn't see what the
      popover was pointing at — and fix 2 would have made it worse by expanding the sidebar. The
@@ -867,12 +886,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
      sidebar" pointing at the sidebar toggle — never step 2's copy on the Tools button. The
      sidebar opens for step 3 only, and returns to collapsed after Done or Skip.
   2. **Below 768px**: steps 1 and 2 must point at the composer with the sidebar **not** covering
-     it; the sidebar should only appear for step 3, with a single backdrop, not two.
+     it; the sidebar appears for step 3, with a single backdrop, not two.
+  2b. **Below 768px, step 4**: the sidebar must **stay open** through the account step — its
+     anchor lives inside the panel, so if it collapses on the way in, the popover points at
+     something sliding off-screen rather than failing visibly. Press Back from step 4 too; the
+     sidebar should still be open on step 3.
   3. **Quit mid-tour on step 3, then reload**: `unifiedSidebarExpanded` in localStorage must
      still hold whatever it held before the tour.
   4. **During the anchor-hunt window** (easiest to force by removing `#tools-dropdown-button` in
      devtools, then pressing Next): Escape must still dismiss, and Tab must not reach the app
-     behind the backdrop.
+     behind the backdrop. With the same anchor removed, press **Back** repeatedly from step 3 —
+     it must not bounce forward, and repeated presses must not end the tour.
+  4b. **Escape below 768px on the sidebar step**: dismissing must not also collapse the sidebar
+     and leave it in the wrong state.
   5. **Dark and light**: dark keeps a light dim, light is fully transparent, and clicks are
      swallowed in both.
 - **Upstream status:** not submitted — `Onboarding/` is entirely ours; only the `UnifiedSidebar.tsx`

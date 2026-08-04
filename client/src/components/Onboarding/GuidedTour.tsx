@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
+import { useMediaQuery } from '@librechat/client';
 import store from '~/store';
 import useTourSeen from './useTourSeen';
 import useGuidedTour from './useGuidedTour';
@@ -9,9 +10,16 @@ import { tourActiveState } from './tourState';
 import TourBackdrop from './TourBackdrop';
 import TourPopover from './TourPopover';
 
-/** The one step that needs the sidebar open. Matched by id, not index, so reordering steps
- *  can't silently point this at the wrong one. */
-const SIDEBAR_STEP_ID = 'sidebar';
+/** Steps whose anchor lives in the sidebar. Matched by id, not index, so reordering steps can't
+ *  silently point this at the wrong one.
+ *
+ *  `account` is only here below 768px. `AccountSettings` (the `[data-testid="nav-user"]` anchor)
+ *  renders inside `ExpandedPanel`, which on desktop stays on screen as a narrow rail when
+ *  collapsed — but on mobile the whole panel is translated off-screen and marked `inert`. Since
+ *  `document.querySelector` doesn't care about transforms the anchor still *resolves*, so there's
+ *  no retry and no skip: the popover would simply point at something sliding out of view. */
+const SIDEBAR_STEP_IDS = ['sidebar'];
+const SIDEBAR_STEP_IDS_SMALL_SCREEN = ['sidebar', 'account'];
 /** Key `store.sidebarExpanded` persists under (see `atomWithLocalStorage`). */
 const SIDEBAR_STORAGE_KEY = 'unifiedSidebarExpanded';
 
@@ -20,7 +28,12 @@ const GuidedTour = () => {
   const [sidebarExpanded, setSidebarExpanded] = useRecoilState(store.sidebarExpanded);
   const setTourActive = useSetRecoilState(tourActiveState);
   const [ended, setEnded] = useState(false);
+  const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const restoreSidebarTo = useRef<boolean | null>(null);
+  /** True when the user had no stored sidebar preference before the tour, so restoring must
+   *  clear the key again rather than persisting a value the tour invented. The default is
+   *  breakpoint-dependent, so pinning it would stop it following a resize across 768px. */
+  const hadNoStoredPreference = useRef(false);
 
   const active = !seen && !ended;
 
@@ -34,8 +47,9 @@ const GuidedTour = () => {
     return () => setTourActive(false);
   }, [active, setTourActive]);
 
-  const { currentStep, stepIndex, totalSteps, isFirstStep, isLastStep, next, back, dismiss } =
-    useGuidedTour(
+  // `isFirstStep`/`isLastStep` are deliberately not taken from the hook — they're derived below
+  // from the step on screen, for the reason spelled out at the TourPopover props.
+  const { currentStep, stepIndex, totalSteps, next, back, dismiss } = useGuidedTour(
       // Deliberately no start gate. `useGuidedTour` retries each step's anchor lookup instead of
       // checking once, so a late-mounting composer can no longer cause a step to be skipped.
       useCallback(
@@ -61,7 +75,8 @@ const GuidedTour = () => {
   // overlay up to 380px wide (`UnifiedSidebar.tsx`), so holding it open covers the composer that
   // steps 1 and 2 anchor to.
   const pendingStep = stepIndex < tourSteps.length ? tourSteps[stepIndex] : null;
-  const needsSidebar = active && pendingStep?.id === SIDEBAR_STEP_ID;
+  const sidebarStepIds = isSmallScreen ? SIDEBAR_STEP_IDS_SMALL_SCREEN : SIDEBAR_STEP_IDS;
+  const needsSidebar = active && pendingStep != null && sidebarStepIds.includes(pendingStep.id);
 
   useEffect(() => {
     if (!needsSidebar) {
@@ -75,6 +90,7 @@ const GuidedTour = () => {
       // Root.tsx can do as config/terms queries resolve — the atom already reads `true` because
       // we set it, and capturing that would make the expansion permanent.
       restoreSidebarTo.current = stored === null ? sidebarExpanded : stored === 'true';
+      hadNoStoredPreference.current = stored === null;
     }
     setSidebarExpanded(true);
 
@@ -97,9 +113,17 @@ const GuidedTour = () => {
   }, [needsSidebar]);
 
   const restoreSidebar = useCallback(() => {
-    if (restoreSidebarTo.current !== null) {
-      setSidebarExpanded(restoreSidebarTo.current);
-      restoreSidebarTo.current = null;
+    if (restoreSidebarTo.current === null) {
+      return;
+    }
+    setSidebarExpanded(restoreSidebarTo.current);
+    restoreSidebarTo.current = null;
+    if (hadNoStoredPreference.current) {
+      // The setter above persists, so a user who had never set this would end the tour with a
+      // pinned value. Clear it again on the next tick (after Recoil's `onSet` writes) so the
+      // breakpoint default keeps applying.
+      hadNoStoredPreference.current = false;
+      setTimeout(() => localStorage.removeItem(SIDEBAR_STORAGE_KEY), 0);
     }
   }, [setSidebarExpanded]);
 
@@ -112,6 +136,8 @@ const GuidedTour = () => {
     return undefined;
   }, [needsSidebar, restoreSidebar]);
 
+  const displayIndex = currentStep ? tourSteps.indexOf(currentStep) : stepIndex;
+
   if (!active) {
     return null;
   }
@@ -123,14 +149,15 @@ const GuidedTour = () => {
       <TourBackdrop />
       <TourPopover
         step={currentStep}
-        // Derived from the step actually on screen, not from `stepIndex`. `stepIndex` advances
-        // on click and paints before the anchor lookup runs, so feeding it straight through
-        // rendered one frame of the outgoing step's content under the incoming step's number —
-        // a single-frame flash of the exact bug this branch exists to fix.
-        stepIndex={currentStep ? tourSteps.indexOf(currentStep) : stepIndex}
+        // All three derived from the step actually on screen, not from `stepIndex`. `stepIndex`
+        // advances on click and paints before the anchor lookup runs, so feeding it straight
+        // through rendered one frame of the outgoing step's content under the incoming step's
+        // number — and, while the number alone was fixed, the incoming step's *button semantics*:
+        // Back appearing on step 1, or the primary button reading "Done" over step 3's copy.
+        stepIndex={displayIndex}
         totalSteps={totalSteps}
-        isFirstStep={isFirstStep}
-        isLastStep={isLastStep}
+        isFirstStep={displayIndex === 0}
+        isLastStep={displayIndex >= totalSteps - 1}
         onNext={next}
         onBack={back}
         onDismiss={dismiss}

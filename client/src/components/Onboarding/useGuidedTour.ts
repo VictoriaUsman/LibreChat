@@ -37,6 +37,8 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
   const [currentStep, setCurrentStep] = useState<TourStep | null>(null);
   const shownAnyStep = useRef(false);
   const totalAttempts = useRef(0);
+  /** +1 forward, -1 backward — which way to skip a step whose anchor never appears. */
+  const direction = useRef<1 | -1>(1);
 
   // Retries the anchor lookup for the current step instead of checking once: on a real page
   // load, the sidebar/composer render at different times as conversation/config data resolves
@@ -74,6 +76,10 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
       }
       if (document.querySelector(rawStep.anchorSelector) != null) {
         shownAnyStep.current = true;
+        // The budget below guards *consecutive* failure. Reset on every success, or normal use —
+        // stepping back over a permanently missing step, say — slowly drains it and ends the tour
+        // for someone whose app is working fine.
+        totalAttempts.current = 0;
         setCurrentStep(rawStep);
         return;
       }
@@ -89,7 +95,12 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
       }
       if (attempts >= maxAttempts) {
         setCurrentStep(null);
-        if (stepIndex + 1 >= tourSteps.length) {
+        // Skip in the direction the user was travelling. Always incrementing made Back a one-way
+        // valve: pressing it onto a missing step blanked the popover, then bounced forward to the
+        // step just left, with no way past it.
+        if (direction.current === -1 && stepIndex > 0) {
+          setStepIndex((prev) => Math.max(0, prev - 1));
+        } else if (stepIndex + 1 >= tourSteps.length) {
           onEnd(shownAnyStep.current ? 'finished' : 'no-anchors');
         } else {
           setStepIndex((prev) => prev + 1);
@@ -105,6 +116,11 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
       cancelled = true;
       clearTimeout(timeoutId);
     };
+    // `[stepIndex]` only, and the disable below is load-bearing rather than lazy. `onEnd` is not
+    // stable — it closes over `markSeen` from `useLocalStorage`, which returns a fresh setter
+    // every render — so listing it would restart this effect on every render, resetting
+    // `attempts` to 0 each time. A missing anchor would then retry forever, holding an invisible
+    // backdrop with no popover and no exit. Keep the dep list as-is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex]);
 
@@ -119,9 +135,13 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
     [stepIndex, onEnd],
   );
 
-  const next = useCallback(() => advanceOrEnd('finished'), [advanceOrEnd]);
+  const next = useCallback(() => {
+    direction.current = 1;
+    advanceOrEnd('finished');
+  }, [advanceOrEnd]);
 
   const back = useCallback(() => {
+    direction.current = -1;
     setStepIndex((prev) => Math.max(0, prev - 1));
   }, []);
 

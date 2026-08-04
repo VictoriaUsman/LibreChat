@@ -79,6 +79,11 @@ const TourPopover = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        // Capture phase, so stopping propagation here keeps the app's own Escape handlers out of
+        // it. `UnifiedSidebar` binds Escape-to-collapse whenever the sidebar is expanded on a
+        // small screen — a state the tour itself creates — so without this, dismissing the tour
+        // also collapsed the sidebar, and the restore then re-expanded it.
+        e.stopPropagation();
         onDismiss();
         return;
       }
