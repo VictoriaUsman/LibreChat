@@ -612,19 +612,18 @@ Keep the patch set as small as possible. Add entries below as patches land.
     - **Step 2 (`_tools_body`)** dropped "the paperclip turns it on for you," which explained step 1's
       control inside step 2 and was the main reason the two steps read as blurred together. File
       Search is now described by what it does — "lets the assistant read and search the documents
-      you've attached to this chat" — rather than by the name of the control. A trailing clause,
-      "uploading a document turns it on for you," restores the one *fact* the removed clause
-      carried: without it the tour promised in step 1 that questions work immediately, then
-      presented File Search in step 2 as something the user operates, with nothing saying they
-      need not touch it.
-      ⚠️ Hedged to "you won't usually need to turn it on yourself" on purpose, after two sharper
-      versions were rejected as overclaiming. The paperclip (`AttachFileMenu.tsx`) and the rail
+      you've attached to this chat" — rather than by the name of the control.
+      ⚠️ **No "it's already on" clause, deliberately — dropped 2026-08-05 after seeing it in dev.**
+      Three versions were tried and all were rejected: "It's already on for anything you upload"
+      and "uploading a document turns it on for you" both overclaimed, and the hedged
+      "you won't usually need to turn it on yourself" didn't read well. The underlying difficulty
+      is that the claim is genuinely conditional: the paperclip (`AttachFileMenu.tsx`) and the rail
       panel (`PanelTable.tsx`) set `EToolResources.file_search` unconditionally, but drag-and-drop
       routes through `useDragHelpers.ts`'s `handleOptionSelect`, which only sets the resource the
       user picked in the drop modal — dropping a file and choosing Image or Code leaves File
-      Search off. "Anything you upload" and "uploading a document turns it on" both read as
-      covering that path. The sentence exists to reassure rather than instruct, so the weaker
-      claim is the correct one; don't tighten it back without re-checking `handleOptionSelect`.
+      Search off. Any sentence short enough for a tour either overstates it or hedges into
+      mush. Step 1 already tells the user questions work right after upload, which is the part
+      that matters. **If you reintroduce a version of this, re-check `handleOptionSelect` first.**
       Also: **"Two options live here," not "switches."** `ToolsDropdown.tsx` rows toggle on
       row-click and render only a pin button; there is no switch or checkbox drawn, so telling a
       non-technical user to look for one sends them hunting for a control that doesn't exist.
@@ -869,10 +868,14 @@ Keep the patch set as small as possible. Add entries below as patches land.
      for the life of the `RecoilRoot`, which sits above the router; the scrim would then be
      permanently `pointer-events-none opacity-0`, so on mobile the sidebar opens with no dim and
      tap-outside-to-close is dead), and the
-     tour's own backdrop drops to the minimum that still reads as modal: **fully transparent in
-     light, `dark:bg-black/35` in dark.** The asymmetry is deliberate — a bright app separates the
-     popover on its own, a near-black one doesn't. Both were picked against the running dev build.
-     Interaction stays blocked either way: an element with no background still receives pointer
+     tour's own backdrop drops to the minimum that still reads as modal: **`bg-black/35` in light,
+     fully transparent in dark.** The asymmetry is deliberate — a bright page needs something to
+     separate the popover from it, while dimming an already-near-black app only muddies it.
+     ⚠️ **This pairing was reversed on 2026-08-05.** It first shipped the other way round (dim in
+     dark, transparent in light) on a devtools comparison; seeing it in the deployed build showed
+     the opposite was right. Both values are judgement calls made against the running app, not
+     derived — if you find yourself "correcting" them back, check in the app first.
+     Interaction stays blocked in both themes: an element with no background still receives pointer
      events, which is why `pointer-events-none` must never be added here.
      Note this is a first-run-visible surface in **both** themes: `ThemeProvider` defaults to
      `'system'` (`getInitialTheme`, no stored `color-theme` key), so a user whose OS is in dark
