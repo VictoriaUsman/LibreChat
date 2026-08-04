@@ -624,9 +624,15 @@ Keep the patch set as small as possible. Add entries below as patches land.
       Search off. Any sentence short enough for a tour either overstates it or hedges into
       mush. Step 1 already tells the user questions work right after upload, which is the part
       that matters. **If you reintroduce a version of this, re-check `handleOptionSelect` first.**
-      Also: **"Two options live here," not "switches."** `ToolsDropdown.tsx` rows toggle on
-      row-click and render only a pin button; there is no switch or checkbox drawn, so telling a
-      non-technical user to look for one sends them hunting for a control that doesn't exist.
+      Also: the opener is **"Open this menu for chat options."** It went "Two switches live here"
+      → "Two options live here" → this. "Switches" was wrong on the code: `ToolsDropdown.tsx` rows
+      toggle on row-click and render only a pin button, so there is no switch or checkbox drawn to
+      look for. "Two options" was accurate but **counted the rows**, making the copy a config
+      assertion that goes stale the moment a capability is toggled in `librechat.yaml` — which had
+      already happened twice. The current wording names neither a control type nor a count, so it
+      can't be invalidated by config at all. It also mirrors step 4's "Open this menu for…" and
+      stays a description rather than an instruction, which matters because the tour's backdrop
+      blocks clicks: "click here" would ask for something the user can't do until the tour ends.
     - **Step 3 (`_sidebar_body`)** rewrote the Attach Files clause as a sentence with a verb: "lets
       you add a document you've already uploaded to the chat you're in." ⚠️ This deliberately keeps
       the attach capability that the superseded branch `feature/pbi-12626-12627-12633` proposed
@@ -652,10 +658,13 @@ Keep the patch set as small as possible. Add entries below as patches land.
       opens. Step 3's copy is accurate only because it never claims to *list* anything.
     - **These strings are downstream of `librechat.yaml`, and have already been invalidated twice by
       config changes.** Anything the tour asserts about *what is on screen* is a config-dependent
-      claim, not a source fact. Step 2's "Two options" holds only while
-      `agents.capabilities: [file_search, artifacts]` with `interface.skills`/`webSearch`/`runCode`
-      all false and no `mcpServers` block — `ToolsDropdown.tsx` gates six possible rows and exactly
-      two survive that config. Step 3's four icons hold only while
+      claim, not a source fact. Step 2's opener used to count the rows ("Two options live here"),
+      which held only while `agents.capabilities: [file_search, artifacts]` with
+      `interface.skills`/`webSearch`/`runCode` all false and no `mcpServers` block —
+      `ToolsDropdown.tsx` gates six possible rows and exactly two survive that config. It no longer
+      names a count, so that dependency is gone; but the two rows it then *describes* (File Search,
+      Artifacts) are still exactly those keys, so flipping them still makes the step wrong.
+      Step 3's four icons hold only while
       `interface.agents`/`memories`/`bookmarks`/`prompts`/`parameters` are false, which is what
       leaves `useSideNavLinks` with Chat History and Attach Files. **If you flip any of those keys,
       re-read these two strings** — nothing in the build will fail, the tour will simply lie.
