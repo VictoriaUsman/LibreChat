@@ -617,11 +617,14 @@ Keep the patch set as small as possible. Add entries below as patches land.
       carried: without it the tour promised in step 1 that questions work immediately, then
       presented File Search in step 2 as something the user operates, with nothing saying they
       need not touch it.
-      ⚠️ Phrased as "uploading a document" rather than "anything you upload" on purpose. The
-      paperclip (`AttachFileMenu.tsx`) and the rail panel (`PanelTable.tsx`) set
-      `EToolResources.file_search` unconditionally, but drag-and-drop routes through
-      `useDragHelpers.ts`'s `handleOptionSelect`, which only sets the resource the user picked in
-      the drop modal — dropping a file and choosing Image or Code leaves File Search off.
+      ⚠️ Hedged to "you won't usually need to turn it on yourself" on purpose, after two sharper
+      versions were rejected as overclaiming. The paperclip (`AttachFileMenu.tsx`) and the rail
+      panel (`PanelTable.tsx`) set `EToolResources.file_search` unconditionally, but drag-and-drop
+      routes through `useDragHelpers.ts`'s `handleOptionSelect`, which only sets the resource the
+      user picked in the drop modal — dropping a file and choosing Image or Code leaves File
+      Search off. "Anything you upload" and "uploading a document turns it on" both read as
+      covering that path. The sentence exists to reassure rather than instruct, so the weaker
+      claim is the correct one; don't tighten it back without re-checking `handleOptionSelect`.
       Also: **"Two options live here," not "switches."** `ToolsDropdown.tsx` rows toggle on
       row-click and render only a pin button; there is no switch or checkbox drawn, so telling a
       non-technical user to look for one sends them hunting for a control that doesn't exist.
@@ -804,7 +807,13 @@ Keep the patch set as small as possible. Add entries below as patches land.
      assigns `CLOSE_SIDEBAR_ID` only while `expanded`, and `Sidebar.tsx` passes the real
      `expanded` through — so a desktop user who has ever collapsed the sidebar has no anchor, and
      `sidebarExpanded` is sticky in `localStorage`, so it stays that way. `GuidedTour` now expands
-     the sidebar **while the sidebar step is showing**, then restores.
+     the sidebar **while the sidebar step is the one being looked for**, then restores.
+     ⚠️ Keyed on the *pending* step (`tourSteps[stepIndex]`), never on `currentStep`. `currentStep`
+     is only assigned once an anchor resolves, so keying off it is circular — the anchor can't
+     exist until the sidebar expands, and the sidebar wouldn't expand until the anchor existed, so
+     the step silently timed out. That circularity shipped briefly and was caught in review; if
+     this ever gets "simplified" back to `currentStep`, step 3 stops appearing for exactly the
+     users it was fixed for.
      ⚠️ **Below 768px the mechanism is different**, and an earlier version of this entry had it
      wrong: `UnifiedSidebar.tsx`'s small-screen branch renders `<ExpandedPanel>` with **no**
      `expanded` prop, and the prop defaults to `true` (`ExpandedPanel.tsx:124`), so the id is
@@ -819,12 +828,28 @@ Keep the patch set as small as possible. Add entries below as patches land.
      so setting it writes `unifiedSidebarExpanded` immediately, and React cleanup cannot undo
      that on a reload or tab close — anyone quitting mid-tour would have kept a permanently
      expanded sidebar. The effect rewrites the stored value back on the next tick and lets the
-     in-memory atom carry the expansion, so only the live session is affected.
+     in-memory atom carry the expansion, so only the live session is affected. The pre-tour value
+     is captured from `localStorage` rather than from the atom, because a remount mid-step (which
+     `Root.tsx`'s config/terms gating can cause) would otherwise capture the `true` we just set
+     and make the expansion permanent.
+     **Two limits worth knowing.** A user who deliberately collapses the sidebar *during* the
+     sidebar step still gets it restored to the pre-tour value on exit — the tour can't tell that
+     apart from its own expansion. And this only guards the sidebar preference; it is not a
+     general "the tour never writes state" claim.
+  4. **Anchor hunting had no overall ceiling.** The per-step windows are each defensible but they
+     compound: with nothing on the page, four steps at the cold-start window would hold a
+     full-screen click blocker for ~40s — invisible in light mode, Tab hard-blocked, no popover to
+     explain it, and repeating on every load since `no-anchors` doesn't mark the tour seen.
+     `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour instead.
   3. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
      scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
      compounded to ~0.83 alpha in light and ~0.90 in dark, so the user couldn't see what the
      popover was pointing at — and fix 2 would have made it worse by expanding the sidebar. The
-     sidebar's scrim is now suppressed while the tour runs (new `tourActiveState` atom), and the
+     sidebar's scrim is now suppressed while the tour runs (new `tourActiveState` atom — whose
+     effect **must** clear it on unmount, or a logout or route change mid-tour strands it at true
+     for the life of the `RecoilRoot`, which sits above the router; the scrim would then be
+     permanently `pointer-events-none opacity-0`, so on mobile the sidebar opens with no dim and
+     tap-outside-to-close is dead), and the
      tour's own backdrop drops to the minimum that still reads as modal: **fully transparent in
      light, `dark:bg-black/35` in dark.** The asymmetry is deliberate — a bright app separates the
      popover on its own, a near-black one doesn't. Both were picked against the running dev build.

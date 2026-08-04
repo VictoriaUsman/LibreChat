@@ -170,7 +170,7 @@ describe('GuidedTour', () => {
     // how an element got there) without perturbing React's tree at all.
     jest.useFakeTimers();
     try {
-      renderTour({ includeToolsAnchor: false });
+      const { container } = renderTour({ includeToolsAnchor: false });
 
       expect(screen.getByText('Upload documents')).toBeInTheDocument();
       fireEvent.click(screen.getByText('Next'));
@@ -186,7 +186,12 @@ describe('GuidedTour', () => {
       const toolsButton = document.createElement('button');
       toolsButton.id = 'tools-dropdown-button';
       toolsButton.textContent = 'tools';
-      document.body.appendChild(toolsButton);
+      // Into RTL's container, not document.body: `cleanup()` only unmounts what it rendered, and
+      // nothing here clears document.body, so a stray #tools-dropdown-button leaks into every
+      // later test and silently satisfies anchor lookups that were meant to fail. Appending to
+      // the container keeps the property this test cares about — a direct DOM mutation that
+      // doesn't perturb React's tree — while getting cleaned up.
+      container.append(toolsButton);
 
       await act(async () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
@@ -265,7 +270,7 @@ describe('GuidedTour', () => {
     // "Step 2 of 4" footer — reported in dev as step 3 pointing at the chat toggles.
     jest.useFakeTimers();
     try {
-      renderTour({ includeToolsAnchor: false });
+      const { container } = renderTour({ includeToolsAnchor: false });
 
       expect(screen.getByText('Upload documents')).toBeInTheDocument();
       fireEvent.click(screen.getByText('Next'));
@@ -277,15 +282,16 @@ describe('GuidedTour', () => {
       // Step 2 can't render yet, but step 1 must not still be on screen under step 2's number.
       expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
       expect(screen.queryByText('Tools')).not.toBeInTheDocument();
-      // Nor may the footer count ahead of what's rendered — that pairing (old copy, new number)
-      // is the reported bug.
+      // The footer assertion is belt-and-braces, not independent evidence: with no popover
+      // mounted there is no footer of any number. The `tourSteps.indexOf(currentStep)` derivation
+      // it guards is unobservable here by construction — that it can't be observed IS the fix.
       expect(screen.queryByText('Step 2 of 4')).not.toBeInTheDocument();
 
       // And it must still recover once the anchor turns up, inside the mid-tour window.
       const toolsButton = document.createElement('button');
       toolsButton.id = 'tools-dropdown-button';
       toolsButton.textContent = 'tools';
-      document.body.appendChild(toolsButton);
+      container.append(toolsButton);
 
       await act(async () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS);
@@ -310,11 +316,17 @@ describe('GuidedTour', () => {
         </RecoilRoot>,
       );
 
-      await act(async () => {
-        jest.advanceTimersByTime(
-          (ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS * tourSteps.length,
-        );
-      });
+      // One step transition per act() block. Timer callbacks queue state updates that React only
+      // flushes when the act scope resolves, so the next step's effect — and the fresh timer it
+      // schedules — doesn't exist until after advanceTimersByTime has returned. A single big
+      // advance multiplied by the step count would silently stall after the first transition.
+      // Looping once per step is more than enough: the whole-tour attempt budget ends the tour
+      // before every step gets its own full window, and extra advances after that are harmless.
+      for (let i = 0; i < tourSteps.length; i++) {
+        await act(async () => {
+          jest.advanceTimersByTime((ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS);
+        });
+      }
 
       expect(screen.queryByTestId('tour-backdrop')).not.toBeInTheDocument();
       // Not marked seen — a later load with a healthy DOM should still get the tour.

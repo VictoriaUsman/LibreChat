@@ -15,6 +15,11 @@ export const ANCHOR_RETRY_MAX_ATTEMPTS = 40;
  * the app is up, so an anchor that isn't there is genuinely absent rather than late. Waiting
  * the full 10s in that case just strands the user on a step that will never render. */
 export const ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR = 12;
+/** Ceiling on anchor hunting across the whole tour, ~12s. The per-step windows are each
+ * defensible, but they compound: if nothing ever mounts, four steps at the cold-start window
+ * would spend ~40s holding a full-screen click blocker that is invisible in light mode, with no
+ * popover to explain it and Tab hard-blocked. Past this budget the tour gives up. */
+export const ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS = 48;
 
 interface UseGuidedTourResult {
   currentStep: TourStep | null;
@@ -31,6 +36,7 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
   const [stepIndex, setStepIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState<TourStep | null>(null);
   const shownAnyStep = useRef(false);
+  const totalAttempts = useRef(0);
 
   // Retries the anchor lookup for the current step instead of checking once: on a real page
   // load, the sidebar/composer render at different times as conversation/config data resolves
@@ -72,6 +78,15 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
         return;
       }
       attempts += 1;
+      totalAttempts.current += 1;
+      // Give up entirely once the whole-tour budget is spent, rather than skipping to a step
+      // that will almost certainly be missing too. Ending is the safe direction: it tears the
+      // backdrop down instead of leaving an invisible blocker up for the sum of every window.
+      if (totalAttempts.current >= ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS) {
+        setCurrentStep(null);
+        onEnd(shownAnyStep.current ? 'finished' : 'no-anchors');
+        return;
+      }
       if (attempts >= maxAttempts) {
         setCurrentStep(null);
         if (stepIndex + 1 >= tourSteps.length) {

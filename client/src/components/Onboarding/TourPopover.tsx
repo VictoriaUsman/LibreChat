@@ -53,8 +53,10 @@ const TourPopover = ({
   // regardless and there is no dim flicker either way.
   const displayStep = step;
 
-  // Runs as a layout effect (before Radix Popper's own effect) so the anchor is already
-  // up to date by the time Popper reads it for positioning.
+  // A layout effect so `anchorRef` is current before paint. Note the ordering is *not* "layout
+  // effects beat Radix's" — child layout effects run before a parent's, and this is the child.
+  // It works because Radix's `PopperAnchor` reads `virtualRef.current` in a passive effect, which
+  // runs after every layout effect. Don't "fix" this into a passive effect on that assumption.
   useLayoutEffect(() => {
     anchorRef.current = displayStep
       ? document.querySelector<HTMLElement>(displayStep.anchorSelector)
@@ -89,6 +91,14 @@ const TourPopover = ({
         e.preventDefault();
         return;
       }
+      // Focus can start outside the popover — the composer textarea autofocuses on load — and a
+      // first/last-only trap never fires from there, so Tab would walk straight into the blocked
+      // app. Pull focus back in instead.
+      if (!contentRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        primaryButtonRef.current?.focus();
+        return;
+      }
       const focusable = contentRef.current.querySelectorAll<HTMLElement>('button:not([disabled])');
       if (focusable.length === 0) {
         return;
@@ -119,7 +129,9 @@ const TourPopover = ({
           side={displayStep.placement}
           sideOffset={10}
           align="center"
-          aria-modal="true"
+          // No `aria-modal` here: this element carries no dialog role, and `aria-modal` on a
+          // non-dialog is invalid ARIA. It belongs on the inner `role="dialog"` node, which has
+          // it.
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}

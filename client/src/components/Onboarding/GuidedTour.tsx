@@ -24,8 +24,14 @@ const GuidedTour = () => {
 
   const active = !seen && !ended;
 
+  // Cleanup matters: without it, unmounting while the tour is live (logout, a route change, or
+  // Root.tsx's config/terms gate flipping) strands `tourActiveState` at true for the life of the
+  // RecoilRoot — which lives above the router, so it survives logout. UnifiedSidebar would then
+  // permanently render its scrim as `pointer-events-none opacity-0`, killing tap-outside-to-close
+  // on mobile with no dim and no way back.
   useEffect(() => {
     setTourActive(active);
+    return () => setTourActive(false);
   }, [active, setTourActive]);
 
   const { currentStep, stepIndex, totalSteps, isFirstStep, isLastStep, next, back, dismiss } =
@@ -46,27 +52,37 @@ const GuidedTour = () => {
       ),
     );
 
-  // Only the sidebar step needs the sidebar open, and expanding for the whole walk actively
-  // breaks the earlier steps: below 768px the sidebar is a fixed overlay up to 380px wide
-  // (`UnifiedSidebar.tsx`), so holding it open covers the composer that steps 1 and 2 point at.
-  const needsSidebar = active && currentStep?.id === SIDEBAR_STEP_ID;
+  // Keyed off the step being *looked for*, not the one on screen. `currentStep` is only assigned
+  // once its anchor resolves, so keying off it was circular: on desktop with a collapsed sidebar
+  // the anchor can't exist until we expand, and we wouldn't expand until the anchor existed — the
+  // step just timed out and was skipped, which is precisely the case this fix is for.
+  //
+  // Still scoped to this one step rather than the whole walk: below 768px the sidebar is a fixed
+  // overlay up to 380px wide (`UnifiedSidebar.tsx`), so holding it open covers the composer that
+  // steps 1 and 2 anchor to.
+  const pendingStep = stepIndex < tourSteps.length ? tourSteps[stepIndex] : null;
+  const needsSidebar = active && pendingStep?.id === SIDEBAR_STEP_ID;
 
   useEffect(() => {
     if (!needsSidebar) {
-      return;
+      return undefined;
     }
+    // Read before writing: the setter below persists, so reading afterwards would depend on
+    // Recoil's atom-effect ordering to still see the old value.
+    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
     if (restoreSidebarTo.current === null) {
-      restoreSidebarTo.current = sidebarExpanded;
+      // Prefer the stored value over the live atom. If this component remounts mid-tour — which
+      // Root.tsx can do as config/terms queries resolve — the atom already reads `true` because
+      // we set it, and capturing that would make the expansion permanent.
+      restoreSidebarTo.current = stored === null ? sidebarExpanded : stored === 'true';
     }
     setSidebarExpanded(true);
 
     // `sidebarExpanded` is an `atomWithLocalStorage`, so the line above has already written
-    // `true` to the user's stored preference. React cleanup can't undo that on a reload or a
-    // tab close, which would leave anyone who quit mid-tour with a permanently expanded
-    // sidebar. Put the stored value back immediately and let the in-memory atom carry the
-    // expansion for the rest of the step. Deferred a tick because recoil's `onSet` effect
-    // writes after the set is committed, and this has to land last.
-    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    // `true` to the user's stored preference, and React cleanup can't undo that on a reload or
+    // tab close — anyone quitting mid-tour would keep a permanently expanded sidebar. Put the
+    // stored value back and let the in-memory atom carry the expansion for the rest of the step.
+    // Deferred a tick because Recoil's `onSet` effect writes after the set is committed.
     const timeoutId = setTimeout(() => {
       if (stored === null) {
         localStorage.removeItem(SIDEBAR_STORAGE_KEY);
