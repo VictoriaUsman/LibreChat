@@ -14,13 +14,17 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // summary block, which also lists the node:20-alpine base-image digest under
 // `runtime-dependency`. That one is provenance, not deployable.
 //
-// This digest = guided-tour copy + step-advance fixes (fork `main` @ 03925623b, PR 11524,
-// ACR tag 25740, amd64, built 2026-08-04). Plain-language rewrite of all four tour steps,
-// plus fixes for a step advance that could render the previous step, step 3's missing
-// anchor on a collapsed sidebar, and two stacked backdrops.
-// Rollback: restore sha256:5e198b62… (fork `main` @ 0b202deef, tag 25436, 2026-08-03) and
-// redeploy — still in the registry, as is sha256:65932ee0… before it.
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:12c7731e5ff2588b6cb30b13260aa27119b16c066195af431a78d2dc9d556942'
+// This digest = tour overlay + wording corrections (fork `main` @ 84ad8d651, PR 11560,
+// ACR tag 25780, amd64, built 2026-08-04). Backdrop dim moved from dark mode to light,
+// and step 2's copy simplified after seeing the previous build in dev.
+//
+// ⚠️ A digest change alone does NOT deploy — bump DEPLOY_TRIGGER in main.bicep in the same
+// PR, or BicepCreate is Skipped and the app keeps its previous image while the run goes
+// green (see main.bicep's header and LibreChat_Image_Deployments.md §5).
+//
+// Rollback: restore sha256:12c7731e… (fork `main` @ 03925623b, tag 25740, 2026-08-04) and
+// redeploy — still in the registry, as is sha256:5e198b62… before it.
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:308082f95439a92da27484bf5d0107733c0063ad244f2a7d8ba707091f137468'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
