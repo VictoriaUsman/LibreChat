@@ -14,13 +14,13 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // summary block, which also lists the node:20-alpine base-image digest under
 // `runtime-dependency`. That one is provenance, not deployable.
 //
-// This digest = launch review round 2 (fork `main` @ 0b202deef, PR 11452, ACR tag 25436,
-// amd64, built 2026-08-03). It adds PBIs 12687 (vector ROMChat logo), 12745 (File Search
-// restored to the tools menu), 12746 (modal guided tour with backdrop) and 12633's tour
-// reconciliation on top of the first patched build.
-// Rollback: restore sha256:65932ee0… (fork `main` @ 7e80cac6c, tag 25042, 2026-07-31) and
-// redeploy — still in the registry, as is the zero-patch parity build sha256:6c97e7f9….
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544'
+// This digest = guided-tour copy + step-advance fixes (fork `main` @ 03925623b, PR 11524,
+// ACR tag 25740, amd64, built 2026-08-04). Plain-language rewrite of all four tour steps,
+// plus fixes for a step advance that could render the previous step, step 3's missing
+// anchor on a collapsed sidebar, and two stacked backdrops.
+// Rollback: restore sha256:5e198b62… (fork `main` @ 0b202deef, tag 25436, 2026-08-03) and
+// redeploy — still in the registry, as is sha256:65932ee0… before it.
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:12c7731e5ff2588b6cb30b13260aa27119b16c066195af431a78d2dc9d556942'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'

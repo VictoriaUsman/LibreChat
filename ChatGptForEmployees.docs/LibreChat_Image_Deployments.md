@@ -13,9 +13,9 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:5e198b627ddc6854211bc2311c2c01eb591ed3448b4c06169e98f2966be19544` | 2026-08-03 | `0b202deef` | Launch review round 2 — logo, File Search, modal tour. ACR tag `25436`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:5e198b62…6be19544` | *staged* | `0b202deef` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:12c7731e5ff2588b6cb30b13260aa27119b16c066195af431a78d2dc9d556942` | 2026-08-04 | `03925623b` | Guided-tour copy + step-advance fixes. ACR tag `25740`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:12c7731e…9d556942` | *staged* | `03925623b` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:12c7731e…9d556942` | *staged* | `03925623b` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
@@ -26,6 +26,27 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-04 — Dev — `sha256:12c7731e…9d556942`
+
+- **Fork commit:** `03925623b` (fork `main` after PR 11524) · **ACR tag:** `25740` · **arch:** amd64
+- **What's in it:** the guided tour's plain-language copy pass — all four step bodies rewritten to
+  drop internal vocabulary ("indexed for File Search", "switches") for a non-technical audience —
+  plus three fixes to the tour's step machinery found while testing it in dev:
+  advancing a step could render the *previous* step's copy on the previous step's anchor under the
+  new step's number; step 3's anchor doesn't exist when the sidebar is collapsed, so the step was
+  skipped for anyone who'd ever collapsed it; and below 768px the tour's backdrop stacked on top
+  of the sidebar's own scrim, leaving the app too dark to see what the popover pointed at. The
+  backdrop is now transparent in light mode and lightly dimmed in dark.
+- **Paired infra change:** none. Source-only — no `librechat.yaml` or bicep change beyond this
+  digest bump.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
+  tag `25740`, built 2026-08-04 18:11 UTC.
+- **Not covered by automated tests:** the client suite was not run against this build in the
+  authoring environment. The sidebar expand/restore and scrim suppression have no test coverage at
+  all — see the fork's `PATCHES.md` "How to verify" list for the manual checks, particularly
+  desktop-with-collapsed-sidebar and sub-768px.
+- **Rollback:** restore `sha256:5e198b62…6be19544` and redeploy — still in the registry.
 
 ### 2026-08-03 — Dev — `sha256:5e198b62…6be19544`
 
