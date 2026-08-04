@@ -608,7 +608,13 @@ Keep the patch set as small as possible. Add entries below as patches land.
     - **Step 2 (`_tools_body`)** dropped "the paperclip turns it on for you," which explained step 1's
       control inside step 2 and was the main reason the two steps read as blurred together. File
       Search is now described by what it does — "lets the assistant read and search the documents
-      you've attached to this chat" — rather than by the name of the switch.
+      you've attached to this chat" — rather than by the name of the switch. A plain replacement
+      sentence, "It's already on for anything you upload," restores the one *fact* that clause
+      carried: removing it left the tour promising in step 1 that questions work immediately, then
+      presenting File Search in step 2 as a switch the user operates, with nothing saying they need
+      not touch it. True for every attach path — paperclip (`AttachFileMenu.tsx`), drag-drop
+      (`useDragHelpers.ts`) and the rail panel (`PanelTable.tsx`) all set
+      `EToolResources.file_search`.
     - **Step 3 (`_sidebar_body`)** rewrote the Attach Files clause as a sentence with a verb: "lets
       you add a document you've already uploaded to the chat you're in." ⚠️ This deliberately keeps
       the attach capability that the superseded branch `feature/pbi-12626-12627-12633` proposed
@@ -618,7 +624,13 @@ Keep the patch set as small as possible. Add entries below as patches land.
       `addFile({ ..., attached: true })`. That is the same path the File Search patch below hooks to
       auto-enable `EToolResources.file_search`. Do not "correct" this sentence back.
     - **Step 4 (`_account_body`)** reframed from "My Files, where every document you've uploaded is
-      listed" to "the full list of everything you've uploaded." Steps 3 and 4 previously made the
+      listed" to "the full list of everything you've uploaded," and extended to name **Help & FAQ**,
+      which the menu has always had (`AccountSettings.tsx`, rendered unless
+      `startupConfig.helpAndFaqURL === '/'`, which our config never sets) and which is plausibly the
+      most useful item in it for non-technical staff. Items are listed in the order they appear in
+      the menu — My Files, Help & FAQ, Settings — so the sentence can be read top-to-bottom against
+      the open dropdown. Log out is left unnamed as self-evident.
+      Steps 3 and 4 previously made the
       same claim in different words, which is what made the back half of the tour feel repetitive.
       The split is **editorial, not functional**: step 3's sentence is about attaching from the rail,
       step 4's is about reaching the library from the account menu. Do not read it as a difference in
