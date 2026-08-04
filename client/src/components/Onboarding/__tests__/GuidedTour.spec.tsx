@@ -257,10 +257,12 @@ describe('GuidedTour', () => {
     const backdrop = screen.getByTestId('tour-backdrop');
     expect(backdrop).toBeInTheDocument();
     expect(backdrop).not.toHaveClass('pointer-events-none');
-    // Light mode is transparent by design; dark mode keeps a dim, because against a near-black
-    // app the popover has nothing to lift it off the page. Nothing else in the repo pins this
-    // value, so deleting the class would silently regress dark mode with no other signal.
-    expect(backdrop).toHaveClass('dark:bg-black/35');
+    // Dark mode is transparent by design — dimming an already-near-black app just muddies it —
+    // while light mode keeps a dim to separate the popover from a bright page. Nothing else in
+    // the repo pins these, so dropping either would silently regress one theme with no other
+    // signal. Note the pairing was reversed once already; assert both halves, not just one.
+    expect(backdrop).toHaveClass('bg-black/35');
+    expect(backdrop).toHaveClass('dark:bg-transparent');
   });
 
   it('shows nothing rather than the previous step while an anchor is pending', async () => {

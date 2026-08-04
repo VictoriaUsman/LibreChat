@@ -10,15 +10,18 @@ import { createPortal } from 'react-dom';
  * whatever the popover was pointing at. The sidebar's scrim is now suppressed while the tour runs
  * (see `tourState.ts`), and what's left here is the minimum that still reads as modal.
  *
- * **Asymmetric on purpose.** Light mode is fully transparent: the app is bright enough that the
- * popover separates from it unaided. Dark mode keeps `black/35`, because against a near-black app
- * an undimmed backdrop leaves the popover with nothing to lift it off the page. Both values were
- * chosen against the running dev build rather than derived. This matters more than it looks:
- * `ThemeProvider` defaults to `'system'`, so a first-run user on a dark-mode OS meets the tour in
- * dark on their very first load — the dark case is not an edge case.
+ * **Asymmetric on purpose, and this way round deliberately.** Light mode keeps `black/35`; dark
+ * mode is fully transparent. Both values were judged against the running dev build rather than
+ * derived, and the pairing was reversed on 2026-08-05 after the first version shipped with the dim
+ * on the dark side — dimming an already-near-black app just muddies it, while a bright app needs
+ * something to separate the popover from the page behind it.
+ *
+ * This matters more than it looks: `ThemeProvider` defaults to `'system'`, so a first-run user on
+ * a dark-mode OS meets the tour in dark on their very first load. Neither theme is an edge case;
+ * both are somebody's first impression.
  *
  * An element with no background still receives pointer events, so interaction stays blocked in
- * light mode too. `pointer-events-none` is what would break that, and its absence is deliberate.
+ * dark mode too. `pointer-events-none` is what would break that, and its absence is deliberate.
  * Tune the dim here and nowhere else: one backdrop, one place to change it.
  */
 const TourBackdrop = () =>
@@ -26,7 +29,7 @@ const TourBackdrop = () =>
     <div
       aria-hidden="true"
       data-testid="tour-backdrop"
-      className="fixed inset-0 z-[9998] dark:bg-black/35"
+      className="fixed inset-0 z-[9998] bg-black/35 dark:bg-transparent"
     />,
     document.body,
   );
