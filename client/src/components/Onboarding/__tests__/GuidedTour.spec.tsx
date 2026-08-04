@@ -241,11 +241,40 @@ describe('GuidedTour', () => {
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
   });
 
-  it('shows a dimmed backdrop while the tour is open', async () => {
+  it('covers the screen with a click-blocking backdrop while the tour is open', async () => {
+    // Deliberately not "dimmed" any more: the backdrop is transparent so the user can see what
+    // the popover is pointing at. It still has to be present and still has to receive pointer
+    // events — `pointer-events-none` here would silently unblock the whole app.
     renderTour();
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
 
-    expect(screen.getByTestId('tour-backdrop')).toBeInTheDocument();
+    const backdrop = screen.getByTestId('tour-backdrop');
+    expect(backdrop).toBeInTheDocument();
+    expect(backdrop).not.toHaveClass('pointer-events-none');
+  });
+
+  it('shows nothing rather than the previous step while an anchor is pending', async () => {
+    // Regression: `currentStep` used to keep pointing at the outgoing step for the whole retry
+    // window while `stepIndex` had already advanced, and TourPopover fell back to the last
+    // rendered step. Together they rendered step 1's content on step 1's anchor beneath a
+    // "Step 2 of 4" footer — reported in dev as step 3 pointing at the chat toggles.
+    jest.useFakeTimers();
+    try {
+      renderTour({ includeToolsAnchor: false });
+
+      expect(screen.getByText('Upload documents')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Next'));
+
+      await act(async () => {
+        jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS * 3);
+      });
+
+      // Step 2 can't render yet, but step 1 must not still be on screen under step 2's number.
+      expect(screen.queryByText('Upload documents')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('announces the popover as a modal dialog to assistive technology', async () => {

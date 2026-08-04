@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef, memo, startTransition } from 'react';
 import type { ReactNode } from 'react';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
+import { tourActiveState } from '~/components/Onboarding/tourState';
 import { useForm } from 'react-hook-form';
 import { useMediaQuery } from '@librechat/client';
 import type { ChatFormValues } from '~/common';
@@ -42,6 +43,9 @@ function SidebarChatProvider({ children }: { children: ReactNode }) {
 function UnifiedSidebar() {
   const localize = useLocalize();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  // The guided tour renders its own full-screen blocker. Stacking this scrim under it left the
+  // app unreadable at exactly the moment the tour is asking the user to look at something.
+  const tourActive = useRecoilValue(tourActiveState);
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
   const [isResizing, setIsResizing] = useState(false);
@@ -158,7 +162,9 @@ function UnifiedSidebar() {
         <div
           className={cn(
             'fixed inset-0 z-[109] bg-black/50',
-            expanded ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+            expanded && !tourActive
+              ? 'pointer-events-auto opacity-100'
+              : 'pointer-events-none opacity-0',
           )}
           style={{ transition: `opacity ${TRANSITION_MS}ms ${EASING}` }}
           role="presentation"

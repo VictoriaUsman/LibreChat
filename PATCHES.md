@@ -593,15 +593,19 @@ Keep the patch set as small as possible. Add entries below as patches land.
     after the tour reached dev. Every step was written from the implementation outward and leaked
     internal vocabulary to an audience of non-technical staff. `client/src/locales/en/translation.json`
     only — no logic, no step order, no anchors changed.
-    - **Prior finding this builds on — "steps 2 and 3 got mixed up" is not a logic bug.** A team-lead
-      spot-check after the v2 merge reported the steps as reading confused. Andrea Tiamson
-      investigated live against a running dev server — normal transitions, frame-by-frame capture,
-      and a rapid double-click on Next to rule out a state race — and found **no code-level swap**:
-      step index, title and anchor tracked correctly in every case. The cause was the copy alone.
-      Recorded here so nobody re-opens this as a state-management bug. Her diagnosis of step 2 (that
-      it explained step 1's control inside its own paragraph) is carried into the rewrite below; her
-      proposed strings were superseded by this pass, and her step 3 conclusion was incorrect — see
-      the step 3 note.
+    - **Prior finding this builds on — partly wrong, corrected 2026-08-04.** A team-lead spot-check
+      after the v2 merge reported steps 2 and 3 as reading confused. Andrea Tiamson investigated
+      live against a running dev server — normal transitions, frame-by-frame capture, and a rapid
+      double-click on Next to rule out a state race — and concluded there was **no code-level
+      swap**: step index, title and anchor tracked correctly in every case. Her diagnosis of step 2
+      (that it explained step 1's control inside its own paragraph) was right and is carried into
+      the rewrite below.
+      ⚠️ **The "no logic bug" conclusion was wrong**, and this entry previously repeated it. There
+      *was* a logic bug — see the "Step advance could render the previous step" entry below. It
+      only reproduces when a step's anchor is absent, which for step 3 means a collapsed sidebar,
+      which is the default below 768px. On the expanded-sidebar desktop session she tested, step 3
+      works correctly and the fault is invisible. Both the copy and the logic were genuinely
+      broken; fixing the copy first made the remaining symptom look like more copy trouble.
     - **Step 1 (`_upload_body`)** dropped "It's indexed for File Search automatically." Indexing is a
       mechanism the user neither controls nor needs a word for; the promise is that questions work
       immediately, so the copy now says only that.
@@ -755,6 +759,57 @@ Keep the patch set as small as possible. Add entries below as patches land.
   merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
   equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
 
+### Guided tour: step advance could render the previous step; backdrops stacked
+
+- **Work item:** follow-up to PBI 12633 / 12746, from product-owner testing in dev
+- **Added:** 2026-08-04
+- **Files touched:** `client/src/components/Onboarding/useGuidedTour.ts`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Onboarding/TourBackdrop.tsx`,
+  `client/src/components/Onboarding/GuidedTour.tsx`,
+  `client/src/components/Onboarding/tourState.ts` (new),
+  `client/src/components/UnifiedSidebar/UnifiedSidebar.tsx`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+- **What:** Three faults, all reported as one symptom — *"step 3 points at the toggle options in
+  the chat."*
+  1. **Advancing a step could render the previous step under the new step's number.** `stepIndex`
+     advances the moment Next is clicked, but `currentStep` was only reassigned once the new
+     step's anchor was found in the DOM — and `TourPopover` fell back to `lastStepRef` whenever
+     `step` was null. So while the retry loop hunted for a missing anchor, the popover rendered
+     the *outgoing* step's copy at the *outgoing* step's anchor, while the footer read
+     `stepIndex + 1`. Step 2's popover, sitting on the Tools button, labelled "Step 3 of 4", for
+     up to the full 10s window before the step was skipped. Fixed by clearing `currentStep` when
+     the step changes and deleting the fallback: the popover now shows the right step or nothing.
+     On a normal transition this costs nothing — the anchor resolves in the same synchronous
+     effect, so React batches both updates and no blank frame is committed.
+  2. **Step 3's anchor doesn't exist when the sidebar is collapsed.** `ExpandedPanel.tsx` assigns
+     `CLOSE_SIDEBAR_ID` only while `expanded`, and `sidebarExpanded` defaults to false below 768px
+     and is sticky in `localStorage` for anyone who has ever collapsed it. So step 3 was
+     unanchored *and* its copy described four rail icons that weren't on screen. `GuidedTour` now
+     expands the sidebar for the duration of the walk and restores the previous value on exit
+     (including unmount, so navigating away mid-tour doesn't silently change a user preference).
+  3. **Two backdrops stacked.** Below 768px `UnifiedSidebar.tsx` renders its own `bg-black/50`
+     scrim behind the expanded sidebar; under the tour's `bg-gray-600/65` / `dark:bg-black/80` that
+     compounded to near-black, so the user couldn't see what the popover was pointing at — and
+     fix 2 would have made it worse by expanding the sidebar. The sidebar's scrim is now
+     suppressed while the tour runs (new `tourActiveState` atom), and the tour's own backdrop is
+     **transparent but still click-blocking**: a background-less element still receives pointer
+     events, so interaction stays blocked while the app stays legible.
+- **Why:** Config can't reach any of this — it's component state and DOM anchoring. Fix 1 is the
+  important one: a tour that confidently shows the wrong step is worse than no tour, and the
+  failure is invisible in the environment most developers test in (desktop, sidebar expanded),
+  which is exactly why it survived a live investigation that concluded "no code-level swap."
+- **How to verify:** Clear `guidedTourSeen` from localStorage. **Collapse the sidebar**, reload,
+  and walk the tour: step 3 must show "Your sidebar" pointing at the sidebar toggle, never step
+  2's copy on the Tools button, and the app must stay readable behind the popover. Repeat under
+  768px width — only one backdrop should be present. Confirm the sidebar returns to collapsed
+  after Done or Skip.
+- **Upstream status:** not submitted — `Onboarding/` is entirely ours; only the `UnifiedSidebar.tsx`
+  scrim condition touches an upstream file.
+- **Merge notes:** The `UnifiedSidebar.tsx` change is two lines (a `useRecoilValue` and a condition)
+  and is the only conflict surface. If upstream reworks that scrim, the requirement is simply:
+  don't render a second full-screen overlay while `tourActiveState` is true.
+
 ### Guided tour becomes modal — dimmed backdrop, blocked interaction, speech-bubble tail
 
 - **Work item:** PBI 12746 (builds on the "First-run guided tour" patch above, PBI 12633)
@@ -764,7 +819,9 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `client/src/components/Onboarding/TourPopover.tsx`,
   `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
 - **What:** Two fixes to the tour's original non-modal Radix Popover:
-  1. **Dimmed, click-absorbing backdrop.** New `TourBackdrop.tsx` portals a single
+  1. **Dimmed, click-absorbing backdrop.** ⚠️ *The dim was removed on 2026-08-04 — see the entry
+     above; the backdrop is now transparent and blocks clicks only.* As originally written: new
+     `TourBackdrop.tsx` portals a single
      `fixed inset-0 z-[9998]` dim div (`bg-gray-600/65` / `dark:bg-black/80` — the same tokens
      `@librechat/client`'s `Dialog.tsx` overlay uses) straight to `document.body`. It is rendered
      by `GuidedTour.tsx` itself (`ready && !seen`), as a sibling of `TourPopover`, not by
