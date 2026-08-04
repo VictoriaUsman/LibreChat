@@ -538,6 +538,10 @@ Keep the patch set as small as possible. Add entries below as patches land.
       either. Rewrote to name only what's actually there (`com_onboarding_tour_step_tools_title`/
       `_body`), plus a one-line definition of what an Artifact is, since the term is internal
       jargon.
+      ⚠️ **Superseded twice since.** "Artifacts only" stopped being true when the File Search toggle
+      was restored to this menu (see that patch below), and the wording that replaced it was itself
+      rewritten by the plain-language copy pass at the end of this entry. Read that pass for the
+      copy actually shipping.
     - **Step 3 rebuilt as a single "sidebar" step** covering all four icons in the
       `ExpandedPanel.tsx` rail (Close Sidebar, New Chat, Chat History, Attach Files) instead of only
       "New Chat" with vague copy — kept as one step per the decision to avoid a 4→7-step tour.
@@ -589,6 +593,15 @@ Keep the patch set as small as possible. Add entries below as patches land.
     after the tour reached dev. Every step was written from the implementation outward and leaked
     internal vocabulary to an audience of non-technical staff. `client/src/locales/en/translation.json`
     only — no logic, no step order, no anchors changed.
+    - **Prior finding this builds on — "steps 2 and 3 got mixed up" is not a logic bug.** A team-lead
+      spot-check after the v2 merge reported the steps as reading confused. Andrea Tiamson
+      investigated live against a running dev server — normal transitions, frame-by-frame capture,
+      and a rapid double-click on Next to rule out a state race — and found **no code-level swap**:
+      step index, title and anchor tracked correctly in every case. The cause was the copy alone.
+      Recorded here so nobody re-opens this as a state-management bug. Her diagnosis of step 2 (that
+      it explained step 1's control inside its own paragraph) is carried into the rewrite below; her
+      proposed strings were superseded by this pass, and her step 3 conclusion was incorrect — see
+      the step 3 note.
     - **Step 1 (`_upload_body`)** dropped "It's indexed for File Search automatically." Indexing is a
       mechanism the user neither controls nor needs a word for; the promise is that questions work
       immediately, so the copy now says only that.
