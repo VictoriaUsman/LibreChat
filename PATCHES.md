@@ -585,6 +585,29 @@ Keep the patch set as small as possible. Add entries below as patches land.
       unkeyed children array shifts its position and causes React to unmount+remount it, invalidating
       a `rerender()`-based version of this test) and live against the running dev server, confirming
       the tour now starts at step 1 instead of skipping to step 3.
+  - **Plain-language copy pass (2026-08-04, all four body strings):** reviewed with the product owner
+    after the tour reached dev. Every step was written from the implementation outward and leaked
+    internal vocabulary to an audience of non-technical staff. `client/src/locales/en/translation.json`
+    only — no logic, no step order, no anchors changed.
+    - **Step 1 (`_upload_body`)** dropped "It's indexed for File Search automatically." Indexing is a
+      mechanism the user neither controls nor needs a word for; the promise is that questions work
+      immediately, so the copy now says only that.
+    - **Step 2 (`_tools_body`)** dropped "the paperclip turns it on for you," which explained step 1's
+      control inside step 2 and was the main reason the two steps read as blurred together. File
+      Search is now described by what it does — "lets the assistant read and search the documents
+      you've attached to this chat" — rather than by the name of the switch.
+    - **Step 3 (`_sidebar_body`)** rewrote the Attach Files clause as a sentence with a verb: "lets
+      you add a document you've already uploaded to the chat you're in." ⚠️ This deliberately keeps
+      the attach capability that the superseded branch `feature/pbi-12626-12627-12633` proposed
+      removing on the grounds that the panel is read-only. It is not read-only:
+      `SidePanel/Files/Panel.tsx` renders `PanelTable.tsx`, whose filename cell is `role="button"`
+      with `tabIndex={0}` and `onClick`/`onKeyDown` handlers calling `handleFileClick` →
+      `addFile({ ..., attached: true })`. That is the same path the File Search patch below hooks to
+      auto-enable `EToolResources.file_search`. Do not "correct" this sentence back.
+    - **Step 4 (`_account_body`)** reframed from "My Files, where every document you've uploaded is
+      listed" to "the full list of everything you've uploaded." Steps 3 and 4 previously made the
+      same claim in different words, which is what made the back half of the tour feel repetitive.
+      The split is now: **step 3 attaches a file to this chat, step 4 shows everything.**
 - **Why:** New users have no way to discover document upload, Artifacts, the sidebar rail, or
   Settings except by accident. No `librechat.yaml`/env-var can add a client-side onboarding overlay,
   so this required new source files. The dev-testing follow-ups exist because the first version
