@@ -21,6 +21,26 @@ stages:
 
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
+      # Opt out of incremental detection. `insert-stage-detect-folder-changes.yml` decides whether
+      # to run by diffing the LAST SUCCESSFUL RUN OF THIS PIPELINE DEFINITION against HEAD —
+      # `definitions=<id>&resultFilter=succeeded`, with no branch filter — and only runs the deploy
+      # if a changed path falls under `bicepDetectFolder`. Two problems for us:
+      #
+      #   1. The base commit isn't the previous `dev` tip. Any successful run of this definition on
+      #      any ref counts, so a PR build-validation run — which builds the PR's merge commit,
+      #      already containing the change — becomes the baseline. The subsequent merge to `dev`
+      #      then diffs against a commit that already had everything, sees nothing, and skips.
+      #   2. When it skips, nothing fails. `BicepWhatIf` is conditioned on `RunStage == 'true'` and
+      #      `BicepCreate` on `succeeded('BicepWhatIf')`, so both are Skipped, the run goes green,
+      #      and the restart stages (which tolerate a Skipped BicepCreate, PR 10964) cycle the app
+      #      on its OLD image. A digest bump silently does nothing. This bit us twice: PR 11547
+      #      (tag 25740) and PR 11602 (tag 26023).
+      #
+      # Passing an empty string takes the template's documented escape hatch — "If no folder
+      # resolved, default to running the stage" — so whatif/create run on every push to this
+      # branch. The cost is a couple of minutes and an idempotent ARM deployment on pushes that
+      # changed no infra; the cost of the alternative is a deploy that silently doesn't happen.
+      bicepDetectFolder: ''
       bicepParamFile: $(bicepParamFile)
       bicepWorkingDirectory: $(bicepWorkingDirectory)
       resourceGroup: $(resourceGroup)

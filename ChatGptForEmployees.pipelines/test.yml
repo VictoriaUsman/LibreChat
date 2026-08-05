@@ -93,6 +93,13 @@ stages:
 
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. Short version: the
+      # detect step diffs against the last successful run of this pipeline definition on ANY ref,
+      # so a PR validation build becomes the baseline and the real merge sees no changes; when it
+      # skips, `BicepWhatIf` and `BicepCreate` are both Skipped, the run still goes green, and the
+      # app restarts on its previous image. An empty value takes the template's documented
+      # "no folder resolved → run the stage" path.
+      bicepDetectFolder: ''
       bicepParamFile: $(bicepParamFile)
       bicepWorkingDirectory: $(bicepWorkingDirectory)
       resourceGroup: $(resourceGroup)

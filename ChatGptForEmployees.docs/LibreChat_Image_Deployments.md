@@ -36,16 +36,18 @@ Newest first. One entry per image change per environment.
   `#171717` on the green submit surface, **3.2:1 at rest and 2.3:1 on hover — both below WCAG AA**
   for 14px text, now white at 5.5:1 and 7.8:1; and Back, which had no background of its own and so
   took the popover's dark surface, now uses the inverted `--primary` token pair.
-- **Paired infra change:** none beyond this digest bump and the `DEPLOY_TRIGGER` increment.
-- **`DEPLOY_TRIGGER`:** bumped 2 → 3 in the same PR. **Required** — see §5.
+- **Paired infra change:** none beyond this digest bump.
+- ⚠️ **This deploy initially did not happen.** The PR bumped `DEPLOY_TRIGGER` 2 → 3, which we then
+  believed was required; `BicepCreate` was Skipped anyway and dev kept serving `25780`. That is
+  what finally disproved the counter and led to the real cause and fix in §5. The digest below
+  reached dev only after `bicepDetectFolder: ''` landed.
 - **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
   tag `26023`, built 2026-08-05 14:29 UTC.
 - **Not covered by automated tests:** the client suite has still not been run against any build in
   this series. This one adds a step to the tour and a new `ModelSelector.tourAnchor.spec.ts` guard,
   neither executed. Highest-value manual check is **step 3 at phone width in dark mode**, where the
   new step's placement, the button colours, and the transparent-in-dark backdrop all land together.
-- **Rollback:** restore `sha256:308082f9…1f137468` and redeploy — still in the registry. Bump
-  `DEPLOY_TRIGGER` again when doing so.
+- **Rollback:** restore `sha256:308082f9…1f137468` and redeploy — still in the registry.
 
 ### 2026-08-04 — Dev — `sha256:308082f9…1f137468`
 
@@ -56,13 +58,13 @@ Newest first. One entry per image change per environment.
   the "it's already on" clause dropped, and the opener changed to "Open this menu for chat
   options," which no longer counts the menu's rows and so can't be invalidated by a
   `librechat.yaml` capability toggle.
-- **Paired infra change:** none beyond this digest bump and the `DEPLOY_TRIGGER` increment.
-- **`DEPLOY_TRIGGER`:** bumped 1 → 2 in the same PR. **Required** — see §5; without it
-  `BicepCreate` is Skipped and this digest never reaches the container app.
+- **Paired infra change:** none beyond this digest bump.
+- **`DEPLOY_TRIGGER` bumped 1 → 2** in the same PR, believed at the time to be what made the
+  deploy run. It wasn't — the counter was never load-bearing (§5). This deploy succeeded because
+  the detect step's baseline happened to be an older commit, not because of the bump.
 - **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
   tag `25780`, built 2026-08-04 19:45 UTC.
-- **Rollback:** restore `sha256:12c7731e…9d556942` and redeploy — still in the registry. Bump
-  `DEPLOY_TRIGGER` again when doing so, for the same reason.
+- **Rollback:** restore `sha256:12c7731e…9d556942` and redeploy — still in the registry.
 
 ### 2026-08-04 — Dev — `sha256:12c7731e…9d556942`
 
@@ -173,13 +175,8 @@ target environment's registry. Order is load-bearing: **build → copy digest �
 3. Update `ChatGptForEmployees.bicep/main.dev.bicepparam` → `libreChatImage`, **and add a History
    entry above, in the same PR.**
 
-   ⚠️ **Also bump `DEPLOY_TRIGGER` at the top of `main.bicep`, in the same PR.** The pipelines
-   gate the deploy on `DetectBicepChanges`, which only counts `.bicep` files — a digest bump
-   edits `.bicepparam` only, so `BicepCreate` is **Skipped** and the image is never applied.
-   The run still goes green, and because the restart stages tolerate a Skipped `BicepCreate`,
-   the app cycles on the **old** image and looks healthy. Bumping the counter touches a
-   `.bicep` file and trips the gate. One counter covers all three envs — it rides the
-   promotion merges. See §5 and `main.bicep`'s header.
+   Changing the digest is now sufficient. It wasn't until 2026-08-05 — see §5 for what used to
+   go wrong and how to recognise it if it ever returns.
 4. Merge to `dev`. `BicepCreate` applies the image; Container Apps rolls a new revision automatically
    because the digest changed.
 5. **Verify what's actually serving** (§4).
@@ -259,17 +256,40 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
 
 ## 5. Known gaps
 
-- **A digest bump alone does not deploy.** `DetectBicepChanges` counts only `.bicep` files, so a
-  `.bicepparam`-only PR leaves `BicepCreate` **Skipped** and the container app keeps its previous
-  image. Nothing fails: the run is green, the restart stages run (they were made to tolerate a
-  Skipped `BicepCreate` in PR 10964), and the app restarts on the old image. Diagnosed
-  2026-08-04 after PR 11547 merged tag `25740` and dev carried on serving `25436` — the app's
-  own `/api/config` `buildInfo` still reported the previous commit, and the resource group had no
-  ARM deployment for the merge. **Mitigation:** the `DEPLOY_TRIGGER` counter in `main.bicep`,
-  bumped in the same PR. **Real fix:** teach `DetectBicepChanges` (in `ROMTech/PipelineTemplates`)
-  that `*.bicepparam` is an infra change, then delete the counter.
-  ⚠️ Unexplained: PR 11458 on 2026-08-03 was also `.bicepparam`-only and *did* deploy. Check what
-  `DetectBicepChanges` logged in each run before assuming the rule is purely "no `.bicep` = skip".
+- **RESOLVED 2026-08-05 — a digest bump used to silently not deploy.** Worth reading, because the
+  failure is invisible and the first two diagnoses were wrong.
+
+  **Symptom.** A digest-only PR merges, the run goes green, and the container app keeps its
+  previous image. No new revision, no ARM deployment in the resource group, and the app's own
+  `/api/config` `buildInfo` still reports the old commit. The restart stages still run — they were
+  made to tolerate a Skipped `BicepCreate` in PR 10964 — so the app cycles on the **old** image and
+  looks perfectly healthy. Hit us on PR 11547 (tag `25740`) and again on PR 11602 (tag `26023`).
+
+  **Cause.** `DetectBicepChanges` (`ROMTech/PipelineTemplates`,
+  `insert-stage-detect-folder-changes.yml`) gates `BicepWhatIf` on `RunStage == 'true'`, and
+  `BicepCreate` is `condition: succeeded('BicepWhatIf')` — so a false detection skips both while
+  the run reports success. The detection is **folder-based, not file-type-based**: it runs when a
+  changed path falls under `ChatGptForEmployees.bicep/`, which includes `.bicepparam`. The real
+  problem is the baseline it diffs against —
+  `builds?definitions=<id>&resultFilter=succeeded&$top=1`, **no branch filter**. A PR
+  build-validation run builds the PR's merge commit, already containing the change, and becomes
+  that baseline; the subsequent merge to `dev` then diffs against a commit that already had
+  everything and finds nothing to do. That also explains why PR 11458 on 08-03 deployed fine —
+  the baseline happened to be older.
+
+  **Two wrong diagnoses, recorded so nobody repeats them.** First: "it only counts `.bicep`
+  files" — false, it is folder-based. Second, following from it: the `DEPLOY_TRIGGER` counter in
+  `main.bicep`, a comment bumped by hand to make a digest change touch a `.bicep` file. It could
+  never have helped, and PR 11602 proved it — counter bumped, deploy still skipped. Removed.
+
+  **Fix.** `dev.yml`, `test.yml` and `prod.yml` now pass `bicepDetectFolder: ''` to
+  `insert-stage-bicep-whatif.yml`, taking the detect template's documented "no folder resolved →
+  run the stage" path. Whatif and create now run on every push to the env branch. Cost: a couple
+  of minutes and an idempotent ARM deployment when nothing infra changed. `BicepCreate` is still a
+  deployment job bound to its environment, so any approval gate is unaffected.
+
+  **If it ever comes back**, the detect step logs both halves — `Last successful build SHA:` and
+  `Changed files:`. A baseline that isn't the previous env-branch tip is the tell.
 
 - **Test and prod are staged for our fork but not yet running it** — their params point at
   `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
