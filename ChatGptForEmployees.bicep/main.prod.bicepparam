@@ -7,7 +7,7 @@ param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // Prod migrates off upstream's mutable ghcr tag onto OUR fork build, pinned by digest —
-// the same digest validated in dev and test (fork `main` @ 84ad8d651, ACR tag 25780, amd64).
+// the same digest validated in dev and test (fork `main` @ a4e71a966, ACR tag 26023, amd64).
 // This closes the last mutable-tag exposure: a re-pushed upstream `:v0.8.6` could otherwise
 // reach production on any replica pull.
 //
@@ -18,7 +18,7 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // The copy into acrcgfeprod is automatic: prod.yml's ImportLibreChatImage stage reads this
 // value and imports the digest from acrcgfedev before BicepCreate runs.
 // This value is inert until the test -> main promotion; it deploys when that PR completes.
-param libreChatImage = 'acrcgfeprod.azurecr.io/librechat@sha256:308082f95439a92da27484bf5d0107733c0063ad244f2a7d8ba707091f137468'
+param libreChatImage = 'acrcgfeprod.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param flagshipModelName = 'gpt-5'

@@ -13,9 +13,9 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:308082f95439a92da27484bf5d0107733c0063ad244f2a7d8ba707091f137468` | 2026-08-04 | `84ad8d651` | Tour overlay + wording corrections. ACR tag `25780`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:308082f9…1f137468` | *staged* | `84ad8d651` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:308082f9…1f137468` | *staged* | `84ad8d651` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | Tour model step + dark-mode button colours. ACR tag `26023`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
@@ -26,6 +26,26 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-05 — Dev — `sha256:7f4b246d…22e612c`
+
+- **Fork commit:** `a4e71a966` (fork `main` after PR 11602) · **ACR tag:** `26023` · **arch:** amd64
+- **What's in it:** a fifth guided-tour step covering model choice — ROMChat Fast vs Standard,
+  anchored on the model spec selector and placed third, so the walk finishes the chat area before
+  moving to the left rail. Plus two dark-mode button fixes in the tour popover: Next was
+  `#171717` on the green submit surface, **3.2:1 at rest and 2.3:1 on hover — both below WCAG AA**
+  for 14px text, now white at 5.5:1 and 7.8:1; and Back, which had no background of its own and so
+  took the popover's dark surface, now uses the inverted `--primary` token pair.
+- **Paired infra change:** none beyond this digest bump and the `DEPLOY_TRIGGER` increment.
+- **`DEPLOY_TRIGGER`:** bumped 2 → 3 in the same PR. **Required** — see §5.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr repository show`), linux/amd64,
+  tag `26023`, built 2026-08-05 14:29 UTC.
+- **Not covered by automated tests:** the client suite has still not been run against any build in
+  this series. This one adds a step to the tour and a new `ModelSelector.tourAnchor.spec.ts` guard,
+  neither executed. Highest-value manual check is **step 3 at phone width in dark mode**, where the
+  new step's placement, the button colours, and the transparent-in-dark backdrop all land together.
+- **Rollback:** restore `sha256:308082f9…1f137468` and redeploy — still in the registry. Bump
+  `DEPLOY_TRIGGER` again when doing so.
 
 ### 2026-08-04 — Dev — `sha256:308082f9…1f137468`
 

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────────────
 // DEPLOY TRIGGER — bump this number to force BicepCreate to run.
 //
-//   DEPLOY_TRIGGER = 2        (last bumped 2026-08-04 — dev digest 308082f9 / tag 25780)
+//   DEPLOY_TRIGGER = 3        (last bumped 2026-08-05 — dev digest 7f4b246d / tag 26023)
 //
 // WHY THIS EXISTS. The pipelines gate the whole deploy on `DetectBicepChanges`: if a push
 // touches no `.bicep` file, `BicepCreate` is **Skipped** (WORKING_NOTES §9.2). A digest bump
