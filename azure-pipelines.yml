@@ -8,10 +8,17 @@
 # at the end; that digest goes into ChatGptForEmployees main.<env>.bicepparam
 # (libreChatImage) to deploy. We never deploy a mutable tag.
 #
-# SCOPE: builds into the dev ACR, then MIRRORS that exact digest into acrcgfetest and
-# acrcgfeprod (MirrorImage stage below), so every environment holds the identical manifest and
-# no environment ever reads another's registry at runtime. Building per environment was the
-# alternative and is worse: BUILD_DATE alone would give three digests from one commit.
+# SCOPE: builds into the dev ACR only. The copy into acrcgfetest / acrcgfeprod is done by the
+# INFRA repo's test.yml and prod.yml (`ImportLibreChatImage`), at promotion time.
+#
+# A MirrorImage stage briefly lived here doing that copy at build time, and was removed
+# 2026-08-05 in favour of the infra-side implementation, which was further along and already
+# had the registry role grants in place. Either shape works; what must NOT happen is both,
+# since two mechanisms copying the same digest is two places to keep in sync.
+#
+# Either way the image is BUILT once and COPIED, never rebuilt per environment: three builds
+# from one commit give three different digests — BUILD_DATE alone guarantees it — which would
+# mean prod running bytes nobody had executed.
 
 trigger:
   branches:
@@ -39,13 +46,6 @@ pool:
 variables:
   - name: acrName
     value: acrcgfedev
-  # The image is BUILT once, into acrcgfedev, then copied byte-for-byte into the other two
-  # registries by the MirrorImage stage below. At runtime each environment pulls only from its
-  # own registry and never reads another environment's — the copy happens here, in CI.
-  - name: acrTestName
-    value: acrcgfetest
-  - name: acrProdName
-    value: acrcgfeprod
   - name: imageRepo
     value: librechat
   - name: serviceConnection
@@ -96,85 +96,12 @@ stages:
                   --image $(imageRepo):$(Build.BuildId) \
                   --query digest -o tsv)
 
-                # Hand the digest to the MirrorImage stage. Resolving it once and passing it on
-                # is deliberate: re-resolving per registry would invite a copy that silently
-                # mirrors something other than what this run built.
-                echo "##vso[task.setvariable variable=imageDigest;isOutput=true]${DIGEST}"
-
                 echo ""
                 echo "=================================================================="
                 echo "Image pushed. Deploy by DIGEST (put this in libreChatImage):"
                 echo "  $(acrName).azurecr.io/$(imageRepo)@${DIGEST}"
                 echo ""
                 echo "Use the SAME digest for every environment — only the registry host"
-                echo "changes. MirrorImage copies it to test and prod next:"
-                echo "  $(acrTestName).azurecr.io/$(imageRepo)@${DIGEST}"
-                echo "  $(acrProdName).azurecr.io/$(imageRepo)@${DIGEST}"
+                echo "changes (acrcgfetest / acrcgfeprod). The infra pipelines copy the image"
+                echo "into those registries when you promote."
                 echo "=================================================================="
-
-  - stage: MirrorImage
-    displayName: 'Copy image to test + prod registries'
-    dependsOn: BuildImage
-    condition: succeeded('BuildImage')
-    variables:
-      imageDigest: $[ stageDependencies.BuildImage.AcrBuild.outputs['BuildStep.imageDigest'] ]
-    jobs:
-      - job: Mirror
-        displayName: 'az acr import -> acrcgfetest, acrcgfeprod'
-        steps:
-          - task: AzureCLI@2
-            displayName: 'Copy the built digest into the other environment registries'
-            inputs:
-              azureSubscription: $(serviceConnection)
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                set -euo pipefail
-
-                DIGEST="$(imageDigest)"
-                if [ -z "$DIGEST" ]; then
-                  echo "##vso[task.logissue type=error]No digest received from BuildImage."
-                  exit 1
-                fi
-
-                # Copy, don't rebuild. `az acr import` transfers the manifest as-is, so every
-                # registry ends up with the identical digest and test/prod run exactly the bytes
-                # dev validated. Building per environment would produce three different digests —
-                # BUILD_DATE alone guarantees it, and dependency resolution can drift between
-                # runs — which would mean prod running an artifact nobody had ever executed.
-                for TARGET in $(acrTestName) $(acrProdName); do
-                  echo "----------------------------------------------------------------"
-                  # No 2>/dev/null here: a not-found and an authorization failure look identical
-                  # once stderr is discarded, and the difference is the whole diagnosis.
-                  if az acr repository show --name "$TARGET" \
-                       --image "$(imageRepo)@${DIGEST}" --output none; then
-                    echo "${TARGET}: already has ${DIGEST} — skipping."
-                    continue
-                  fi
-
-                  echo "${TARGET}: importing ${DIGEST}..."
-                  # Target is repo:TAG, never repo@digest. `--image/-t` takes 'repo/image:tag'
-                  # (`az acr import --help`); a digest there is passed straight through to the ARM
-                  # importImage API as a target tag and rejected, since '@' is not legal in a
-                  # repository name. Digest-only copies would use `--repository`, but a tag is
-                  # better here: the manifest is copied as-is either way — so the digest is
-                  # identical, which is the point — while an UNTAGGED manifest is what ACR
-                  # retention policies delete, and these sit staged for days between build and
-                  # promotion. The build id also makes the mirrored image visible to
-                  # `az acr repository show-tags`, which untagged manifests are not.
-                  if ! az acr import --name "$TARGET" \
-                         --source "$(acrName).azurecr.io/$(imageRepo)@${DIGEST}" \
-                         --image "$(imageRepo):$(Build.BuildId)"; then
-                    echo "##vso[task.logissue type=error]Import into ${TARGET} failed. If this is an authorization error: az acr import is a CONTROL-plane operation, so a data-plane role such as AcrPush is NOT sufficient. The $(serviceConnection) service principal needs 'Container Registry Data Importer and Data Reader' on ${TARGET} (and on $(acrName) as the source, unless it already holds a broader role there)."
-                    exit 1
-                  fi
-
-                  # Verify rather than assume: a missing image in a target registry only shows up
-                  # much later, as a promotion whose new revision never goes healthy.
-                  az acr repository show --name "$TARGET" \
-                    --image "$(imageRepo)@${DIGEST}" \
-                    --query "{registry:'${TARGET}', digest:digest, arch:architecture}" -o json
-                done
-
-                echo "----------------------------------------------------------------"
-                echo "Digest present in all three registries. Promotion needs no image work."
