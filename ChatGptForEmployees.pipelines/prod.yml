@@ -77,10 +77,18 @@ stages:
                 # az acr import requires a tag as target — digest refs are invalid for TargetTags.
                 # Derive a short unique tag from the digest (first 12 hex chars after "sha256:").
                 SHORT="${DIGEST:7:12}"
+
+                # The target ACR's backend needs credentials to pull from the source registry.
+                # Use acrcgfedev's admin user so the import can authenticate data-plane access.
+                SOURCE_USER=$(az acr credential show --name "$SOURCE_ACR" --query "username" -o tsv)
+                SOURCE_PASS=$(az acr credential show --name "$SOURCE_ACR" --query "passwords[0].value" -o tsv)
+
                 echo "Importing ${DIGEST} from ${SOURCE_ACR} as :${SHORT}..."
                 if ! az acr import --name "$TARGET_ACR" \
                        --source "${SOURCE_ACR}.azurecr.io/${REPOSITORY}@${DIGEST}" \
-                       --image "${REPOSITORY}:${SHORT}"; then
+                       --image "${REPOSITORY}:${SHORT}" \
+                       --username "$SOURCE_USER" \
+                       --password "$SOURCE_PASS"; then
                   echo "##vso[task.logissue type=error]Import failed. If this is an authorization error, grant the $(serviceConnection) service principal AcrPull on ${SOURCE_ACR} (rg-dev-shared) — it needs read access to the source registry."
                   exit 1
                 fi
