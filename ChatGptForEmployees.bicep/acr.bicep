@@ -29,11 +29,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
-// NOTE: ChatGptForEmployeesDevSC (14143789-…) has "Container Registry Data Importer and
-// Data Reader" (577a9874-…) on acrcgfetest and acrcgfeprod — pre-provisioned manually via
-// az rest because the Test/Prod service connections only have Contributor (no roleAssignments/write).
-// If those SCs are ever granted User Access Administrator, restore this as a Bicep resource.
-
 output name string = acr.name
 output loginServer string = acr.properties.loginServer
 output id string = acr.id
