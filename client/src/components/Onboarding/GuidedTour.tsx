@@ -58,7 +58,7 @@ const GuidedTour = () => {
             markSeen(true);
           }
           // Even on 'no-anchors' the tour is over. Without this the component keeps rendering —
-          // and since the backdrop is now transparent in light mode, that left an invisible
+          // and since the backdrop is transparent in dark mode, that left an invisible
           // full-screen click-blocker over a normal-looking app until the next reload.
           setEnded(true);
         },

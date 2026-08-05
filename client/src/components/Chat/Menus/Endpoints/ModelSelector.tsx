@@ -74,8 +74,9 @@ function ModelSelectorContent() {
       render={
         <button
           // The tour resolves targets with `document.querySelector`, and nothing else in this
-          // component exposes a stable hook. Additive only — but see the guard in
-          // `ModelSelector.spec.tsx`: nothing else fails if an upstream merge drops this.
+          // component exposes a stable hook. Guarded by
+          // `__tests__/ModelSelector.tourAnchor.spec.ts` — without it, dropping this id in an
+          // upstream merge breaks the model step with no test failure and no runtime error.
           id="model-selector-button"
           className="my-1 flex h-9 w-full max-w-[70vw] items-center justify-center gap-2 rounded-xl border border-border-light bg-presentation px-3 py-2 text-sm text-text-primary hover:bg-surface-active-alt"
           aria-label={localize('com_ui_select_model')}

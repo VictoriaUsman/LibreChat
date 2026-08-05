@@ -42,9 +42,10 @@ export const tourSteps: TourStep[] = [
     bodyKey: 'com_onboarding_tour_step_model_body',
     // `bottom`, not `right` like the two steps below it. Those anchor in the left rail, where
     // there is a whole page to their right. This one is in the header (`Header.tsx`, `absolute
-    // top-0 h-[52px]`, left-aligned), so "right" means "into the remaining header width" — on a
-    // phone the button's right edge sits around 210-240px, leaving far less than the popover's
-    // 300px + 10px offset. Radix would not rescue it either: `flip` only tries the opposite side,
+    // top-0 h-[52px]`, left-aligned), so "right" means "into the remaining header width". The
+    // trigger is `w-full max-w-[70vw]` inside a `max-w-md` wrapper, so on a 390px phone it spans
+    // roughly x≈56-330 — leaving ~60px against the popover's 300px plus 19px of offset
+    // (sideOffset 10 + a 9px arrow). Radix would not rescue it: `flip` only tries the opposite side,
     // where there is even less room, and its `shift` is configured `crossAxis: false`, so for a
     // `right` placement there is no horizontal correction at all. The Back/Next buttons would
     // hang off the screen edge. For `bottom`, shift's main axis IS horizontal, so Radix clamps

@@ -315,8 +315,8 @@ describe('GuidedTour', () => {
 
   it('stops blocking the screen when no anchors are found at all', async () => {
     // 'no-anchors' deliberately doesn't mark the tour seen, so it can run again on a healthier
-    // load. It must still tear the backdrop down: it is transparent in light mode, so leaving
-    // it mounted swallows every click over an app that looks completely normal.
+    // load. It must still tear the backdrop down: it is transparent in dark mode, so leaving it
+    // mounted swallows every click over an app that looks completely normal.
     jest.useFakeTimers();
     try {
       render(

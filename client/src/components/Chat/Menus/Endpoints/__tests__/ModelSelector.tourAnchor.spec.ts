@@ -11,9 +11,10 @@ import path from 'path';
  * the real app silently loses the step.
  *
  * The cost of that silence is the reason this exists. A missing anchor is not a visible failure:
- * mid-tour the step burns 12 × 250ms of full-screen, click-blocking, light-mode-invisible
- * backdrop with no popover on it, on every load, for every user, then moves on. No error, no
- * telemetry, nothing to notice until somebody complains.
+ * mid-tour the step burns 12 × 250ms of full-screen, click-blocking backdrop with no popover on
+ * it — invisible in dark mode, where the backdrop is transparent (`TourBackdrop.tsx`) — on every
+ * load, for every user, then moves on. No error, no telemetry, nothing to notice until somebody
+ * complains.
  *
  * This asserts on source text rather than rendering, deliberately: rendering `ModelSelector`
  * needs the endpoints/query/Recoil provider stack, and a heavyweight render test would be a
@@ -26,14 +27,10 @@ describe('ModelSelector — guided tour anchor', () => {
   );
 
   it('keeps the tour anchor id on the trigger', () => {
+    // Presence is the whole invariant. The id is currently set at two levels — on the
+    // `TooltipAnchor` and on its render element — mirroring how upstream writes the other two
+    // tour anchors, but either one alone lands the attribute on the same single DOM node, so
+    // asserting a count here would fail a legitimate simplification while proving nothing extra.
     expect(source).toContain('id="model-selector-button"');
-  });
-
-  it('sets it on both the TooltipAnchor and its render element, as upstream does', () => {
-    // Upstream sets these ids at both levels for the other two tour anchors
-    // (AttachFileMenu.tsx, ToolsDropdown.tsx). Matching that avoids depending on Ariakit's
-    // prop-merge order surviving an upgrade.
-    const occurrences = source.match(/id="model-selector-button"/g) ?? [];
-    expect(occurrences).toHaveLength(2);
   });
 });

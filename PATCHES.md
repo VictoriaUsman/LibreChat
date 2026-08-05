@@ -785,7 +785,8 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `client/src/components/Onboarding/TourPopover.tsx`,
   `client/src/components/Chat/Menus/Endpoints/ModelSelector.tsx`,
   `client/src/locales/en/translation.json`,
-  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`,
+  `client/src/components/Chat/Menus/Endpoints/__tests__/ModelSelector.tourAnchor.spec.ts` (new)
 - **What:**
   1. **A fifth step covering model choice.** The tour never mentioned that there are two models.
      New step `model`, anchored on the model spec selector and placed **third** — after the two
@@ -823,18 +824,22 @@ Keep the patch set as small as possible. Add entries below as patches land.
   one-attribute id in `ModelSelector.tsx`.
 - **Merge notes:** ⚠️ **If an upstream merge drops that id, nothing fails loudly.** The step is not
   simply "skipped": mid-tour a missing anchor costs 12 × 250ms of full-screen, click-blocking,
-  light-mode-invisible backdrop with no popover on it — on every load, for every user, with no
-  error and no telemetry. It also spends 12 of the 48-attempt whole-tour budget, which resets on
+  backdrop with no popover on it — invisible in **dark** mode, where the backdrop is transparent
+  (`TourBackdrop.tsx` is `bg-black/35 dark:bg-transparent`) — on every load, for every user, with
+  no error and no telemetry. It also spends 12 of the 48-attempt whole-tour budget, which resets on
   the next success but leaves less margin if another anchor is slow on the same load. Realistically
   it presents as a silent three-second dead zone nobody notices until a user complains.
   `client/src/components/Chat/Menus/Endpoints/__tests__/ModelSelector.tourAnchor.spec.ts` guards
   the id for exactly this reason — `GuidedTour.spec.tsx` cannot, since it mounts its own stand-in
   anchor and stays green while the real app loses the step.
-  **Three of the five tour anchors now live in upstream-owned files**
-  (`#attach-file-menu-button`, `#tools-dropdown-button`, `#model-selector-button`); only the model
-  one has a guard. The other two are pre-existing and equally silent.
-  The step's copy is config-dependent the same way steps 2 and 4 are: it describes exactly the two
-  entries in `modelSpecs.list`, and "every new chat starts on Fast" holds because
+  **All five tour anchors live in upstream-owned files** — `#attach-file-menu-button`,
+  `#tools-dropdown-button`, `#model-selector-button`, `#close-sidebar-button` (`OpenSidebar.tsx` /
+  `ExpandedPanel.tsx`) and `[data-testid="nav-user"]` (`AccountSettings.tsx`). Only the model one
+  has a guard; the other four are pre-existing and fail just as silently. Two of them we added, the
+  rest we re-used, but the exposure is identical either way.
+  The step's copy is config-dependent the same way steps 2 and 5 are (inserting this step made the
+  sidebar step 4 and the account step 5): it describes exactly the two entries in
+  `modelSpecs.list`, and "every new chat starts on Fast" holds because
   `prioritize: true` makes the default spec win over the last-selected one on every new chat.
   Changing `modelSpecs` means re-reading this string.
   ⚠️ Step count is asserted in `GuidedTour.spec.tsx` ("Step N of 5"), and the skip-path tests
@@ -913,7 +918,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
      has rendered the app is demonstrably up, so a missing anchor is genuinely missing —
      `ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR` (12, ~3s) applies from then on, gated on `shownAnyStep`.
      The windows still compound, though: with nothing on the page, four steps at the cold-start
-     window would hold a full-screen click blocker for ~40s — invisible in light mode, Tab
+     window would hold a full-screen click blocker for ~40s — invisible in dark mode, Tab
      hard-blocked, no popover to explain it, and repeating on every load since `no-anchors`
      doesn't mark the tour seen. `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour
      instead. It counts **consecutive** failures and resets on every successful render, or normal
