@@ -121,7 +121,8 @@ stages:
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
-    dependsOn: BicepCreate
+    dependsOn: ImportLibreChatImage
+    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: BuildPush
         displayName: 'az acr build Dockerfile.cleanup -> acrcgfetest'
@@ -141,14 +142,8 @@ stages:
 
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
-    dependsOn: BicepCreate
-    # Config files (litellm_routing_config.yaml, librechat.yaml) change
-    # independently of infrastructure. BicepCreate is Skipped when a push
-    # touches no .bicep files, which previously skipped this stage AND the
-    # restart stages that depend on it — so config-only changes never reached
-    # the Azure File Shares. Run when BicepCreate Succeeded OR was Skipped;
-    # only bail if it actually Failed.
-    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    dependsOn: ImportLibreChatImage
+    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: UploadConfigs
         displayName: 'Upload litellm and librechat config'
@@ -278,11 +273,8 @@ stages:
 
   - stage: DeployHelpPage
     displayName: 'Deploy Help Page to Static Web App'
-    dependsOn: BicepCreate
-    # Run on config/content-only changes too (same rationale as UploadConfigs): the
-    # help HTML lives in the repo, so pushing an update should redeploy it even when
-    # no .bicep changed (BicepCreate Skipped). Only bail if BicepCreate actually Failed.
-    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    dependsOn: ImportLibreChatImage
+    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: DeployHelp
         displayName: 'Push romtech_ai_help.html to the SWA'
