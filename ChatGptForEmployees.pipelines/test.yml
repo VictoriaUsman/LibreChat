@@ -43,6 +43,12 @@ stages:
   # The only thing the old order bought was first-run bootstrap — the registry existing before the
   # import. Both target registries already exist, and the check below handles the case anyway.
   #
+  # ⚠️ ORDERING IS ENFORCED BY IMPLICIT CHAINING ONLY. This stage declares no dependsOn, so ADO
+  # chains it to the preceding stage. That is now load-bearing twice over: it sequences the import
+  # ahead of Bicep, AND it is what makes a failed import stop the deploy (DetectBicepChanges carries
+  # `not(failed())`). If the bicep templates are ever changed to declare their own dependsOn, this
+  # stage must be added to that list or the two can race.
+  #
   # TO REVERT: move this stage back below the insert-stage-bicep-create template and restore
   #   dependsOn: BicepCreate
   #   condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
@@ -76,6 +82,15 @@ stages:
                 IMAGE_REF=$(grep -E "^param libreChatImage" "$PARAM_FILE" | sed "s/.*=[[:space:]]*'\(.*\)'.*/\1/")
                 echo "libreChatImage = $IMAGE_REF"
 
+                # Must be digest-pinned. §1 of the deployment log makes that the central rule, and
+                # nothing else enforces it: a tag ref (…/librechat:26023) would leave REPOSITORY and
+                # DIGEST both holding the whole string and produce an illegal target tag, failing
+                # later with a cryptic message instead of here with a clear one.
+                case "$IMAGE_REF" in
+                  *@sha256:*) ;;
+                  *) echo "##vso[task.logissue type=error]libreChatImage must be pinned by digest, got: ${IMAGE_REF}"; exit 1 ;;
+                esac
+
                 # Three cases, deliberately distinguished:
                 #   1. This environment's own ACR  -> import it.
                 #   2. A DIFFERENT acrcgfe* host   -> FAIL. This is the footgun the deployment log
@@ -95,14 +110,16 @@ stages:
                   *) echo "Not an ${TARGET_ACR} reference — nothing to import."; exit 0 ;;
                 esac
 
-                # Bootstrap: on a brand-new environment the registry may not exist yet, because
-                # BicepCreate — which creates it — now runs after this stage. Skip rather than fail;
-                # that run deploys an app whose image isn't there (old revision keeps serving), and
-                # the next run imports it. One-time, and not a case either target hits today.
-                if ! az acr show --name "$TARGET_ACR" --output none 2>/dev/null; then
-                  echo "${TARGET_ACR} does not exist yet — skipping. BicepCreate will create it; the next run will import."
-                  exit 0
-                fi
+                # NO "registry might not exist yet" ESCAPE HATCH HERE, deliberately. A
+                # `az acr show || exit 0` bootstrap branch was added when this stage moved ahead of
+                # BicepCreate and removed again the same day: its condition is true for a missing
+                # registry, but equally for a missing RBAC read, ARM throttling, a 5xx or a token
+                # blip — so it turned every one of those into a green run that skipped the import
+                # and let BicepCreate repoint the app at an image that isn't there. That is exactly
+                # the failure this stage exists to prevent. Both target registries already exist, so
+                # it bought nothing. If a brand-new environment ever needs bootstrapping, run the
+                # manual import from LibreChat_Image_Deployments.md §3 once, or let this stage fail
+                # loudly and re-run after BicepCreate has created the registry.
 
                 REPO_AND_DIGEST="${IMAGE_REF#*.azurecr.io/}"
                 REPOSITORY="${REPO_AND_DIGEST%@*}"
@@ -171,15 +188,10 @@ stages:
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
-    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
-    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
-    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
-    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
-    # 'Succeeded' (the script exits 0), not 'Skipped'.
-    dependsOn:
-      - BicepCreate
-      - ImportLibreChatImage
-    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    # Builds the scheduled-jobs image (librechat-cleanup); nothing to do with the LibreChat
+    # image import, so it is not gated on it. Default succeeded() on BicepCreate, matching
+    # dev.yml — a config-only push should not rebuild and repush this image.
+    dependsOn: BicepCreate
     jobs:
       - job: BuildPush
         displayName: 'az acr build Dockerfile.cleanup -> acrcgfetest'
@@ -199,15 +211,23 @@ stages:
 
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
-    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
-    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
-    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
-    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
-    # 'Succeeded' (the script exits 0), not 'Skipped'.
+    # Depends on BOTH, and checks BOTH.
+    #
+    # ImportLibreChatImage runs FIRST, so a failed import makes DetectBicepChanges skip
+    # (`not(failed())`), which cascades to BicepWhatIf and BicepCreate as 'Skipped' — not 'Failed'.
+    # Checking only BicepCreate would therefore read a failed image copy as "nothing to do" and
+    # carry on uploading config and restarting apps. Checking only the import misses a genuine
+    # BicepCreate failure. Hence both.
+    #
+    # BicepCreate is NOT allowed to be 'Skipped': all three pipelines pass `bicepDetectFolder: ''`,
+    # so the incremental gate always resolves RunStage=true and the stage always runs. A 'Skipped'
+    # BicepCreate now means something upstream failed — most often BicepWhatIf, which would
+    # otherwise arrive here as 'Skipped' and be waved through. ⚠️ If `bicepDetectFolder: ''` is ever
+    # removed, restore 'Skipped' here or config-only pushes stop deploying (the PR 10964 bug).
     dependsOn:
       - BicepCreate
       - ImportLibreChatImage
-    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: UploadConfigs
         displayName: 'Upload litellm and librechat config'
@@ -313,10 +333,12 @@ stages:
       - DeployRagApi
       - ImportLibreChatImage
     # Restart LibreChat only when LiteLLM, RAG API and the image import all succeeded, AND the
-    # Bicep deploy itself did not fail. ImportLibreChatImage 'Skipped' means BicepCreate was
-    # skipped or failed — NOT "image already present", which exits 0 and reports 'Succeeded' — so
-    # without the BicepCreate check a failed ARM deploy would still restart the app.
-    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    # Bicep deploy itself did not fail. See the note on UploadConfigs for why BicepCreate must not
+    # be allowed to be 'Skipped'. Note the import can essentially never be 'Skipped' now that it
+    # runs first with no dependsOn — 'image already present' exits 0 and reports 'Succeeded' — but
+    # the tolerance is kept so the documented revert (moving this stage back after BicepCreate)
+    # doesn't silently change behaviour.
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: RestartLibreChat
         displayName: 'Restart LibreChat Container App'
@@ -340,15 +362,23 @@ stages:
 
   - stage: DeployHelpPage
     displayName: 'Deploy Help Page to Static Web App'
-    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
-    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
-    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
-    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
-    # 'Succeeded' (the script exits 0), not 'Skipped'.
+    # Depends on BOTH, and checks BOTH.
+    #
+    # ImportLibreChatImage runs FIRST, so a failed import makes DetectBicepChanges skip
+    # (`not(failed())`), which cascades to BicepWhatIf and BicepCreate as 'Skipped' — not 'Failed'.
+    # Checking only BicepCreate would therefore read a failed image copy as "nothing to do" and
+    # carry on uploading config and restarting apps. Checking only the import misses a genuine
+    # BicepCreate failure. Hence both.
+    #
+    # BicepCreate is NOT allowed to be 'Skipped': all three pipelines pass `bicepDetectFolder: ''`,
+    # so the incremental gate always resolves RunStage=true and the stage always runs. A 'Skipped'
+    # BicepCreate now means something upstream failed — most often BicepWhatIf, which would
+    # otherwise arrive here as 'Skipped' and be waved through. ⚠️ If `bicepDetectFolder: ''` is ever
+    # removed, restore 'Skipped' here or config-only pushes stop deploying (the PR 10964 bug).
     dependsOn:
       - BicepCreate
       - ImportLibreChatImage
-    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: DeployHelp
         displayName: 'Push romtech_ai_help.html to the SWA'
@@ -376,3 +406,55 @@ stages:
                 npx -y @azure/static-web-apps-cli deploy /tmp/helpsite \
                   --deployment-token "$TOKEN" \
                   --env production
+
+  - stage: VerifyLibreChatImage
+    displayName: 'Verify LibreChat is serving the pinned image'
+    dependsOn: DeployLibreChat
+    condition: in(dependencies.DeployLibreChat.result, 'Succeeded', 'SucceededWithIssues')
+    # The point of this whole chain is that a green run means the new image is live. Nothing else
+    # asserts it: DeployLibreChat reports on the restart CALL, not its outcome, and with
+    # activeRevisionsMode 'Single' a revision that cannot pull, or cannot pass /health, leaves the
+    # previous one serving — so a failed rollout and a successful one look identical to the
+    # pipeline. That has bitten twice (PR 11547, PR 11602), both times found by hand days later.
+    #
+    # Reads the ACTIVE revision's own image, never the app's properties.template, which reports the
+    # DESIRED spec and looks correct either way — see LibreChat_Image_Deployments.md §4.
+    #
+    # This stage asserts; it changes nothing. If it ever misfires, deleting it is safe.
+    jobs:
+      - job: VerifyImage
+        displayName: 'Poll the active revision until it matches the pinned digest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Assert the active revision runs the pinned digest and is healthy'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -uo pipefail
+
+                PARAM_FILE="$(Build.SourcesDirectory)/ChatGptForEmployees.bicep/main.test.bicepparam"
+                LINE=$(grep -E "^param libreChatImage" "$PARAM_FILE")
+                EXPECTED=${LINE#*\'}
+                EXPECTED=${EXPECTED%\'*}
+                echo "Expecting: $EXPECTED"
+
+                # ~5 minutes. A revision that is going to come up does so well inside that; one
+                # that never pulls stays put, which is the case worth failing on.
+                for i in $(seq 1 30); do
+                  read -r NAME IMAGE HEALTH RUNNING TRAFFIC <<<"$(az containerapp revision list \
+                    -n $(appNameEnvLibreChat) -g $(resourceGroup) \
+                    --query "[?properties.active]|[0].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
+                    -o tsv 2>/dev/null)"
+
+                  if [ "$IMAGE" = "$EXPECTED" ] && [ "$HEALTH" = "Healthy" ] && [ "$TRAFFIC" = "100" ]; then
+                    echo "OK: $NAME serving $IMAGE ($HEALTH/$RUNNING, $TRAFFIC%)"
+                    exit 0
+                  fi
+                  echo "  [$i/30] active=${NAME:-none} image=${IMAGE:-none} health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}"
+                  sleep 10
+                done
+
+                echo "##vso[task.logissue type=error]LibreChat is serving ${IMAGE:-none} (${HEALTH:-?}/${RUNNING:-?}), expected ${EXPECTED}. The deploy did NOT take — the previous revision is still handling traffic. See LibreChat_Image_Deployments.md section 4."
+                exit 1

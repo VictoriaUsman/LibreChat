@@ -17,6 +17,11 @@ it from drifting out of sync with reality.
 | **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
 | **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
+> **ACR tags differ between registries.** The `Since`/`ACR tag` values above are the *dev* build's
+> tag, assigned by the fork pipeline. The copy into test and prod tags the same manifest with the
+> first 12 hex characters of its digest instead, so `az acr repository show-tags` will disagree
+> across registries. The **digest** is identical everywhere, and the digest is what deploys.
+>
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
 > is *genuinely* running right now, query Azure (§4).
@@ -153,8 +158,8 @@ yet — that's the open migration work.
 
 The infra pipeline **does not build anything.** It deploys an image that must already exist in the
 target environment's registry. Order is load-bearing: **build → copy digest → verify → deploy.**
-(For dev that is the whole story. For test and prod the copy happens *inside* the deploy run, after
-`BicepCreate` — see §3, which explains why that ordering is safe and what it costs.)
+(For dev that is the whole story. For test and prod the copy happens *inside* the deploy run, as
+the **first** stage — before `BicepCreate` repoints the app. See §3.)
 
 1. Merge the change in the **fork** repo → its pipeline builds and prints the digest.
 
@@ -221,11 +226,17 @@ and the stage now checks for a missing registry and skips rather than failing.
 
 **Two consequences of the new order, both accepted:**
 
-1. A brand-new environment needs **two runs** — the first skips the import and creates the registry,
-   the second imports. Not a case either current environment hits.
+1. A brand-new environment needs the registry to exist first. There is deliberately **no**
+   "skip if the registry is missing" branch — one was added and removed the same day, because its
+   condition was also true for a missing RBAC read, throttling or a token blip, turning any of
+   those into a green run that skipped the import. Bootstrap a new environment by running the
+   manual import in this section once, or let the stage fail and re-run after `BicepCreate` has
+   created the registry. Neither current environment is in this position.
 2. The copy now happens **before** the Prod environment's approval gate, since that gate sits on
-   `BicepCreate`. Only an unreferenced manifest lands in the registry; nothing deploys without the
-   approval.
+   `BicepCreate`. What lands early is a tagged manifest that nothing points at — the import tags it
+   deliberately, since untagged manifests are what ACR retention policies delete. Nothing deploys
+   without the approval, and a rejected approval leaves the manifest in the registry; remove it by
+   hand if that matters.
 
 **To revert:** move the `ImportLibreChatImage` stage back below the `insert-stage-bicep-create`
 template in `test.yml` and `prod.yml`, and restore `dependsOn: BicepCreate` with
@@ -267,6 +278,15 @@ az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --qu
 > Test and Prod connections cannot read `acrcgfedev`, and the source has to be readable by whoever
 > performs the copy. The step also passes `acrcgfedev`'s admin credentials explicitly for the source
 > side. Every other stage in these pipelines still runs as the environment's own connection.
+>
+> ⚠️ **The command above and the pipeline authenticate differently.** The manual command uses
+> `-r <source-resource-id>`, which resolves the source via AAD. The stage instead passes
+> `acrcgfedev`'s admin username/password with a bare `--source` FQDN, because without `-r` a
+> login-server source is treated as an external registry and 401s. Both work. Now that the role
+> grant exists the credential form is probably unnecessary, and dropping it would remove an
+> admin password from the pipeline's process arguments — worth doing, but it changes a working
+> path, so it wants a deliberate test rather than a drive-by edit. The password is registered
+> with `issecret=true` so the agent masks it in the meantime.
 >
 > That principal needs **`Container Registry Data Importer and Data Reader`** on `acrcgfetest` and
 > `acrcgfeprod` — granted by Ops 2026-08-05. ⚠️ **`AcrPush` does not work**: `az acr import` is a
