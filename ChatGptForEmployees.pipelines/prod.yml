@@ -62,7 +62,11 @@ stages:
           - task: AzureCLI@2
             displayName: 'Copy the pinned digest from acrcgfedev'
             inputs:
-              azureSubscription: $(serviceConnection)
+              # Use the Dev SC: it owns acrcgfedev (can read admin credentials) and has
+              # Container Registry Data Importer and Data Reader on acrcgfeprod.
+              # The Prod SC cannot read acrcgfedev credentials, so this step is an
+              # intentional cross-environment exception.
+              azureSubscription: ChatGptForEmployeesDevSC
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -99,18 +103,17 @@ stages:
                 # Derive a short unique tag from the digest (first 12 hex chars after "sha256:").
                 SHORT="${DIGEST:7:12}"
 
-                # --source-resource-id tells Azure the source is a first-party ACR in the same
-                # tenant, enabling AAD auth for the data-plane manifest pull. Without it, Azure
-                # treats the source URL as external and falls back to anonymous pull → 401.
-                # The Prod SC has AcrPull on acrcgfedev (pre-provisioned via az rest).
-                SOURCE_RESOURCE_ID="/subscriptions/e64069c2-4b14-4c32-a1f0-3493457f0eff/resourceGroups/rg-dev-shared/providers/Microsoft.ContainerRegistry/registries/${SOURCE_ACR}"
+                # Dev SC has admin access to acrcgfedev and Data Importer on acrcgfeprod.
+                SOURCE_USER=$(az acr credential show --name "$SOURCE_ACR" --query "username" -o tsv)
+                SOURCE_PASS=$(az acr credential show --name "$SOURCE_ACR" --query "passwords[0].value" -o tsv)
 
                 echo "Importing ${DIGEST} from ${SOURCE_ACR} as :${SHORT}..."
                 if ! az acr import --name "$TARGET_ACR" \
                        --source "${SOURCE_ACR}.azurecr.io/${REPOSITORY}@${DIGEST}" \
                        --image "${REPOSITORY}:${SHORT}" \
-                       --source-resource-id "$SOURCE_RESOURCE_ID"; then
-                  echo "##vso[task.logissue type=error]Import failed. Verify the $(serviceConnection) service principal has AcrPull on ${SOURCE_ACR} (rg-dev-shared)."
+                       --username "$SOURCE_USER" \
+                       --password "$SOURCE_PASS"; then
+                  echo "##vso[task.logissue type=error]Import failed."
                   exit 1
                 fi
 
