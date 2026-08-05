@@ -92,6 +92,12 @@ stages:
 
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
+      # a promotion to prod that silently keeps the previous image, while the run reports green,
+      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
+      # Prod environment, so any approval gate on that environment still applies — this changes
+      # only whether the stage is evaluated, not who may approve it.
+      bicepDetectFolder: ''
       bicepParamFile: $(bicepParamFile)
       bicepWorkingDirectory: $(bicepWorkingDirectory)
       resourceGroup: $(resourceGroup)

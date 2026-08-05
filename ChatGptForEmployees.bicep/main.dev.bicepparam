@@ -19,13 +19,13 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // Fast vs Standard, and fixes the tour's Back/Next buttons in dark mode — Next was below
 // WCAG AA contrast on the green submit surface.
 //
-// ⚠️ A digest change alone does NOT deploy — bump DEPLOY_TRIGGER in main.bicep in the same
-// PR, or BicepCreate is Skipped and the app keeps its previous image while the run goes
-// green (see main.bicep's header and LibreChat_Image_Deployments.md §5).
+// Changing this line is now enough to deploy: the pipelines pass `bicepDetectFolder: ''`, so
+// the incremental gate that used to skip BicepCreate no longer applies. If you ever see a
+// green run that did NOT change the running image, check that first — history in
+// main.bicep's header and LibreChat_Image_Deployments.md §5.
 //
 // Rollback: restore sha256:308082f9… (fork `main` @ 84ad8d651, tag 25780, 2026-08-04) and
-// redeploy — still in the registry, as is sha256:12c7731e… before it. Bump DEPLOY_TRIGGER
-// when rolling back too, for the same reason.
+// redeploy — still in the registry, as is sha256:12c7731e… before it.
 param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 

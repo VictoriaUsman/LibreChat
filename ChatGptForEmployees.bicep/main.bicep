@@ -1,28 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────────────
-// DEPLOY TRIGGER — bump this number to force BicepCreate to run.
+// There used to be a DEPLOY_TRIGGER counter here, bumped by hand so that a digest-only change
+// would touch a `.bicep` file and force the deploy to run. **It was based on a wrong diagnosis
+// and it did not work** — removed 2026-08-05 along with the real fix, in the pipelines.
 //
-//   DEPLOY_TRIGGER = 3        (last bumped 2026-08-05 — dev digest 7f4b246d / tag 26023)
+// The gate is `DetectBicepChanges` (`ROMTech/PipelineTemplates`,
+// `insert-stage-detect-folder-changes.yml`). It is folder-based, not file-type-based: it runs
+// the deploy when any changed path falls under `ChatGptForEmployees.bicep/`, which includes the
+// `.bicepparam` files. So a digest bump always qualified, and the counter was never the thing
+// making deploys work.
 //
-// WHY THIS EXISTS. The pipelines gate the whole deploy on `DetectBicepChanges`: if a push
-// touches no `.bicep` file, `BicepCreate` is **Skipped** (WORKING_NOTES §9.2). A digest bump
-// only edits `main.<env>.bicepparam`, which that check does not count — so the image the
-// container app runs is never updated, no new revision is created, and the run still goes
-// green. The restart stages tolerate a Skipped BicepCreate (PR 10964), so the app cycles on
-// the OLD image and looks perfectly healthy. That is exactly what happened on 2026-08-04:
-// PR 11547 merged the digest for tag 25740 and dev carried on serving tag 25436.
+// What actually skipped the deploy is the *baseline* it diffs against: the last successful run
+// of the pipeline definition on ANY ref. A PR validation build — which builds the PR's merge
+// commit, already containing the change — becomes that baseline, so the real merge to `dev`
+// diffs against a commit that already had everything and sees nothing to do.
 //
-// HOW TO USE IT. **Increment the number above in the same PR as any `.bicepparam`-only
-// change** — digest bumps especially. One counter serves all three environments: this file
-// compiles for every env, and the bump rides the `dev` → `test` → `main` promotion merges,
-// tripping the gate in each. There is deliberately no per-env counter, because the only
-// per-env files are the `.bicepparam`s the detection ignores.
-//
-// It is a comment, so Bicep strips it: the compiled template is byte-identical and `what-if`
-// shows nothing for the bump itself — only the real change alongside it.
-//
-// THIS IS A WORKAROUND. The correct fix is for `DetectBicepChanges` (in the
-// `ROMTech/PipelineTemplates` repo, `insert-stage-bicep-create.yml`) to treat `*.bicepparam`
-// as an infra change, since a digest bump is one. Delete this block when that lands.
+// Fixed by passing `bicepDetectFolder: ''` from `dev.yml` / `test.yml` / `prod.yml`, which takes
+// the detect template's documented "no folder resolved → run the stage" path. See the note in
+// `dev.yml` and `LibreChat_Image_Deployments.md` §5. Nothing to bump here any more.
 // ─────────────────────────────────────────────────────────────────────────────────────
 param appName string = 'ChatGptForEmployees'
 param location string = 'eastus'
