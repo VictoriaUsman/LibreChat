@@ -790,15 +790,29 @@ Keep the patch set as small as possible. Add entries below as patches land.
   1. **A fifth step covering model choice.** The tour never mentioned that there are two models.
      New step `model`, anchored on the model spec selector and placed **third** — after the two
      composer steps and before the sidebar — so the walk finishes the chat area before moving to
-     the left rail. Copy names ROMChat Fast and ROMChat Standard, says new chats start on Fast,
-     and gives a reason to switch rather than just naming the button.
-     `ModelSelector.tsx` gains `id="model-selector-button"`: the tour resolves anchors with
-     `document.querySelector` and that component exposed no stable hook. One attribute, additive.
-  2. **Dark-mode button colours.** Back has no background of its own, so it inherited the dark
-     popover surface and read as a black button with white text; it now gets a white face and a
-     dark label, in dark mode only. Next used `text-primary-foreground`, which resolves to a dark
-     ink in dark mode and sat badly on the green submit surface; forced to white, again dark mode
-     only. Light mode is untouched in both cases — the tokens are correct there.
+     the left rail. Copy names ROMChat Fast and ROMChat Standard, says every new chat starts on
+     Fast, and gives a reason to switch rather than just naming the button.
+     ⚠️ `placement: 'bottom'`, unlike the two `right` steps after it — the header anchor is
+     left-aligned in a 52px bar, so `right` pushed a 300px popover off-screen on phones, and
+     Radix's `shift` is `crossAxis: false`, so it would not have corrected it. See the comment in
+     `tourSteps.ts`, which also records the ordering coupling with the sidebar step.
+     ⚠️ The copy deliberately does **not** claim Standard helps with longer documents. Both specs
+     are pinned to `maxContextTokens: 64000`, and document length is handled by File Search
+     retrieval rather than the context window, so model choice does not affect it.
+     `ModelSelector.tsx` gains `id="model-selector-button"` on both the `TooltipAnchor` and its
+     render element, matching how upstream sets the other two tour anchors: the tour resolves
+     anchors with `document.querySelector` and that component exposed no stable hook.
+  2. **Dark-mode button colours.** Two different problems, worth keeping distinct:
+     - **Next was a genuine WCAG failure.** `text-primary-foreground` resolves to `#171717` in
+       dark mode against `bg-surface-submit` (`#047857`): **3.2:1** at rest and **2.3:1** on
+       hover, both under AA for 14px text. Forced to white → 5.5:1 and 7.8:1. This is the half of
+       the change that must survive an upstream merge.
+     - **Back was legibility-fine but faceless.** It has no background of its own, so it took the
+       popover's dark surface — light text on dark at ~16:1 with a border, perfectly readable, it
+       just didn't look like a button. Inverted for dark using the `--primary` /
+       `--primary-foreground` token pair. Purely aesthetic; don't let the wording above imply it
+       was a contrast bug.
+     Light mode is untouched in both cases — the tokens are already correct there.
 - **Why:** Config can't add a tour step or restyle its buttons. The model step matters because
   `modelSpecs.enforce: true` with `interface.modelSelect: false` means that button is the *only*
   model control a user has, and nothing else in the product explains the Fast/Standard split.
@@ -807,10 +821,22 @@ Keep the patch set as small as possible. Add entries below as patches land.
   white with dark text and Next is green with white text; in light mode both are unchanged.
 - **Upstream status:** not submitted. `Onboarding/` is ours; the only upstream file touched is the
   one-attribute id in `ModelSelector.tsx`.
-- **Merge notes:** If an upstream merge drops that id, the model step degrades safely — the anchor
-  retries, then the step is skipped — so the tour keeps working, just without it. The step's copy
-  is config-dependent the same way steps 2 and 4 are: it describes exactly the two entries in
-  `modelSpecs.list`, so changing that list means re-reading this string.
+- **Merge notes:** ⚠️ **If an upstream merge drops that id, nothing fails loudly.** The step is not
+  simply "skipped": mid-tour a missing anchor costs 12 × 250ms of full-screen, click-blocking,
+  light-mode-invisible backdrop with no popover on it — on every load, for every user, with no
+  error and no telemetry. It also spends 12 of the 48-attempt whole-tour budget, which resets on
+  the next success but leaves less margin if another anchor is slow on the same load. Realistically
+  it presents as a silent three-second dead zone nobody notices until a user complains.
+  `client/src/components/Chat/Menus/Endpoints/__tests__/ModelSelector.tourAnchor.spec.ts` guards
+  the id for exactly this reason — `GuidedTour.spec.tsx` cannot, since it mounts its own stand-in
+  anchor and stays green while the real app loses the step.
+  **Three of the five tour anchors now live in upstream-owned files**
+  (`#attach-file-menu-button`, `#tools-dropdown-button`, `#model-selector-button`); only the model
+  one has a guard. The other two are pre-existing and equally silent.
+  The step's copy is config-dependent the same way steps 2 and 4 are: it describes exactly the two
+  entries in `modelSpecs.list`, and "every new chat starts on Fast" holds because
+  `prioritize: true` makes the default spec win over the last-selected one on every new chat.
+  Changing `modelSpecs` means re-reading this string.
   ⚠️ Step count is asserted in `GuidedTour.spec.tsx` ("Step N of 5"), and the skip-path tests
   assume the model step follows Tools. Adding or reordering steps means updating those.
 
