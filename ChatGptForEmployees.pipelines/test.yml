@@ -75,10 +75,13 @@ stages:
                   exit 0
                 fi
 
-                echo "Importing ${DIGEST} from ${SOURCE_ACR}..."
+                # az acr import requires a tag as target — digest refs are invalid for TargetTags.
+                # Derive a short unique tag from the digest (first 12 hex chars after "sha256:").
+                SHORT="${DIGEST:7:12}"
+                echo "Importing ${DIGEST} from ${SOURCE_ACR} as :${SHORT}..."
                 if ! az acr import --name "$TARGET_ACR" \
                        --source "${SOURCE_ACR}.azurecr.io/${REPOSITORY}@${DIGEST}" \
-                       --image "${REPOSITORY}@${DIGEST}"; then
+                       --image "${REPOSITORY}:${SHORT}"; then
                   echo "##vso[task.logissue type=error]Import failed. If this is an authorization error, grant the $(serviceConnection) service principal AcrPull on ${SOURCE_ACR} (rg-dev-shared) — it needs read access to the source registry."
                   exit 1
                 fi
