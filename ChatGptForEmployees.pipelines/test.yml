@@ -32,8 +32,10 @@ stages:
   # It is declared ahead of the whatif/create templates with no explicit dependsOn, so ADO
   # chains it to the preceding stage. If those templates are ever changed to declare their
   # own dependsOn, add ImportLibreChatImage to BicepCreate's list or the two can race.
+  # TEMP: disabled while acrcgfetest Bicep hasn't run yet — re-enable once the registry exists.
   - stage: ImportLibreChatImage
     displayName: 'Import LibreChat image into acrcgfetest'
+    condition: false
     jobs:
       - job: ImportImage
         displayName: 'az acr import librechat@<digest> -> acrcgfetest'
