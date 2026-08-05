@@ -777,6 +777,43 @@ Keep the patch set as small as possible. Add entries below as patches land.
   merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
   equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
 
+### Guided tour: model step, and dark-mode button colours
+
+- **Work item:** product-owner request, 2026-08-05
+- **Added:** 2026-08-05
+- **Files touched:** `client/src/components/Onboarding/tourSteps.ts`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Chat/Menus/Endpoints/ModelSelector.tsx`,
+  `client/src/locales/en/translation.json`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`
+- **What:**
+  1. **A fifth step covering model choice.** The tour never mentioned that there are two models.
+     New step `model`, anchored on the model spec selector and placed **third** — after the two
+     composer steps and before the sidebar — so the walk finishes the chat area before moving to
+     the left rail. Copy names ROMChat Fast and ROMChat Standard, says new chats start on Fast,
+     and gives a reason to switch rather than just naming the button.
+     `ModelSelector.tsx` gains `id="model-selector-button"`: the tour resolves anchors with
+     `document.querySelector` and that component exposed no stable hook. One attribute, additive.
+  2. **Dark-mode button colours.** Back has no background of its own, so it inherited the dark
+     popover surface and read as a black button with white text; it now gets a white face and a
+     dark label, in dark mode only. Next used `text-primary-foreground`, which resolves to a dark
+     ink in dark mode and sat badly on the green submit surface; forced to white, again dark mode
+     only. Light mode is untouched in both cases — the tokens are correct there.
+- **Why:** Config can't add a tour step or restyle its buttons. The model step matters because
+  `modelSpecs.enforce: true` with `interface.modelSelect: false` means that button is the *only*
+  model control a user has, and nothing else in the product explains the Fast/Standard split.
+- **How to verify:** Clear `guidedTourSeen`, reload, and walk the tour. Step 3 of 5 reads
+  "Fast and Standard" and points at the model button in the chat header. In **dark mode**, Back is
+  white with dark text and Next is green with white text; in light mode both are unchanged.
+- **Upstream status:** not submitted. `Onboarding/` is ours; the only upstream file touched is the
+  one-attribute id in `ModelSelector.tsx`.
+- **Merge notes:** If an upstream merge drops that id, the model step degrades safely — the anchor
+  retries, then the step is skipped — so the tour keeps working, just without it. The step's copy
+  is config-dependent the same way steps 2 and 4 are: it describes exactly the two entries in
+  `modelSpecs.list`, so changing that list means re-reading this string.
+  ⚠️ Step count is asserted in `GuidedTour.spec.tsx` ("Step N of 5"), and the skip-path tests
+  assume the model step follows Tools. Adding or reordering steps means updating those.
+
 ### Guided tour: step advance could render the previous step; backdrops stacked
 
 - **Work item:** follow-up to PBI 12633 / 12746, from product-owner testing in dev

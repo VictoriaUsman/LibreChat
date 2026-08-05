@@ -67,6 +67,11 @@ function ModelSelectorContent() {
       description={localize('com_ui_select_model')}
       render={
         <button
+          // ROMChat: anchor for the guided tour's model step (see `Onboarding/tourSteps.ts`).
+          // The tour resolves targets with `document.querySelector`, and nothing else in this
+          // component exposes a stable hook. Additive only — if an upstream merge drops this id,
+          // the tour retries, then skips that step rather than breaking anything.
+          id="model-selector-button"
           className="my-1 flex h-9 w-full max-w-[70vw] items-center justify-center gap-2 rounded-xl border border-border-light bg-presentation px-3 py-2 text-sm text-text-primary hover:bg-surface-active-alt"
           aria-label={localize('com_ui_select_model')}
         >

@@ -19,6 +19,8 @@ function renderTour({ includeToolsAnchor = true }: { includeToolsAnchor?: boolea
         <button id="tools-dropdown-button">tools</button>
       )}
       {/* eslint-disable-next-line i18next/no-literal-string */}
+      <button id="model-selector-button">model</button>
+      {/* eslint-disable-next-line i18next/no-literal-string */}
       <button id="close-sidebar-button">close sidebar</button>
       {/* eslint-disable-next-line i18next/no-literal-string */}
       <button data-testid="nav-user">account</button>
@@ -35,7 +37,7 @@ describe('GuidedTour', () => {
   it('shows the first step on first load when not seen', async () => {
     renderTour();
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
-    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
   });
 
   it('does not appear again once already marked seen', async () => {
@@ -87,14 +89,18 @@ describe('GuidedTour', () => {
 
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
-    expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+    expect(screen.getByText('Step 2 of 5')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('Fast and Standard')).toBeInTheDocument());
+    expect(screen.getByText('Step 3 of 5')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Your sidebar')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Settings & files')).toBeInTheDocument());
-    expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
+    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument();
 
     // Last step's primary button reads "Done", not "Next".
     expect(screen.queryByText('Next')).not.toBeInTheDocument();
@@ -147,12 +153,12 @@ describe('GuidedTour', () => {
 
       // Step 2's anchor (#tools-dropdown-button) doesn't exist. Fast-forward through the full
       // retry window so it's confirmed genuinely absent (not just not-yet-rendered) and
-      // skipped straight to step 3.
+      // skipped straight to step 3, the model step.
       await act(async () => {
         jest.advanceTimersByTime((ANCHOR_RETRY_MAX_ATTEMPTS + 2) * ANCHOR_RETRY_INTERVAL_MS);
       });
 
-      expect(screen.getByText('Your sidebar')).toBeInTheDocument();
+      expect(screen.getByText('Fast and Standard')).toBeInTheDocument();
       expect(screen.queryByText('Tools')).not.toBeInTheDocument();
     } finally {
       jest.useRealTimers();
@@ -181,7 +187,8 @@ describe('GuidedTour', () => {
         jest.advanceTimersByTime(ANCHOR_RETRY_INTERVAL_MS * 3);
       });
       expect(screen.queryByText('Tools')).not.toBeInTheDocument();
-      expect(screen.queryByText('Your sidebar')).not.toBeInTheDocument();
+      // Nor may it have given up and jumped to the next step (the model step) instead of waiting.
+      expect(screen.queryByText('Fast and Standard')).not.toBeInTheDocument();
 
       const toolsButton = document.createElement('button');
       toolsButton.id = 'tools-dropdown-button';
@@ -236,7 +243,7 @@ describe('GuidedTour', () => {
 
     // Step 1 is now shown rather than having been skipped.
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
-    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
   });
 
   it('still starts promptly when a later step’s anchor is absent', async () => {
@@ -244,7 +251,7 @@ describe('GuidedTour', () => {
     // for the full timeout — it is skipped as before.
     renderTour({ includeToolsAnchor: false });
     await waitFor(() => expect(screen.getByText('Upload documents')).toBeInTheDocument());
-    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
   });
 
   it('covers the screen with a click-blocking backdrop while the tour is open', async () => {
@@ -269,7 +276,7 @@ describe('GuidedTour', () => {
     // Regression: `currentStep` used to keep pointing at the outgoing step for the whole retry
     // window while `stepIndex` had already advanced, and TourPopover fell back to the last
     // rendered step. Together they rendered step 1's content on step 1's anchor beneath a
-    // "Step 2 of 4" footer — reported in dev as step 3 pointing at the chat toggles.
+    // "Step 2 of 5" footer — reported in dev as step 3 pointing at the chat toggles.
     jest.useFakeTimers();
     try {
       const { container } = renderTour({ includeToolsAnchor: false });
@@ -287,7 +294,7 @@ describe('GuidedTour', () => {
       // The footer assertion is belt-and-braces, not independent evidence: with no popover
       // mounted there is no footer of any number. The `tourSteps.indexOf(currentStep)` derivation
       // it guards is unobservable here by construction — that it can't be observed IS the fix.
-      expect(screen.queryByText('Step 2 of 4')).not.toBeInTheDocument();
+      expect(screen.queryByText('Step 2 of 5')).not.toBeInTheDocument();
 
       // And it must still recover once the anchor turns up, inside the mid-tour window.
       const toolsButton = document.createElement('button');
@@ -300,7 +307,7 @@ describe('GuidedTour', () => {
       });
 
       expect(screen.getByText('Tools')).toBeInTheDocument();
-      expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+      expect(screen.getByText('Step 2 of 5')).toBeInTheDocument();
     } finally {
       jest.useRealTimers();
     }
@@ -384,6 +391,8 @@ describe('GuidedTour', () => {
 
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Tools')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => expect(screen.getByText('Fast and Standard')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Next'));
     await waitFor(() => expect(screen.getByText('Your sidebar')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Next'));

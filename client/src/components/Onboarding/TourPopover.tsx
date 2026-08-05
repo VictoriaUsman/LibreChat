@@ -189,7 +189,14 @@ const TourPopover = ({
                     <button
                       type="button"
                       onClick={onBack}
-                      className="rounded-lg border border-border-medium px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
+                      // Back has no background of its own, so in dark mode it inherited the
+                      // popover's dark surface and read as black-on-black with white text.
+                      // Inverted for dark: white face, dark label.
+                      className={cn(
+                        'rounded-lg border border-border-medium px-3 py-1.5 text-sm',
+                        'text-text-primary hover:bg-surface-hover',
+                        'dark:border-transparent dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200',
+                      )}
                     >
                       {localize('com_onboarding_tour_back')}
                     </button>
@@ -198,7 +205,14 @@ const TourPopover = ({
                     type="button"
                     ref={primaryButtonRef}
                     onClick={onNext}
-                    className="rounded-lg bg-surface-submit px-3 py-1.5 text-sm text-primary-foreground hover:bg-surface-submit-hover"
+                    // `text-primary-foreground` resolves to a dark ink in dark mode, which sat
+                    // badly on the green submit surface. Forced white there; light mode keeps the
+                    // token, which is correct against the same green on a light page.
+                    className={cn(
+                      'rounded-lg bg-surface-submit px-3 py-1.5 text-sm',
+                      'text-primary-foreground hover:bg-surface-submit-hover',
+                      'dark:text-white',
+                    )}
                   >
                     {isLastStep
                       ? localize('com_onboarding_tour_finish')
