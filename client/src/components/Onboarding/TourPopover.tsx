@@ -189,7 +189,19 @@ const TourPopover = ({
                     <button
                       type="button"
                       onClick={onBack}
-                      className="rounded-lg border border-border-medium px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
+                      // Back has no background of its own, so in dark mode it took the popover's
+                      // own dark surface and had no distinct face — legible (light text on dark
+                      // at ~16:1, with a border) but not obviously a button. Inverted for dark
+                      // via the existing inverted-button token pair (`--primary` /
+                      // `--primary-foreground` are 98%/9% in dark), so a palette change carries.
+                      // Hover stays a literal: there is no inverted-hover token, and the obvious
+                      // candidate (`surface-active-alt`) would darken a white face.
+                      className={cn(
+                        'rounded-lg border border-border-medium px-3 py-1.5 text-sm',
+                        'text-text-primary hover:bg-surface-hover',
+                        'dark:border-transparent dark:bg-primary dark:text-primary-foreground',
+                        'dark:hover:bg-gray-200',
+                      )}
                     >
                       {localize('com_onboarding_tour_back')}
                     </button>
@@ -198,7 +210,16 @@ const TourPopover = ({
                     type="button"
                     ref={primaryButtonRef}
                     onClick={onNext}
-                    className="rounded-lg bg-surface-submit px-3 py-1.5 text-sm text-primary-foreground hover:bg-surface-submit-hover"
+                    // Accessibility fix, not cosmetics: in dark mode `text-primary-foreground`
+                    // resolves to #171717 against `bg-surface-submit` (#047857), which is 3.2:1
+                    // at rest and 2.3:1 on hover — both below WCAG AA for 14px text. White takes
+                    // those to 5.5:1 and 7.8:1. Light mode keeps the token, where it already
+                    // passes at 5.3:1 against the same green.
+                    className={cn(
+                      'rounded-lg bg-surface-submit px-3 py-1.5 text-sm',
+                      'text-primary-foreground hover:bg-surface-submit-hover',
+                      'dark:text-white',
+                    )}
                   >
                     {isLastStep
                       ? localize('com_onboarding_tour_finish')

@@ -777,6 +777,74 @@ Keep the patch set as small as possible. Add entries below as patches land.
   merge cleanly unless upstream rewrites either file's attach logic, in which case re-locate the
   equivalent attach point and re-add the `setEphemeralAgent`/unconditional-enable call.
 
+### Guided tour: model step, and dark-mode button colours
+
+- **Work item:** product-owner request, 2026-08-05
+- **Added:** 2026-08-05
+- **Files touched:** `client/src/components/Onboarding/tourSteps.ts`,
+  `client/src/components/Onboarding/TourPopover.tsx`,
+  `client/src/components/Chat/Menus/Endpoints/ModelSelector.tsx`,
+  `client/src/locales/en/translation.json`,
+  `client/src/components/Onboarding/__tests__/GuidedTour.spec.tsx`,
+  `client/src/components/Chat/Menus/Endpoints/__tests__/ModelSelector.tourAnchor.spec.ts` (new)
+- **What:**
+  1. **A fifth step covering model choice.** The tour never mentioned that there are two models.
+     New step `model`, anchored on the model spec selector and placed **third** — after the two
+     composer steps and before the sidebar — so the walk finishes the chat area before moving to
+     the left rail. Copy names ROMChat Fast and ROMChat Standard, says every new chat starts on
+     Fast, and gives a reason to switch rather than just naming the button.
+     ⚠️ `placement: 'bottom'`, unlike the two `right` steps after it — the header anchor is
+     left-aligned in a 52px bar, so `right` pushed a 300px popover off-screen on phones, and
+     Radix's `shift` is `crossAxis: false`, so it would not have corrected it. See the comment in
+     `tourSteps.ts`, which also records the ordering coupling with the sidebar step.
+     ⚠️ The copy deliberately does **not** claim Standard helps with longer documents. Both specs
+     are pinned to `maxContextTokens: 64000`, and document length is handled by File Search
+     retrieval rather than the context window, so model choice does not affect it.
+     `ModelSelector.tsx` gains `id="model-selector-button"` on both the `TooltipAnchor` and its
+     render element, matching how upstream sets the other two tour anchors: the tour resolves
+     anchors with `document.querySelector` and that component exposed no stable hook.
+  2. **Dark-mode button colours.** Two different problems, worth keeping distinct:
+     - **Next was a genuine WCAG failure.** `text-primary-foreground` resolves to `#171717` in
+       dark mode against `bg-surface-submit` (`#047857`): **3.2:1** at rest and **2.3:1** on
+       hover, both under AA for 14px text. Forced to white → 5.5:1 and 7.8:1. This is the half of
+       the change that must survive an upstream merge.
+     - **Back was legibility-fine but faceless.** It has no background of its own, so it took the
+       popover's dark surface — light text on dark at ~16:1 with a border, perfectly readable, it
+       just didn't look like a button. Inverted for dark using the `--primary` /
+       `--primary-foreground` token pair. Purely aesthetic; don't let the wording above imply it
+       was a contrast bug.
+     Light mode is untouched in both cases — the tokens are already correct there.
+- **Why:** Config can't add a tour step or restyle its buttons. The model step matters because
+  `modelSpecs.enforce: true` with `interface.modelSelect: false` means that button is the *only*
+  model control a user has, and nothing else in the product explains the Fast/Standard split.
+- **How to verify:** Clear `guidedTourSeen`, reload, and walk the tour. Step 3 of 5 reads
+  "Fast and Standard" and points at the model button in the chat header. In **dark mode**, Back is
+  white with dark text and Next is green with white text; in light mode both are unchanged.
+- **Upstream status:** not submitted. `Onboarding/` is ours; the only upstream file touched is the
+  one-attribute id in `ModelSelector.tsx`.
+- **Merge notes:** ⚠️ **If an upstream merge drops that id, nothing fails loudly.** The step is not
+  simply "skipped": mid-tour a missing anchor costs 12 × 250ms of full-screen, click-blocking,
+  backdrop with no popover on it — invisible in **dark** mode, where the backdrop is transparent
+  (`TourBackdrop.tsx` is `bg-black/35 dark:bg-transparent`) — on every load, for every user, with
+  no error and no telemetry. It also spends 12 of the 48-attempt whole-tour budget, which resets on
+  the next success but leaves less margin if another anchor is slow on the same load. Realistically
+  it presents as a silent three-second dead zone nobody notices until a user complains.
+  `client/src/components/Chat/Menus/Endpoints/__tests__/ModelSelector.tourAnchor.spec.ts` guards
+  the id for exactly this reason — `GuidedTour.spec.tsx` cannot, since it mounts its own stand-in
+  anchor and stays green while the real app loses the step.
+  **All five tour anchors live in upstream-owned files** — `#attach-file-menu-button`,
+  `#tools-dropdown-button`, `#model-selector-button`, `#close-sidebar-button` (`OpenSidebar.tsx` /
+  `ExpandedPanel.tsx`) and `[data-testid="nav-user"]` (`AccountSettings.tsx`). Only the model one
+  has a guard; the other four are pre-existing and fail just as silently. Two of them we added, the
+  rest we re-used, but the exposure is identical either way.
+  The step's copy is config-dependent the same way steps 2 and 5 are (inserting this step made the
+  sidebar step 4 and the account step 5): it describes exactly the two entries in
+  `modelSpecs.list`, and "every new chat starts on Fast" holds because
+  `prioritize: true` makes the default spec win over the last-selected one on every new chat.
+  Changing `modelSpecs` means re-reading this string.
+  ⚠️ Step count is asserted in `GuidedTour.spec.tsx` ("Step N of 5"), and the skip-path tests
+  assume the model step follows Tools. Adding or reordering steps means updating those.
+
 ### Guided tour: step advance could render the previous step; backdrops stacked
 
 - **Work item:** follow-up to PBI 12633 / 12746, from product-owner testing in dev
@@ -850,7 +918,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
      has rendered the app is demonstrably up, so a missing anchor is genuinely missing —
      `ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR` (12, ~3s) applies from then on, gated on `shownAnyStep`.
      The windows still compound, though: with nothing on the page, four steps at the cold-start
-     window would hold a full-screen click blocker for ~40s — invisible in light mode, Tab
+     window would hold a full-screen click blocker for ~40s — invisible in dark mode, Tab
      hard-blocked, no popover to explain it, and repeating on every load since `no-anchors`
      doesn't mark the tour seen. `ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS` (48, ~12s) ends the tour
      instead. It counts **consecutive** failures and resets on every successful render, or normal

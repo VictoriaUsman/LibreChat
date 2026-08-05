@@ -17,7 +17,7 @@ export const ANCHOR_RETRY_MAX_ATTEMPTS = 40;
 export const ANCHOR_RETRY_MAX_ATTEMPTS_MID_TOUR = 12;
 /** Ceiling on anchor hunting across the whole tour, ~12s. The per-step windows are each
  * defensible, but they compound: if nothing ever mounts, four steps at the cold-start window
- * would spend ~40s holding a full-screen click blocker that is invisible in light mode, with no
+ * would spend ~40s holding a full-screen click blocker that is invisible in dark mode, with no
  * popover to explain it and Tab hard-blocked. Past this budget the tour gives up. */
 export const ANCHOR_RETRY_MAX_TOTAL_ATTEMPTS = 48;
 
@@ -63,7 +63,7 @@ export default function useGuidedTour(onEnd: (reason: TourEndReason) => void): U
     // pointing at the PREVIOUS step for the whole retry window while `stepIndex` has already
     // advanced — so the popover renders the previous step's text at the previous step's anchor
     // while the footer counts up. That is the "step 3 points at the chat toggles" bug: step 2's
-    // popover, on the Tools button, labelled "Step 3 of 4", for up to the full timeout.
+    // popover, on the Tools button, carrying the *next* step's number, for up to the full timeout.
     //
     // On a normal transition this costs nothing: `check()` runs synchronously below and finds
     // the anchor in the same effect, so React batches both updates into one render and no blank

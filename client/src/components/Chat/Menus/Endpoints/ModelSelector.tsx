@@ -65,8 +65,19 @@ function ModelSelectorContent() {
     <TooltipAnchor
       aria-label={localize('com_ui_select_model')}
       description={localize('com_ui_select_model')}
+      // ROMChat: anchor for the guided tour's model step (see `Onboarding/tourSteps.ts`). Set on
+      // BOTH the TooltipAnchor and its render element, mirroring how upstream does it for
+      // `#attach-file-menu-button` (AttachFileMenu.tsx) and `#tools-dropdown-button`
+      // (ToolsDropdown.tsx) — these layers clone and merge props, and matching upstream's own
+      // belt-and-braces is cheaper than reasoning about Ariakit's merge order.
+      id="model-selector-button"
       render={
         <button
+          // The tour resolves targets with `document.querySelector`, and nothing else in this
+          // component exposes a stable hook. Guarded by
+          // `__tests__/ModelSelector.tourAnchor.spec.ts` — without it, dropping this id in an
+          // upstream merge breaks the model step with no test failure and no runtime error.
+          id="model-selector-button"
           className="my-1 flex h-9 w-full max-w-[70vw] items-center justify-center gap-2 rounded-xl border border-border-light bg-presentation px-3 py-2 text-sm text-text-primary hover:bg-surface-active-alt"
           aria-label={localize('com_ui_select_model')}
         >

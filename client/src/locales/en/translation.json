@@ -631,6 +631,8 @@
   "com_onboarding_tour_skip": "Skip",
   "com_onboarding_tour_step_account_body": "Open this menu for My Files, the full list of everything you've uploaded, plus Help & FAQ and Settings.",
   "com_onboarding_tour_step_account_title": "Settings & files",
+  "com_onboarding_tour_step_model_body": "This button switches between ROMChat Fast and ROMChat Standard. Every new chat starts on Fast, which is quicker and suits everyday work. Switch to Standard for harder questions, when it's worth waiting a little longer for a more careful answer.",
+  "com_onboarding_tour_step_model_title": "Fast and Standard",
   "com_onboarding_tour_step_of": "Step {{0}} of {{1}}",
   "com_onboarding_tour_step_sidebar_body": "Close sidebar collapses the panel for more room. New chat starts a fresh conversation. Chat History holds your past conversations. Attach Files lets you add a document you've already uploaded to the chat you're in.",
   "com_onboarding_tour_step_sidebar_title": "Your sidebar",
