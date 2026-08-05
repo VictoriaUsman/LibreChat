@@ -19,21 +19,42 @@ variables:
 stages:
   - template: insert-stage-variables-confirm.yml@templates
 
-  # Copy the LibreChat image into THIS environment's registry before Bicep points the
-  # Container App at it. Identical to the test pipeline's stage — see test.yml for the
-  # full rationale.
+  - template: insert-stage-bicep-whatif.yml@templates
+    parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
+      # a promotion to prod that silently keeps the previous image, while the run reports green,
+      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
+      # Prod environment, so any approval gate on that environment still applies — this changes
+      # only whether the stage is evaluated, not who may approve it.
+      bicepDetectFolder: ''
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+
+  - template: insert-stage-bicep-create.yml@templates
+    parameters:
+      appNameEnv: $(appName)
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      envName: $(envName)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+
+  # Copy the LibreChat image into THIS environment's registry after Bicep creates it.
+  # Identical to test.yml's stage — see test.yml for the full rationale.
   #
   # The fork builds LibreChat once, into acrcgfedev. libreChat.bicep gives the Container
   # App pull credentials for acrcgfe<env> and nothing else, so prod cannot pull from a
   # lower environment's registry. `az acr import` preserves the digest, so prod runs the
   # bit-identical image validated in dev and test — promotion is a copy, never a rebuild.
   #
-  # ⚠️ ORDERING IS LOAD-BEARING. This must finish before BicepCreate sets the app's image.
-  # It is declared ahead of the whatif/create templates with no explicit dependsOn, so ADO
-  # chains it to the preceding stage. If those templates are ever changed to declare their
-  # own dependsOn, add ImportLibreChatImage to BicepCreate's list or the two can race.
+  # Runs after BicepCreate (which creates acrcgfeprod if it doesn't exist yet) and before
+  # DeployLibreChat (which restarts the container app to pick up the new image).
   - stage: ImportLibreChatImage
     displayName: 'Import LibreChat image into acrcgfeprod'
+    dependsOn: BicepCreate
+    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: ImportImage
         displayName: 'az acr import librechat@<digest> -> acrcgfeprod'
@@ -100,28 +121,6 @@ stages:
                   --image "${REPOSITORY}@${DIGEST}" \
                   --query "{digest:digest, arch:architecture, os:os}" -o json
                 echo "Imported into ${TARGET_ACR} and verified."
-
-  - template: insert-stage-bicep-whatif.yml@templates
-    parameters:
-      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
-      # a promotion to prod that silently keeps the previous image, while the run reports green,
-      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
-      # Prod environment, so any approval gate on that environment still applies — this changes
-      # only whether the stage is evaluated, not who may approve it.
-      bicepDetectFolder: ''
-      bicepParamFile: $(bicepParamFile)
-      bicepWorkingDirectory: $(bicepWorkingDirectory)
-      resourceGroup: $(resourceGroup)
-      serviceConnection: $(serviceConnection)
-
-  - template: insert-stage-bicep-create.yml@templates
-    parameters:
-      appNameEnv: $(appName)
-      bicepParamFile: $(bicepParamFile)
-      bicepWorkingDirectory: $(bicepWorkingDirectory)
-      envName: $(envName)
-      resourceGroup: $(resourceGroup)
-      serviceConnection: $(serviceConnection)
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
@@ -255,10 +254,10 @@ stages:
     dependsOn:
       - DeployLiteLLM
       - DeployRagApi
-    # Explicit result check on the immediate parents (see DeployLiteLLM note).
-    # Restart LibreChat when both upstream restarts succeeded; the default
-    # succeeded() would be poisoned by the Skipped BicepCreate ancestor.
-    condition: and(in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'))
+      - ImportLibreChatImage
+    # Restart LibreChat only when LiteLLM, RAG API, and the image import all succeeded.
+    # ImportLibreChatImage Skipped (image already present) is also fine.
+    condition: and(in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: RestartLibreChat
         displayName: 'Restart LibreChat Container App'
