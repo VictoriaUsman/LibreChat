@@ -12,12 +12,6 @@
 param envName string = 'Dev'
 param location string = 'eastus'
 
-// The Dev pipeline (ChatGptForEmployeesDevSC) builds the image once into acrcgfedev and then
-// imports it into acrcgfetest and acrcgfeprod. It needs this role on the target registries
-// so the import (control-plane operation) succeeds. AcrPush is not enough — import requires
-// Container Registry Data Importer and Data Reader (577a9874-…).
-param devPipelinePrincipalId string = '14143789-0cd9-4978-9ccf-c9bf0005f99c'
-
 var acrName = 'acrcgfe${toLower(envName)}'
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -35,17 +29,10 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
-// Grant Dev pipeline import access to Test and Prod registries so the image copy works.
-// Not needed for Dev itself (the Dev SC already owns that registry).
-resource devPipelineImportRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (envName == 'Test' || envName == 'Prod') {
-  name: guid(acr.id, devPipelinePrincipalId, '577a9874-89fd-4f24-9dbd-b5034d0ad23a')
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '577a9874-89fd-4f24-9dbd-b5034d0ad23a')
-    principalId: devPipelinePrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
+// NOTE: ChatGptForEmployeesDevSC (14143789-…) has "Container Registry Data Importer and
+// Data Reader" (577a9874-…) on acrcgfetest and acrcgfeprod — pre-provisioned manually via
+// az rest because the Test/Prod service connections only have Contributor (no roleAssignments/write).
+// If those SCs are ever granted User Access Administrator, restore this as a Bicep resource.
 
 output name string = acr.name
 output loginServer string = acr.properties.loginServer
