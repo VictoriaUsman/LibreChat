@@ -17,6 +17,11 @@ it from drifting out of sync with reality.
 | **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
 | **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
+> **ACR tags differ between registries.** The `Since`/`ACR tag` values above are the *dev* build's
+> tag, assigned by the fork pipeline. The copy into test and prod tags the same manifest with the
+> first 12 hex characters of its digest instead, so `az acr repository show-tags` will disagree
+> across registries. The **digest** is identical everywhere, and the digest is what deploys.
+>
 > **This table is a convenience, not the source of truth.** The authoritative record is
 > `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
 > is *genuinely* running right now, query Azure (§4).
@@ -153,6 +158,8 @@ yet — that's the open migration work.
 
 The infra pipeline **does not build anything.** It deploys an image that must already exist in the
 target environment's registry. Order is load-bearing: **build → copy digest → verify → deploy.**
+(For dev that is the whole story. For test and prod the copy happens *inside* the deploy run, as
+the **first** stage — before `BicepCreate` repoints the app. See §3.)
 
 1. Merge the change in the **fork** repo → its pipeline builds and prints the digest.
 
@@ -190,10 +197,57 @@ target environment's registry. Order is load-bearing: **build → copy digest �
 Promotion is **not a rebuild.** The same digest is copied into the target environment's registry, so
 test and prod run bit-identical images to what was validated in dev.
 
-**The copy is automatic.** `test.yml` and `prod.yml` each have an `ImportLibreChatImage` stage that
-runs before `BicepCreate`: it reads `libreChatImage` from that environment's bicepparam, imports the
-digest from `acrcgfedev` if it isn't already there, and verifies it landed. Set the digest in the
-param file and promote — nothing else to do.
+**The copy is automatic.** `test.yml` and `prod.yml` each have an `ImportLibreChatImage` stage: it
+reads `libreChatImage` from that environment's bicepparam, imports the digest from `acrcgfedev` if
+it isn't already there, and verifies it landed. Set the digest in the param file and promote —
+nothing else to do.
+
+**It runs *before* `BicepWhatIf`/`BicepCreate`.** The image is in the target registry by the time
+Bicep points the Container App at that digest, so the new revision pulls on creation and comes up
+healthy. If the copy can't happen, the run fails before any infrastructure is touched.
+
+### Why it was reordered on 2026-08-05, and how to put it back
+
+It originally ran *after* `BicepCreate`, so that on a first run the registry would exist before the
+import needed it. The cost of that ordering was paid on every deploy, not just the first:
+
+- **Bicep created a revision that couldn't pull.** It stayed unhealthy until the later
+  `DeployLibreChat` restart retried it — making that restart the recovery mechanism for image
+  rollout, a path never actually exercised. `UploadConfigs`, `DeployLiteLLM` and `DeployRagApi` all
+  run in between, each waiting on a restart of its own, so the revision could pass its progress
+  deadline before the retry arrived.
+- **A failed `BicepCreate` gated the import off**, so a re-run couldn't self-heal — the image could
+  never land without a hand-run import.
+- `activeRevisionsMode: Single` meant none of this took the app down; it just meant the environment
+  could sit on the old image behind a green pipeline.
+
+The bootstrap case it protected is one-time per environment, both target registries already exist,
+and the stage now checks for a missing registry and skips rather than failing.
+
+**Two consequences of the new order, both accepted:**
+
+1. A brand-new environment needs the registry to exist first. There is deliberately **no**
+   "skip if the registry is missing" branch — one was added and removed the same day, because its
+   condition was also true for a missing RBAC read, throttling or a token blip, turning any of
+   those into a green run that skipped the import. Bootstrap a new environment by running the
+   manual import in this section once, or let the stage fail and re-run after `BicepCreate` has
+   created the registry. Neither current environment is in this position.
+2. The copy now happens **before** the Prod environment's approval gate, since that gate sits on
+   `BicepCreate`. What lands early is a tagged manifest that nothing points at — the import tags it
+   deliberately, since untagged manifests are what ACR retention policies delete. Nothing deploys
+   without the approval, and a rejected approval leaves the manifest in the registry; remove it by
+   hand if that matters.
+
+**To revert:** move the `ImportLibreChatImage` stage back below the `insert-stage-bicep-create`
+template in `test.yml` and `prod.yml`, and restore `dependsOn: BicepCreate` with
+`condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')`.
+Nothing else changes — the downstream stages check both `BicepCreate` and the import either way, and
+the registry-exists branch is harmless in that position. The same instructions are in the stage's own
+comment block.
+
+**A green run still does not prove the new image is serving.** Nothing asserts the LibreChat revision
+went healthy on the new digest, and `Single` mode makes a failed rollout look identical to a
+successful one from the pipeline's point of view. Verify with §4 after any promotion.
 
 The stage is idempotent (a redeploy of an unchanged digest is one lookup), and it no-ops on any
 reference that isn't for that environment's own ACR, so it stays harmless on a param still pointing
@@ -202,20 +256,42 @@ at upstream's public `ghcr.io` image.
 Doing it by hand — for a one-off, or if you're diagnosing the stage:
 
 ```bash
-# 1. Copy the exact digest into the target env's registry
+# 1. Copy the exact digest into the target env's registry.
+#    TARGET must be repo:TAG — `--image/-t` takes 'repo/image:tag', and a digest there is rejected
+#    ('@' isn't legal in a repository name). The manifest is copied as-is either way, so the
+#    resulting DIGEST is identical; the tag is only a handle. The pipeline derives it from the
+#    digest (first 12 hex chars), which is why a mirrored image carries a different tag from the
+#    dev build's ACR tag.
+#    `-r` names the SOURCE registry so it resolves via AAD. Without it, `--source` is treated as an
+#    external registry and returns 401 even when you do have access.
 az acr import --name acrcgfetest \
-  --source acrcgfedev.azurecr.io/librechat@sha256:<digest> \
-  --image librechat@sha256:<digest>
+  -r /subscriptions/e64069c2-4b14-4c32-a1f0-3493457f0eff/resourceGroups/rg-dev-shared/providers/Microsoft.ContainerRegistry/registries/acrcgfedev \
+  --source librechat@sha256:<digest> \
+  --image librechat:<short-digest>
 
 # 2. Confirm it arrived
 az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --query digest -o tsv
 ```
 
-> **First run only:** the import reads from `acrcgfedev`, which lives in `rg-dev-shared`, while the
-> stage runs as that environment's own service connection (`ChatGptForEmployeesTestSC` /
-> `…ProdSC`). If those principals lack read access to the dev registry, the stage fails with an
-> authorization error and prints the exact grant needed — `AcrPull` on `acrcgfedev`. Same
-> subscription, so it's a role assignment, not a cross-tenant problem.
+> **Permissions — the one cross-environment exception.** The import step runs as
+> **`ChatGptForEmployeesDevSC`**, not as the environment's own service connection. It has to: the
+> Test and Prod connections cannot read `acrcgfedev`, and the source has to be readable by whoever
+> performs the copy. The step also passes `acrcgfedev`'s admin credentials explicitly for the source
+> side. Every other stage in these pipelines still runs as the environment's own connection.
+>
+> ⚠️ **The command above and the pipeline authenticate differently.** The manual command uses
+> `-r <source-resource-id>`, which resolves the source via AAD. The stage instead passes
+> `acrcgfedev`'s admin username/password with a bare `--source` FQDN, because without `-r` a
+> login-server source is treated as an external registry and 401s. Both work. Now that the role
+> grant exists the credential form is probably unnecessary, and dropping it would remove an
+> admin password from the pipeline's process arguments — worth doing, but it changes a working
+> path, so it wants a deliberate test rather than a drive-by edit. The password is registered
+> with `issecret=true` so the agent masks it in the meantime.
+>
+> That principal needs **`Container Registry Data Importer and Data Reader`** on `acrcgfetest` and
+> `acrcgfeprod` — granted by Ops 2026-08-05. ⚠️ **`AcrPush` does not work**: `az acr import` is a
+> control-plane operation and `AcrPush` only grants data-plane push. An earlier version of this note
+> said `AcrPull`, which was wrong in the same way.
 
 **Then set `main.test.bicepparam` to that env's OWN registry host** — edited on `dev` and carried up
 by the `dev` → `test` promotion, like every other param change. Never edit it on the `test` branch:
@@ -292,7 +368,7 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
   `Changed files:`. A baseline that isn't the previous env-branch tip is the tell.
 
 - **Test and prod are staged for our fork but not yet running it** — their params point at
-  `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
+  the current digest in their own registries, but that only takes effect as the promotions reach
   them. Until then both are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag.
   The import is automatic now (§3), but the supply-chain hardening isn't done until both
   promotions have completed and been verified (§4).
