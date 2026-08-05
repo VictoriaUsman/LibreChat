@@ -16,7 +16,8 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // production at a lower environment's registry.
 //
 // The copy into acrcgfeprod is automatic: prod.yml's ImportLibreChatImage stage reads this
-// value and imports the digest from acrcgfedev before BicepCreate runs.
+// value and imports the digest from acrcgfedev. It runs after BicepCreate and before the
+// LibreChat restart; see LibreChat_Image_Deployments.md §3 for why that ordering is safe.
 // This value is inert until the test -> main promotion; it deploys when that PR completes.
 param libreChatImage = 'acrcgfeprod.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'

@@ -190,10 +190,19 @@ target environment's registry. Order is load-bearing: **build → copy digest �
 Promotion is **not a rebuild.** The same digest is copied into the target environment's registry, so
 test and prod run bit-identical images to what was validated in dev.
 
-**The copy is automatic.** `test.yml` and `prod.yml` each have an `ImportLibreChatImage` stage that
-runs before `BicepCreate`: it reads `libreChatImage` from that environment's bicepparam, imports the
-digest from `acrcgfedev` if it isn't already there, and verifies it landed. Set the digest in the
-param file and promote — nothing else to do.
+**The copy is automatic.** `test.yml` and `prod.yml` each have an `ImportLibreChatImage` stage: it
+reads `libreChatImage` from that environment's bicepparam, imports the digest from `acrcgfedev` if
+it isn't already there, and verifies it landed. Set the digest in the param file and promote —
+nothing else to do.
+
+**It runs *after* `BicepCreate`, which is deliberate and worth understanding.** `BicepCreate` points
+the Container App at a digest that isn't in the target registry yet, so the revision it creates
+can't pull and stays unhealthy — with `activeRevisionsMode: Single` the previous revision keeps
+serving, so nothing is down. The import then lands the image, and `DeployLibreChat` restarts
+`latestRevisionName`, which retries the pull and brings that revision up. Every stage in the chain
+is explicitly gated on the import's result, so a failed copy stops the restart rather than leaving
+a half-applied deploy. Running the import first would avoid the unhealthy window, but the import
+needs the target registry to exist, which `BicepCreate` is what guarantees on a first run.
 
 The stage is idempotent (a redeploy of an unchanged digest is one lookup), and it no-ops on any
 reference that isn't for that environment's own ACR, so it stays harmless on a param still pointing
@@ -211,11 +220,16 @@ az acr import --name acrcgfetest \
 az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --query digest -o tsv
 ```
 
-> **First run only:** the import reads from `acrcgfedev`, which lives in `rg-dev-shared`, while the
-> stage runs as that environment's own service connection (`ChatGptForEmployeesTestSC` /
-> `…ProdSC`). If those principals lack read access to the dev registry, the stage fails with an
-> authorization error and prints the exact grant needed — `AcrPull` on `acrcgfedev`. Same
-> subscription, so it's a role assignment, not a cross-tenant problem.
+> **Permissions — the one cross-environment exception.** The import step runs as
+> **`ChatGptForEmployeesDevSC`**, not as the environment's own service connection. It has to: the
+> Test and Prod connections cannot read `acrcgfedev`, and the source has to be readable by whoever
+> performs the copy. The step also passes `acrcgfedev`'s admin credentials explicitly for the source
+> side. Every other stage in these pipelines still runs as the environment's own connection.
+>
+> That principal needs **`Container Registry Data Importer and Data Reader`** on `acrcgfetest` and
+> `acrcgfeprod` — granted by Ops 2026-08-05. ⚠️ **`AcrPush` does not work**: `az acr import` is a
+> control-plane operation and `AcrPush` only grants data-plane push. An earlier version of this note
+> said `AcrPull`, which was wrong in the same way.
 
 **Then set `main.test.bicepparam` to that env's OWN registry host** — edited on `dev` and carried up
 by the `dev` → `test` promotion, like every other param change. Never edit it on the `test` branch:
