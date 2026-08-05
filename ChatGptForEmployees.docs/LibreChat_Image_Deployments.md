@@ -153,6 +153,8 @@ yet — that's the open migration work.
 
 The infra pipeline **does not build anything.** It deploys an image that must already exist in the
 target environment's registry. Order is load-bearing: **build → copy digest → verify → deploy.**
+(For dev that is the whole story. For test and prod the copy happens *inside* the deploy run, after
+`BicepCreate` — see §3, which explains why that ordering is safe and what it costs.)
 
 1. Merge the change in the **fork** repo → its pipeline builds and prints the digest.
 
@@ -195,14 +197,33 @@ reads `libreChatImage` from that environment's bicepparam, imports the digest fr
 it isn't already there, and verifies it landed. Set the digest in the param file and promote —
 nothing else to do.
 
-**It runs *after* `BicepCreate`, which is deliberate and worth understanding.** `BicepCreate` points
-the Container App at a digest that isn't in the target registry yet, so the revision it creates
-can't pull and stays unhealthy — with `activeRevisionsMode: Single` the previous revision keeps
-serving, so nothing is down. The import then lands the image, and `DeployLibreChat` restarts
-`latestRevisionName`, which retries the pull and brings that revision up. Every stage in the chain
-is explicitly gated on the import's result, so a failed copy stops the restart rather than leaving
-a half-applied deploy. Running the import first would avoid the unhealthy window, but the import
-needs the target registry to exist, which `BicepCreate` is what guarantees on a first run.
+**It runs *after* `BicepCreate`, which is deliberate — and carries two risks worth knowing.**
+`BicepCreate` points the Container App at a digest that isn't in the target registry yet, so the
+revision it creates can't pull and stays unhealthy. With `activeRevisionsMode: Single` the previous
+revision keeps serving, so nothing goes down. The import then lands the image, and `DeployLibreChat`
+restarts `latestRevisionName` — which is that same revision — so the pull is retried and it comes
+up. Running the import first would avoid the unhealthy window, but the import needs the target
+registry to exist, which on a first run only `BicepCreate` guarantees.
+
+> ⚠️ **Two things about this are assumed, not proven.**
+>
+> **The restart is the recovery mechanism, and it is untested.** `az containerapp revision restart`
+> recreating replicas should re-attempt the pull, but it is not documented as a recovery path for a
+> revision that has already tripped `ProgressDeadlineExceeded` — and `UploadConfigs`,
+> `DeployLiteLLM` and `DeployRagApi` all run in between, each waiting on its own restart, so the
+> deadline may well have passed by then. If a promotion ends with the app still on its old image,
+> this is the first thing to check.
+>
+> **There is a self-heal gap.** The import is gated on `BicepCreate` succeeding. If ACA ever
+> surfaces the failed pull back to the ARM deployment, `BicepCreate` fails, the import is gated
+> off, and a re-run repeats the same sequence — the image can never land without a hand-run import.
+>
+> Neither has been observed; both follow from the ordering. Reordering the import ahead of
+> `BicepCreate`, with a tolerated "registry doesn't exist yet" branch, would remove both.
+
+**A green run does not prove the new image is serving.** Nothing asserts the LibreChat revision went
+healthy on the new digest, and `Single` mode means a failed rollout looks identical to a successful
+one from the pipeline's point of view. Verify with §4 after any promotion.
 
 The stage is idempotent (a redeploy of an unchanged digest is one lookup), and it no-ops on any
 reference that isn't for that environment's own ACR, so it stays harmless on a param still pointing
@@ -211,10 +232,18 @@ at upstream's public `ghcr.io` image.
 Doing it by hand — for a one-off, or if you're diagnosing the stage:
 
 ```bash
-# 1. Copy the exact digest into the target env's registry
+# 1. Copy the exact digest into the target env's registry.
+#    TARGET must be repo:TAG — `--image/-t` takes 'repo/image:tag', and a digest there is rejected
+#    ('@' isn't legal in a repository name). The manifest is copied as-is either way, so the
+#    resulting DIGEST is identical; the tag is only a handle. The pipeline derives it from the
+#    digest (first 12 hex chars), which is why a mirrored image carries a different tag from the
+#    dev build's ACR tag.
+#    `-r` names the SOURCE registry so it resolves via AAD. Without it, `--source` is treated as an
+#    external registry and returns 401 even when you do have access.
 az acr import --name acrcgfetest \
-  --source acrcgfedev.azurecr.io/librechat@sha256:<digest> \
-  --image librechat@sha256:<digest>
+  -r /subscriptions/e64069c2-4b14-4c32-a1f0-3493457f0eff/resourceGroups/rg-dev-shared/providers/Microsoft.ContainerRegistry/registries/acrcgfedev \
+  --source librechat@sha256:<digest> \
+  --image librechat:<short-digest>
 
 # 2. Confirm it arrived
 az acr repository show --name acrcgfetest --image librechat@sha256:<digest> --query digest -o tsv
@@ -306,7 +335,7 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
   `Changed files:`. A baseline that isn't the previous env-branch tip is the tell.
 
 - **Test and prod are staged for our fork but not yet running it** — their params point at
-  `sha256:5e198b62…` in their own registries, but that only takes effect as the promotions reach
+  the current digest in their own registries, but that only takes effect as the promotions reach
   them. Until then both are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag.
   The import is automatic now (§3), but the supply-chain hardening isn't done until both
   promotions have completed and been verified (§4).

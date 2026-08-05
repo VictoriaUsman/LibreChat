@@ -82,11 +82,22 @@ stages:
                 IMAGE_REF=$(grep -E "^param libreChatImage" "$PARAM_FILE" | sed "s/.*=[[:space:]]*'\(.*\)'.*/\1/")
                 echo "libreChatImage = $IMAGE_REF"
 
-                # Only our own ACR references need importing. Anything else — e.g. upstream's
-                # public ghcr.io image — pulls without credentials, so leave it alone. This
-                # keeps the stage harmless on any branch that predates the fork migration.
+                # Three cases, deliberately distinguished:
+                #   1. This environment's own ACR  -> import it.
+                #   2. A DIFFERENT acrcgfe* host   -> FAIL. This is the footgun the deployment log
+                #      warns about: leave acrcgfedev in main.<env>.bicepparam and BicepCreate points
+                #      this environment at a lower one's registry, the pull fails for want of
+                #      credentials, and the previous revision keeps serving — a green run on a stale
+                #      image. This stage is the only thing positioned to catch it, so it must not
+                #      shrug and exit 0.
+                #   3. Anything else (upstream's public ghcr.io image) -> no-op. It pulls without
+                #      credentials, so there is nothing to copy, and this keeps the stage harmless
+                #      on a branch that predates the fork migration.
                 case "$IMAGE_REF" in
                   ${TARGET_ACR}.azurecr.io/*) ;;
+                  acrcgfe*.azurecr.io/*)
+                    echo "##vso[task.logissue type=error]libreChatImage points at a DIFFERENT environment's registry: ${IMAGE_REF}. It must use ${TARGET_ACR}.azurecr.io — libreChat.bicep only has pull credentials for this environment's own ACR, so this would deploy an image the app cannot pull while the old revision keeps serving."
+                    exit 1 ;;
                   *) echo "Not an ${TARGET_ACR} reference — nothing to import."; exit 0 ;;
                 esac
 
@@ -108,6 +119,11 @@ stages:
                 # Dev SC has admin access to acrcgfedev and Data Importer on acrcgfetest.
                 SOURCE_USER=$(az acr credential show --name "$SOURCE_ACR" --query "username" -o tsv)
                 SOURCE_PASS=$(az acr credential show --name "$SOURCE_ACR" --query "passwords[0].value" -o tsv)
+                # Register as a secret so ADO masks it in the log. It is passed as a process
+                # argument below, and `az --debug` — which this stage's own docs invite you to add
+                # when diagnosing — echoes the full command line. Without this the dev registry's
+                # admin password lands in a retained build log in clear text.
+                echo "##vso[task.setvariable variable=srcPass;issecret=true]${SOURCE_PASS}"
 
                 echo "Importing ${DIGEST} from ${SOURCE_ACR} as :${SHORT}..."
                 if ! az acr import --name "$TARGET_ACR" \
@@ -129,8 +145,15 @@ stages:
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
-    dependsOn: ImportLibreChatImage
-    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
+    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
+    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
+    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
+    # 'Succeeded' (the script exits 0), not 'Skipped'.
+    dependsOn:
+      - BicepCreate
+      - ImportLibreChatImage
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: BuildPush
         displayName: 'az acr build Dockerfile.cleanup -> acrcgfetest'
@@ -150,8 +173,15 @@ stages:
 
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
-    dependsOn: ImportLibreChatImage
-    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
+    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
+    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
+    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
+    # 'Succeeded' (the script exits 0), not 'Skipped'.
+    dependsOn:
+      - BicepCreate
+      - ImportLibreChatImage
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: UploadConfigs
         displayName: 'Upload litellm and librechat config'
@@ -252,12 +282,15 @@ stages:
   - stage: DeployLibreChat
     displayName: 'Deploy LibreChat'
     dependsOn:
+      - BicepCreate
       - DeployLiteLLM
       - DeployRagApi
       - ImportLibreChatImage
-    # Restart LibreChat only when LiteLLM, RAG API, and the image import all succeeded.
-    # ImportLibreChatImage Skipped (image already present) is also fine.
-    condition: and(in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    # Restart LibreChat only when LiteLLM, RAG API and the image import all succeeded, AND the
+    # Bicep deploy itself did not fail. ImportLibreChatImage 'Skipped' means BicepCreate was
+    # skipped or failed — NOT "image already present", which exits 0 and reports 'Succeeded' — so
+    # without the BicepCreate check a failed ARM deploy would still restart the app.
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: RestartLibreChat
         displayName: 'Restart LibreChat Container App'
@@ -281,8 +314,15 @@ stages:
 
   - stage: DeployHelpPage
     displayName: 'Deploy Help Page to Static Web App'
-    dependsOn: ImportLibreChatImage
-    condition: in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    # Depends on BOTH, and checks BOTH. ImportLibreChatImage is itself gated on BicepCreate, so a
+    # FAILED BicepCreate makes the import 'Skipped' — and checking only the import would then treat
+    # a failed infrastructure deploy as fine and carry on uploading config and restarting apps.
+    # 'Skipped' on the import legitimately means BicepCreate was skipped; image-already-present is
+    # 'Succeeded' (the script exits 0), not 'Skipped'.
+    dependsOn:
+      - BicepCreate
+      - ImportLibreChatImage
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: DeployHelp
         displayName: 'Push romtech_ai_help.html to the SWA'
