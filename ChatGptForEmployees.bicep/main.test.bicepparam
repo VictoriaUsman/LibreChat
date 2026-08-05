@@ -16,8 +16,8 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // The copy into acrcgfetest is automatic: test.yml's ImportLibreChatImage stage reads this
 // value and imports the digest from acrcgfedev. Just set the digest here — promotion is a
 // registry copy, never a rebuild, so test runs the bit-identical image that dev validated.
-// The stage runs after BicepCreate and before the LibreChat restart; see
-// LibreChat_Image_Deployments.md §3 for why that ordering is safe.
+// The stage runs before BicepCreate, so the image is present when the app is repointed; see
+// LibreChat_Image_Deployments.md §3.
 param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 

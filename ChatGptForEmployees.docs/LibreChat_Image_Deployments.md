@@ -197,33 +197,46 @@ reads `libreChatImage` from that environment's bicepparam, imports the digest fr
 it isn't already there, and verifies it landed. Set the digest in the param file and promote —
 nothing else to do.
 
-**It runs *after* `BicepCreate`, which is deliberate — and carries two risks worth knowing.**
-`BicepCreate` points the Container App at a digest that isn't in the target registry yet, so the
-revision it creates can't pull and stays unhealthy. With `activeRevisionsMode: Single` the previous
-revision keeps serving, so nothing goes down. The import then lands the image, and `DeployLibreChat`
-restarts `latestRevisionName` — which is that same revision — so the pull is retried and it comes
-up. Running the import first would avoid the unhealthy window, but the import needs the target
-registry to exist, which on a first run only `BicepCreate` guarantees.
+**It runs *before* `BicepWhatIf`/`BicepCreate`.** The image is in the target registry by the time
+Bicep points the Container App at that digest, so the new revision pulls on creation and comes up
+healthy. If the copy can't happen, the run fails before any infrastructure is touched.
 
-> ⚠️ **Two things about this are assumed, not proven.**
->
-> **The restart is the recovery mechanism, and it is untested.** `az containerapp revision restart`
-> recreating replicas should re-attempt the pull, but it is not documented as a recovery path for a
-> revision that has already tripped `ProgressDeadlineExceeded` — and `UploadConfigs`,
-> `DeployLiteLLM` and `DeployRagApi` all run in between, each waiting on its own restart, so the
-> deadline may well have passed by then. If a promotion ends with the app still on its old image,
-> this is the first thing to check.
->
-> **There is a self-heal gap.** The import is gated on `BicepCreate` succeeding. If ACA ever
-> surfaces the failed pull back to the ARM deployment, `BicepCreate` fails, the import is gated
-> off, and a re-run repeats the same sequence — the image can never land without a hand-run import.
->
-> Neither has been observed; both follow from the ordering. Reordering the import ahead of
-> `BicepCreate`, with a tolerated "registry doesn't exist yet" branch, would remove both.
+### Why it was reordered on 2026-08-05, and how to put it back
 
-**A green run does not prove the new image is serving.** Nothing asserts the LibreChat revision went
-healthy on the new digest, and `Single` mode means a failed rollout looks identical to a successful
-one from the pipeline's point of view. Verify with §4 after any promotion.
+It originally ran *after* `BicepCreate`, so that on a first run the registry would exist before the
+import needed it. The cost of that ordering was paid on every deploy, not just the first:
+
+- **Bicep created a revision that couldn't pull.** It stayed unhealthy until the later
+  `DeployLibreChat` restart retried it — making that restart the recovery mechanism for image
+  rollout, a path never actually exercised. `UploadConfigs`, `DeployLiteLLM` and `DeployRagApi` all
+  run in between, each waiting on a restart of its own, so the revision could pass its progress
+  deadline before the retry arrived.
+- **A failed `BicepCreate` gated the import off**, so a re-run couldn't self-heal — the image could
+  never land without a hand-run import.
+- `activeRevisionsMode: Single` meant none of this took the app down; it just meant the environment
+  could sit on the old image behind a green pipeline.
+
+The bootstrap case it protected is one-time per environment, both target registries already exist,
+and the stage now checks for a missing registry and skips rather than failing.
+
+**Two consequences of the new order, both accepted:**
+
+1. A brand-new environment needs **two runs** — the first skips the import and creates the registry,
+   the second imports. Not a case either current environment hits.
+2. The copy now happens **before** the Prod environment's approval gate, since that gate sits on
+   `BicepCreate`. Only an unreferenced manifest lands in the registry; nothing deploys without the
+   approval.
+
+**To revert:** move the `ImportLibreChatImage` stage back below the `insert-stage-bicep-create`
+template in `test.yml` and `prod.yml`, and restore `dependsOn: BicepCreate` with
+`condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')`.
+Nothing else changes — the downstream stages check both `BicepCreate` and the import either way, and
+the registry-exists branch is harmless in that position. The same instructions are in the stage's own
+comment block.
+
+**A green run still does not prove the new image is serving.** Nothing asserts the LibreChat revision
+went healthy on the new digest, and `Single` mode makes a failed rollout look identical to a
+successful one from the pipeline's point of view. Verify with §4 after any promotion.
 
 The stage is idempotent (a redeploy of an unchanged digest is one lookup), and it no-ops on any
 reference that isn't for that environment's own ACR, so it stays harmless on a param still pointing

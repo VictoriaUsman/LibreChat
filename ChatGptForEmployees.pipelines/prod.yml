@@ -19,29 +19,8 @@ variables:
 stages:
   - template: insert-stage-variables-confirm.yml@templates
 
-  - template: insert-stage-bicep-whatif.yml@templates
-    parameters:
-      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
-      # a promotion to prod that silently keeps the previous image, while the run reports green,
-      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
-      # Prod environment, so any approval gate on that environment still applies — this changes
-      # only whether the stage is evaluated, not who may approve it.
-      bicepDetectFolder: ''
-      bicepParamFile: $(bicepParamFile)
-      bicepWorkingDirectory: $(bicepWorkingDirectory)
-      resourceGroup: $(resourceGroup)
-      serviceConnection: $(serviceConnection)
-
-  - template: insert-stage-bicep-create.yml@templates
-    parameters:
-      appNameEnv: $(appName)
-      bicepParamFile: $(bicepParamFile)
-      bicepWorkingDirectory: $(bicepWorkingDirectory)
-      envName: $(envName)
-      resourceGroup: $(resourceGroup)
-      serviceConnection: $(serviceConnection)
-
-  # Copy the LibreChat image into THIS environment's registry after Bicep creates it.
+  # Copy the LibreChat image into THIS environment's registry, before Bicep points the
+  # Container App at it.
   # Identical to test.yml's stage — see test.yml for the full rationale.
   #
   # The fork builds LibreChat once, into acrcgfedev. libreChat.bicep gives the Container
@@ -49,12 +28,28 @@ stages:
   # lower environment's registry. `az acr import` preserves the digest, so prod runs the
   # bit-identical image validated in dev and test — promotion is a copy, never a rebuild.
   #
-  # Runs after BicepCreate (which creates acrcgfeprod if it doesn't exist yet) and before
-  # DeployLibreChat (which restarts the container app to pick up the new image).
+  # ORDER: runs BEFORE BicepWhatIf/BicepCreate. Reordered 2026-08-05; it previously ran after
+  # BicepCreate. Importing first means the image is already in acrcgfeprod when Bicep points the
+  # Container App at that digest, so the new revision pulls on creation and comes up healthy.
+  #
+  # Running it after meant Bicep created a revision that could not pull, which stayed unhealthy
+  # (activeRevisionsMode 'Single' kept the previous one serving, so nothing went down) until the
+  # later DeployLibreChat restart retried the pull. That made the restart the recovery mechanism
+  # for image rollout — a path never actually exercised, and one where the intervening
+  # UploadConfigs/DeployLiteLLM/DeployRagApi stages could push the revision past its progress
+  # deadline first. It also meant a failed BicepCreate gated the import off, so a re-run could not
+  # self-heal: the image could never land without a hand-run import.
+  #
+  # The only thing the old order bought was first-run bootstrap — the registry existing before the
+  # import. Both target registries already exist, and the check below handles the case anyway.
+  #
+  # TO REVERT: move this stage back below the insert-stage-bicep-create template and restore
+  #   dependsOn: BicepCreate
+  #   condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+  # Nothing else needs changing — the downstream stages check both BicepCreate and this stage's
+  # results either way. See LibreChat_Image_Deployments.md §3.
   - stage: ImportLibreChatImage
     displayName: 'Import LibreChat image into acrcgfeprod'
-    dependsOn: BicepCreate
-    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
     jobs:
       - job: ImportImage
         displayName: 'az acr import librechat@<digest> -> acrcgfeprod'
@@ -99,6 +94,15 @@ stages:
                   *) echo "Not an ${TARGET_ACR} reference — nothing to import."; exit 0 ;;
                 esac
 
+                # Bootstrap: on a brand-new environment the registry may not exist yet, because
+                # BicepCreate — which creates it — now runs after this stage. Skip rather than fail;
+                # that run deploys an app whose image isn't there (old revision keeps serving), and
+                # the next run imports it. One-time, and not a case either target hits today.
+                if ! az acr show --name "$TARGET_ACR" --output none 2>/dev/null; then
+                  echo "${TARGET_ACR} does not exist yet — skipping. BicepCreate will create it; the next run will import."
+                  exit 0
+                fi
+
                 REPO_AND_DIGEST="${IMAGE_REF#*.azurecr.io/}"
                 REPOSITORY="${REPO_AND_DIGEST%@*}"
                 DIGEST="${REPO_AND_DIGEST#*@}"
@@ -140,6 +144,28 @@ stages:
                   --image "${REPOSITORY}@${DIGEST}" \
                   --query "{digest:digest, arch:architecture, os:os}" -o json
                 echo "Imported into ${TARGET_ACR} and verified."
+
+  - template: insert-stage-bicep-whatif.yml@templates
+    parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
+      # a promotion to prod that silently keeps the previous image, while the run reports green,
+      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
+      # Prod environment, so any approval gate on that environment still applies — this changes
+      # only whether the stage is evaluated, not who may approve it.
+      bicepDetectFolder: ''
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+
+  - template: insert-stage-bicep-create.yml@templates
+    parameters:
+      appNameEnv: $(appName)
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      envName: $(envName)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
