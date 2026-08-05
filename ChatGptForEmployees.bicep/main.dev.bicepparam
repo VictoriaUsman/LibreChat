@@ -6,7 +6,27 @@ param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
 param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
-param libreChatImage = 'ghcr.io/danny-avila/librechat:v0.8.6'
+// LibreChat runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from our
+// ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
+// run the fork's build pipeline, copy the digest it prints, and paste it here.
+//
+// Take the digest from the pipeline's `Deploy by DIGEST` banner — NOT from the `az acr build`
+// summary block, which also lists the node:20-alpine base-image digest under
+// `runtime-dependency`. That one is provenance, not deployable.
+//
+// This digest = guided tour model step + dark-mode button colours (fork `main` @ a4e71a966,
+// PR 11602, ACR tag 26023, amd64, built 2026-08-05). Adds a fifth tour step covering ROMChat
+// Fast vs Standard, and fixes the tour's Back/Next buttons in dark mode — Next was below
+// WCAG AA contrast on the green submit surface.
+//
+// Changing this line is now enough to deploy: the pipelines pass `bicepDetectFolder: ''`, so
+// the incremental gate that used to skip BicepCreate no longer applies. If you ever see a
+// green run that did NOT change the running image, check that first — history in
+// main.bicep's header and LibreChat_Image_Deployments.md §5.
+//
+// Rollback: restore sha256:308082f9… (fork `main` @ 84ad8d651, tag 25780, 2026-08-04) and
+// redeploy — still in the registry, as is sha256:12c7731e… before it.
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'

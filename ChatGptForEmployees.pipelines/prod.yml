@@ -19,8 +19,85 @@ variables:
 stages:
   - template: insert-stage-variables-confirm.yml@templates
 
+  # Copy the LibreChat image into THIS environment's registry before Bicep points the
+  # Container App at it. Identical to the test pipeline's stage — see test.yml for the
+  # full rationale.
+  #
+  # The fork builds LibreChat once, into acrcgfedev. libreChat.bicep gives the Container
+  # App pull credentials for acrcgfe<env> and nothing else, so prod cannot pull from a
+  # lower environment's registry. `az acr import` preserves the digest, so prod runs the
+  # bit-identical image validated in dev and test — promotion is a copy, never a rebuild.
+  #
+  # ⚠️ ORDERING IS LOAD-BEARING. This must finish before BicepCreate sets the app's image.
+  # It is declared ahead of the whatif/create templates with no explicit dependsOn, so ADO
+  # chains it to the preceding stage. If those templates are ever changed to declare their
+  # own dependsOn, add ImportLibreChatImage to BicepCreate's list or the two can race.
+  - stage: ImportLibreChatImage
+    displayName: 'Import LibreChat image into acrcgfeprod'
+    jobs:
+      - job: ImportImage
+        displayName: 'az acr import librechat@<digest> -> acrcgfeprod'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Copy the pinned digest from acrcgfedev'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                SOURCE_ACR="acrcgfedev"
+                TARGET_ACR="acrcgfeprod"
+                PARAM_FILE="$(Build.SourcesDirectory)/ChatGptForEmployees.bicep/main.prod.bicepparam"
+
+                # Read the digest from the param file rather than restating it in pipeline
+                # config: libreChatImage stays the single place a deploy is pinned.
+                IMAGE_REF=$(grep -E "^param libreChatImage" "$PARAM_FILE" | sed "s/.*=[[:space:]]*'\(.*\)'.*/\1/")
+                echo "libreChatImage = $IMAGE_REF"
+
+                # Only our own ACR references need importing. Anything else — e.g. upstream's
+                # public ghcr.io image — pulls without credentials, so leave it alone.
+                case "$IMAGE_REF" in
+                  ${TARGET_ACR}.azurecr.io/*) ;;
+                  *) echo "Not an ${TARGET_ACR} reference — nothing to import."; exit 0 ;;
+                esac
+
+                REPO_AND_DIGEST="${IMAGE_REF#*.azurecr.io/}"
+                REPOSITORY="${REPO_AND_DIGEST%@*}"
+                DIGEST="${REPO_AND_DIGEST#*@}"
+
+                # Idempotent: a redeploy of an unchanged param costs one lookup, not a copy.
+                if az acr repository show --name "$TARGET_ACR" \
+                     --image "${REPOSITORY}@${DIGEST}" --output none 2>/dev/null; then
+                  echo "Digest already present in ${TARGET_ACR} — skipping import."
+                  exit 0
+                fi
+
+                echo "Importing ${DIGEST} from ${SOURCE_ACR}..."
+                if ! az acr import --name "$TARGET_ACR" \
+                       --source "${SOURCE_ACR}.azurecr.io/${REPOSITORY}@${DIGEST}" \
+                       --image "${REPOSITORY}@${DIGEST}"; then
+                  echo "##vso[task.logissue type=error]Import failed. If this is an authorization error, grant the $(serviceConnection) service principal AcrPull on ${SOURCE_ACR} (rg-dev-shared) — it needs read access to the source registry."
+                  exit 1
+                fi
+
+                # Verify rather than assume. A missing image does not fail the deploy loudly:
+                # the new revision never goes healthy and activeRevisionsMode 'Single' keeps
+                # the old one serving, so it presents as a working app on a failed deploy.
+                az acr repository show --name "$TARGET_ACR" \
+                  --image "${REPOSITORY}@${DIGEST}" \
+                  --query "{digest:digest, arch:architecture, os:os}" -o json
+                echo "Imported into ${TARGET_ACR} and verified."
+
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
+      # a promotion to prod that silently keeps the previous image, while the run reports green,
+      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
+      # Prod environment, so any approval gate on that environment still applies — this changes
+      # only whether the stage is evaluated, not who may approve it.
+      bicepDetectFolder: ''
       bicepParamFile: $(bicepParamFile)
       bicepWorkingDirectory: $(bicepWorkingDirectory)
       resourceGroup: $(resourceGroup)
