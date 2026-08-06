@@ -466,14 +466,22 @@ stages:
                   # pool ever changed. It was NOT part of the first-run failure — that was the
                   # query shape alone.
                   #
-                  # Selecting on trafficWeight rather than taking whichever row sorts first: during
-                  # a rollout two revisions are briefly active, and the API ordering is
-                  # undocumented. Both orderings are safe for correctness (a stale revision fails
-                  # the image test, a new one carries 0% traffic), but picking the traffic-carrying
-                  # revision is deterministic and cannot stall the poll on a lingering old row.
+                  # ⚠️ DO NOT put a JMESPath literal in this query. A `trafficWeight>` + backtick-0
+                  # filter was tried on 2026-08-06 to pick the traffic-carrying revision
+                  # deterministically. It is valid JMESPath and invalid here: backticks inside the
+                  # double-quoted --query argument of an inline bash script are COMMAND
+                  # SUBSTITUTION, so bash ran `0`, stripped it, and az got a malformed filter —
+                  # which 2>/dev/null then hid. Second spurious failure of this stage, on a deploy
+                  # that was fine. If a literal is ever genuinely needed, single-quote the whole
+                  # --query argument and test it in a real run, not just locally.
+                  #
+                  # head -1 is therefore how the row is chosen. During a rollout two revisions are
+                  # briefly active and the ordering is undocumented, but both orderings are safe:
+                  # a stale revision fails the image test, and a new one carries 0% traffic, so
+                  # neither can produce a false pass. The worst case is one wasted poll cycle.
                   read -r NAME IMAGE HEALTH RUNNING TRAFFIC <<<"$(az containerapp revision list \
                     -n $(appNameEnvLibreChat) -g $(resourceGroup) \
-                    --query "[?properties.active && properties.trafficWeight>`0`].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
+                    --query "[?properties.active].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
                     -o tsv 2>/dev/null | head -1 | tr -d '\r')"
 
                   # RUNNING is logged but deliberately NOT asserted. runningState is
