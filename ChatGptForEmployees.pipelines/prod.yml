@@ -433,9 +433,19 @@ stages:
                 set -uo pipefail
 
                 PARAM_FILE="$(Build.SourcesDirectory)/ChatGptForEmployees.bicep/main.prod.bicepparam"
-                LINE=$(grep -E "^param libreChatImage" "$PARAM_FILE")
+                # Anchor on the trailing space: "^param libreChatImage" alone would also match a
+                # future `param libreChatImageTag`, making LINE multi-line and EXPECTED garbage.
+                LINE=$(grep -E "^param libreChatImage " "$PARAM_FILE")
                 EXPECTED=${LINE#*\'}
                 EXPECTED=${EXPECTED%\'*}
+
+                # Fail closed if the param could not be read. Without this, EXPECTED is empty and
+                # the image test degenerates to "" = "" whenever the az call also returns nothing —
+                # leaving HEALTH as the only thing standing between a broken deploy and a pass.
+                if [ -z "$EXPECTED" ]; then
+                  echo "##vso[task.logissue type=error]Could not read libreChatImage from $PARAM_FILE — cannot verify what should be running."
+                  exit 1
+                fi
                 echo "Expecting: $EXPECTED"
 
                 # ~5 minutes. A revision that is going to come up does so well inside that; one
@@ -447,13 +457,27 @@ stages:
                   # FLAT list, and tsv renders that as one value per LINE, so `read` captures
                   # only the first field and every later comparison runs against an empty
                   # string. That was this stage's first-run bug (2026-08-05): it reported the
-                  # image as missing on a deploy that had actually succeeded. `tr -d` strips the
-                  # trailing CR the CLI emits, which would otherwise break the equality test.
+                  # image as missing on a deploy that had actually succeeded.
+                  #
+                  # The `tr -d` is belt-and-braces only: the CR appears when az runs on Windows,
+                  # and these agents are ubuntu-latest. It costs nothing and would matter if the
+                  # pool ever changed. It was NOT part of the first-run failure — that was the
+                  # query shape alone.
+                  #
+                  # Selecting on trafficWeight rather than taking whichever row sorts first: during
+                  # a rollout two revisions are briefly active, and the API ordering is
+                  # undocumented. Both orderings are safe for correctness (a stale revision fails
+                  # the image test, a new one carries 0% traffic), but picking the traffic-carrying
+                  # revision is deterministic and cannot stall the poll on a lingering old row.
                   read -r NAME IMAGE HEALTH RUNNING TRAFFIC <<<"$(az containerapp revision list \
                     -n $(appNameEnvLibreChat) -g $(resourceGroup) \
-                    --query "[?properties.active].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
+                    --query "[?properties.active && properties.trafficWeight>`0`].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
                     -o tsv 2>/dev/null | head -1 | tr -d '\r')"
 
+                  # RUNNING is logged but deliberately NOT asserted. runningState is
+                  # RunningAtMaxScale when the app is at maxReplicas (2, see libreChat.bicep), so
+                  # requiring "Running" would fail a healthy deploy under load. Do not "finish"
+                  # this check by adding it.
                   if [ "$IMAGE" = "$EXPECTED" ] && [ "$HEALTH" = "Healthy" ] && [ "$TRAFFIC" = "100" ]; then
                     echo "OK: $NAME serving $IMAGE ($HEALTH/$RUNNING, $TRAFFIC%)"
                     exit 0
@@ -462,5 +486,13 @@ stages:
                   sleep 10
                 done
 
-                echo "##vso[task.logissue type=error]LibreChat is serving ${IMAGE:-none} (${HEALTH:-?}/${RUNNING:-?}), expected ${EXPECTED}. The deploy did NOT take — the previous revision is still handling traffic. See LibreChat_Image_Deployments.md section 4."
+                # Report every value the pass condition looks at, including TRAFFIC — a
+                # traffic-only failure previously printed "serving X … expected X", which reads
+                # as self-contradictory. And do not assert a cause: when IMAGE is empty the az
+                # call itself failed, and its reason was discarded by 2>/dev/null.
+                if [ -z "$IMAGE" ]; then
+                  echo "##vso[task.logissue type=error]Could not read the active revision of $(appNameEnvLibreChat) after 5 minutes (last: revision=${NAME:-none} health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}). The deploy may be fine — re-run this query by hand before assuming otherwise. See LibreChat_Image_Deployments.md section 4."
+                else
+                  echo "##vso[task.logissue type=error]$(appNameEnvLibreChat) is serving ${IMAGE} on revision ${NAME:-none} (health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}%), expected ${EXPECTED} at 100% and Healthy. The deploy did NOT take: the previous revision is still handling traffic. See LibreChat_Image_Deployments.md section 4."
+                fi
                 exit 1
