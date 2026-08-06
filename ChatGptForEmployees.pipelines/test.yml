@@ -443,10 +443,18 @@ stages:
                 # ~5 minutes. A revision that is going to come up does so well inside that; one
                 # that never pulls stays put, which is the case worth failing on.
                 for i in $(seq 1 30); do
+                  # NOTE the query shape. `[?properties.active].[a,b,c]` returns a LIST OF
+                  # LISTS, which `-o tsv` renders as one tab-separated ROW per revision — which
+                  # is what `read` needs. Writing `[?properties.active]|[0].[a,b,c]` returns a
+                  # FLAT list, and tsv renders that as one value per LINE, so `read` captures
+                  # only the first field and every later comparison runs against an empty
+                  # string. That was this stage's first-run bug (2026-08-05): it reported the
+                  # image as missing on a deploy that had actually succeeded. `tr -d` strips the
+                  # trailing CR the CLI emits, which would otherwise break the equality test.
                   read -r NAME IMAGE HEALTH RUNNING TRAFFIC <<<"$(az containerapp revision list \
                     -n $(appNameEnvLibreChat) -g $(resourceGroup) \
-                    --query "[?properties.active]|[0].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
-                    -o tsv 2>/dev/null)"
+                    --query "[?properties.active].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
+                    -o tsv 2>/dev/null | head -1 | tr -d '\r')"
 
                   if [ "$IMAGE" = "$EXPECTED" ] && [ "$HEALTH" = "Healthy" ] && [ "$TRAFFIC" = "100" ]; then
                     echo "OK: $NAME serving $IMAGE ($HEALTH/$RUNNING, $TRAFFIC%)"
