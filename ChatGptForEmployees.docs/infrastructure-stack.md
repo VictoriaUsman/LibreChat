@@ -7,8 +7,16 @@
 | romtech-standard | gpt-4o | GlobalStandard | 10K TPM | 20K TPM | 50K TPM |
 | romtech-fast | gpt-4o-mini | GlobalStandard | 20K TPM | 40K TPM | 100K TPM |
 | romtech-embeddings | text-embedding-3-small | GlobalStandard | 20K TPM | 20K TPM | 50K TPM |
+| romtech-tts | gpt-4o-mini-tts (2025-12-15) | GlobalStandard | 25K TPM | 25K TPM | 100K TPM |
 
 > **TPM = Tokens Per Minute.** Determines how many concurrent requests the service can handle.
+>
+> Current capacities are set by the ternaries in `ChatGptForEmployees.bicep/main.bicep`, which is
+> authoritative — treat the numbers above as indicative.
+>
+> `romtech-tts` backs LibreChat's read-aloud button (`speech.tts.azureOpenAI` in
+> `config/librechat.yaml`). LibreChat calls it directly, not through the LiteLLM Gateway, so its
+> spend does not appear in per-department reporting.
 
 ---
 

@@ -19,8 +19,157 @@ variables:
 stages:
   - template: insert-stage-variables-confirm.yml@templates
 
+  # Copy the LibreChat image into THIS environment's registry, before Bicep points the
+  # Container App at it.
+  # Identical to test.yml's stage — see test.yml for the full rationale.
+  #
+  # The fork builds LibreChat once, into acrcgfedev. libreChat.bicep gives the Container
+  # App pull credentials for acrcgfe<env> and nothing else, so prod cannot pull from a
+  # lower environment's registry. `az acr import` preserves the digest, so prod runs the
+  # bit-identical image validated in dev and test — promotion is a copy, never a rebuild.
+  #
+  # ORDER: runs BEFORE BicepWhatIf/BicepCreate. Reordered 2026-08-05; it previously ran after
+  # BicepCreate. Importing first means the image is already in acrcgfeprod when Bicep points the
+  # Container App at that digest, so the new revision pulls on creation and comes up healthy.
+  #
+  # Running it after meant Bicep created a revision that could not pull, which stayed unhealthy
+  # (activeRevisionsMode 'Single' kept the previous one serving, so nothing went down) until the
+  # later DeployLibreChat restart retried the pull. That made the restart the recovery mechanism
+  # for image rollout — a path never actually exercised, and one where the intervening
+  # UploadConfigs/DeployLiteLLM/DeployRagApi stages could push the revision past its progress
+  # deadline first. It also meant a failed BicepCreate gated the import off, so a re-run could not
+  # self-heal: the image could never land without a hand-run import.
+  #
+  # The only thing the old order bought was first-run bootstrap — the registry existing before the
+  # import. Both target registries already exist, and the check below handles the case anyway.
+  #
+  # ⚠️ ORDERING IS ENFORCED BY IMPLICIT CHAINING ONLY. This stage declares no dependsOn, so ADO
+  # chains it to the preceding stage. That is now load-bearing twice over: it sequences the import
+  # ahead of Bicep, AND it is what makes a failed import stop the deploy (DetectBicepChanges carries
+  # `not(failed())`). If the bicep templates are ever changed to declare their own dependsOn, this
+  # stage must be added to that list or the two can race.
+  #
+  # TO REVERT: move this stage back below the insert-stage-bicep-create template and restore
+  #   dependsOn: BicepCreate
+  #   condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+  # Nothing else needs changing — the downstream stages check both BicepCreate and this stage's
+  # results either way. See LibreChat_Image_Deployments.md §3.
+  - stage: ImportLibreChatImage
+    displayName: 'Import LibreChat image into acrcgfeprod'
+    jobs:
+      - job: ImportImage
+        displayName: 'az acr import librechat@<digest> -> acrcgfeprod'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Copy the pinned digest from acrcgfedev'
+            inputs:
+              # Use the Dev SC: it owns acrcgfedev (can read admin credentials) and has
+              # Container Registry Data Importer and Data Reader on acrcgfeprod.
+              # The Prod SC cannot read acrcgfedev credentials, so this step is an
+              # intentional cross-environment exception.
+              azureSubscription: ChatGptForEmployeesDevSC
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                SOURCE_ACR="acrcgfedev"
+                TARGET_ACR="acrcgfeprod"
+                PARAM_FILE="$(Build.SourcesDirectory)/ChatGptForEmployees.bicep/main.prod.bicepparam"
+
+                # Read the digest from the param file rather than restating it in pipeline
+                # config: libreChatImage stays the single place a deploy is pinned.
+                IMAGE_REF=$(grep -E "^param libreChatImage" "$PARAM_FILE" | sed "s/.*=[[:space:]]*'\(.*\)'.*/\1/")
+                echo "libreChatImage = $IMAGE_REF"
+
+                # Must be digest-pinned. §1 of the deployment log makes that the central rule, and
+                # nothing else enforces it: a tag ref (…/librechat:26023) would leave REPOSITORY and
+                # DIGEST both holding the whole string and produce an illegal target tag, failing
+                # later with a cryptic message instead of here with a clear one.
+                case "$IMAGE_REF" in
+                  *@sha256:*) ;;
+                  *) echo "##vso[task.logissue type=error]libreChatImage must be pinned by digest, got: ${IMAGE_REF}"; exit 1 ;;
+                esac
+
+                # Three cases, deliberately distinguished:
+                #   1. This environment's own ACR  -> import it.
+                #   2. A DIFFERENT acrcgfe* host   -> FAIL. This is the footgun the deployment log
+                #      warns about, and it matters most here: leave acrcgfedev or acrcgfetest in
+                #      main.prod.bicepparam and BicepCreate points PRODUCTION at a lower
+                #      environment's registry, the pull fails for want of credentials, and the
+                #      previous revision keeps serving — a green run on a stale image. This stage is
+                #      the only thing positioned to catch it, so it must not shrug and exit 0.
+                #   3. Anything else (upstream's public ghcr.io image) -> no-op. It pulls without
+                #      credentials, so there is nothing to copy.
+                case "$IMAGE_REF" in
+                  ${TARGET_ACR}.azurecr.io/*) ;;
+                  acrcgfe*.azurecr.io/*)
+                    echo "##vso[task.logissue type=error]libreChatImage points at a DIFFERENT environment's registry: ${IMAGE_REF}. It must use ${TARGET_ACR}.azurecr.io — libreChat.bicep only has pull credentials for this environment's own ACR, so this would deploy an image the app cannot pull while the old revision keeps serving."
+                    exit 1 ;;
+                  *) echo "Not an ${TARGET_ACR} reference — nothing to import."; exit 0 ;;
+                esac
+
+                # NO "registry might not exist yet" ESCAPE HATCH HERE, deliberately. A
+                # `az acr show || exit 0` bootstrap branch was added when this stage moved ahead of
+                # BicepCreate and removed again the same day: its condition is true for a missing
+                # registry, but equally for a missing RBAC read, ARM throttling, a 5xx or a token
+                # blip — so it turned every one of those into a green run that skipped the import
+                # and let BicepCreate repoint the app at an image that isn't there. That is exactly
+                # the failure this stage exists to prevent. Both target registries already exist, so
+                # it bought nothing. If a brand-new environment ever needs bootstrapping, run the
+                # manual import from LibreChat_Image_Deployments.md §3 once, or let this stage fail
+                # loudly and re-run after BicepCreate has created the registry.
+
+                REPO_AND_DIGEST="${IMAGE_REF#*.azurecr.io/}"
+                REPOSITORY="${REPO_AND_DIGEST%@*}"
+                DIGEST="${REPO_AND_DIGEST#*@}"
+
+                # Idempotent: a redeploy of an unchanged param costs one lookup, not a copy.
+                if az acr repository show --name "$TARGET_ACR" \
+                     --image "${REPOSITORY}@${DIGEST}" --output none 2>/dev/null; then
+                  echo "Digest already present in ${TARGET_ACR} — skipping import."
+                  exit 0
+                fi
+
+                # az acr import requires a tag as target — digest refs are invalid for TargetTags.
+                # Derive a short unique tag from the digest (first 12 hex chars after "sha256:").
+                SHORT="${DIGEST:7:12}"
+
+                # Dev SC has admin access to acrcgfedev and Data Importer on acrcgfeprod.
+                SOURCE_USER=$(az acr credential show --name "$SOURCE_ACR" --query "username" -o tsv)
+                SOURCE_PASS=$(az acr credential show --name "$SOURCE_ACR" --query "passwords[0].value" -o tsv)
+                # Register as a secret so ADO masks it in the log. It is passed as a process
+                # argument below, and `az --debug` — which this stage's own docs invite you to add
+                # when diagnosing — echoes the full command line. Without this the dev registry's
+                # admin password lands in a retained build log in clear text.
+                echo "##vso[task.setvariable variable=srcPass;issecret=true]${SOURCE_PASS}"
+
+                echo "Importing ${DIGEST} from ${SOURCE_ACR} as :${SHORT}..."
+                if ! az acr import --name "$TARGET_ACR" \
+                       --source "${SOURCE_ACR}.azurecr.io/${REPOSITORY}@${DIGEST}" \
+                       --image "${REPOSITORY}:${SHORT}" \
+                       --username "$SOURCE_USER" \
+                       --password "$SOURCE_PASS"; then
+                  echo "##vso[task.logissue type=error]Import failed."
+                  exit 1
+                fi
+
+                # Verify rather than assume. A missing image does not fail the deploy loudly:
+                # the new revision never goes healthy and activeRevisionsMode 'Single' keeps
+                # the old one serving, so it presents as a working app on a failed deploy.
+                az acr repository show --name "$TARGET_ACR" \
+                  --image "${REPOSITORY}@${DIGEST}" \
+                  --query "{digest:digest, arch:architecture, os:os}" -o json
+                echo "Imported into ${TARGET_ACR} and verified."
+
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
+      # Opt out of incremental detection — see the long note in `dev.yml`. It matters most here:
+      # a promotion to prod that silently keeps the previous image, while the run reports green,
+      # is the worst version of this failure. `BicepCreate` remains a deployment job bound to the
+      # Prod environment, so any approval gate on that environment still applies — this changes
+      # only whether the stage is evaluated, not who may approve it.
+      bicepDetectFolder: ''
       bicepParamFile: $(bicepParamFile)
       bicepWorkingDirectory: $(bicepWorkingDirectory)
       resourceGroup: $(resourceGroup)
@@ -37,6 +186,9 @@ stages:
 
   - stage: BuildJobsImage
     displayName: 'Build & push scheduled-jobs image'
+    # Builds the scheduled-jobs image (librechat-cleanup); nothing to do with the LibreChat
+    # image import, so it is not gated on it. Default succeeded() on BicepCreate, matching
+    # dev.yml — a config-only push should not rebuild and repush this image.
     dependsOn: BicepCreate
     jobs:
       - job: BuildPush
@@ -57,14 +209,23 @@ stages:
 
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'
-    dependsOn: BicepCreate
-    # Config files (litellm_routing_config.yaml, librechat.yaml) change
-    # independently of infrastructure. BicepCreate is Skipped when a push
-    # touches no .bicep files, which previously skipped this stage AND the
-    # restart stages that depend on it — so config-only changes never reached
-    # the Azure File Shares. Run when BicepCreate Succeeded OR was Skipped;
-    # only bail if it actually Failed.
-    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    # Depends on BOTH, and checks BOTH.
+    #
+    # ImportLibreChatImage runs FIRST, so a failed import makes DetectBicepChanges skip
+    # (`not(failed())`), which cascades to BicepWhatIf and BicepCreate as 'Skipped' — not 'Failed'.
+    # Checking only BicepCreate would therefore read a failed image copy as "nothing to do" and
+    # carry on uploading config and restarting apps. Checking only the import misses a genuine
+    # BicepCreate failure. Hence both.
+    #
+    # BicepCreate is NOT allowed to be 'Skipped': all three pipelines pass `bicepDetectFolder: ''`,
+    # so the incremental gate always resolves RunStage=true and the stage always runs. A 'Skipped'
+    # BicepCreate now means something upstream failed — most often BicepWhatIf, which would
+    # otherwise arrive here as 'Skipped' and be waved through. ⚠️ If `bicepDetectFolder: ''` is ever
+    # removed, restore 'Skipped' here or config-only pushes stop deploying (the PR 10964 bug).
+    dependsOn:
+      - BicepCreate
+      - ImportLibreChatImage
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: UploadConfigs
         displayName: 'Upload litellm and librechat config'
@@ -165,12 +326,17 @@ stages:
   - stage: DeployLibreChat
     displayName: 'Deploy LibreChat'
     dependsOn:
+      - BicepCreate
       - DeployLiteLLM
       - DeployRagApi
-    # Explicit result check on the immediate parents (see DeployLiteLLM note).
-    # Restart LibreChat when both upstream restarts succeeded; the default
-    # succeeded() would be poisoned by the Skipped BicepCreate ancestor.
-    condition: and(in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'))
+      - ImportLibreChatImage
+    # Restart LibreChat only when LiteLLM, RAG API and the image import all succeeded, AND the
+    # Bicep deploy itself did not fail. See the note on UploadConfigs for why BicepCreate must not
+    # be allowed to be 'Skipped'. Note the import can essentially never be 'Skipped' now that it
+    # runs first with no dependsOn — 'image already present' exits 0 and reports 'Succeeded' — but
+    # the tolerance is kept so the documented revert (moving this stage back after BicepCreate)
+    # doesn't silently change behaviour.
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployLiteLLM.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.DeployRagApi.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: RestartLibreChat
         displayName: 'Restart LibreChat Container App'
@@ -194,11 +360,23 @@ stages:
 
   - stage: DeployHelpPage
     displayName: 'Deploy Help Page to Static Web App'
-    dependsOn: BicepCreate
-    # Run on config/content-only changes too (same rationale as UploadConfigs): the
-    # help HTML lives in the repo, so pushing an update should redeploy it even when
-    # no .bicep changed (BicepCreate Skipped). Only bail if BicepCreate actually Failed.
-    condition: in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
+    # Depends on BOTH, and checks BOTH.
+    #
+    # ImportLibreChatImage runs FIRST, so a failed import makes DetectBicepChanges skip
+    # (`not(failed())`), which cascades to BicepWhatIf and BicepCreate as 'Skipped' — not 'Failed'.
+    # Checking only BicepCreate would therefore read a failed image copy as "nothing to do" and
+    # carry on uploading config and restarting apps. Checking only the import misses a genuine
+    # BicepCreate failure. Hence both.
+    #
+    # BicepCreate is NOT allowed to be 'Skipped': all three pipelines pass `bicepDetectFolder: ''`,
+    # so the incremental gate always resolves RunStage=true and the stage always runs. A 'Skipped'
+    # BicepCreate now means something upstream failed — most often BicepWhatIf, which would
+    # otherwise arrive here as 'Skipped' and be waved through. ⚠️ If `bicepDetectFolder: ''` is ever
+    # removed, restore 'Skipped' here or config-only pushes stop deploying (the PR 10964 bug).
+    dependsOn:
+      - BicepCreate
+      - ImportLibreChatImage
+    condition: and(in(dependencies.BicepCreate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ImportLibreChatImage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     jobs:
       - job: DeployHelp
         displayName: 'Push romtech_ai_help.html to the SWA'
@@ -226,3 +404,103 @@ stages:
                 npx -y @azure/static-web-apps-cli deploy /tmp/helpsite \
                   --deployment-token "$TOKEN" \
                   --env production
+
+  - stage: VerifyLibreChatImage
+    displayName: 'Verify LibreChat is serving the pinned image'
+    dependsOn: DeployLibreChat
+    condition: in(dependencies.DeployLibreChat.result, 'Succeeded', 'SucceededWithIssues')
+    # The point of this whole chain is that a green run means the new image is live. Nothing else
+    # asserts it: DeployLibreChat reports on the restart CALL, not its outcome, and with
+    # activeRevisionsMode 'Single' a revision that cannot pull, or cannot pass /health, leaves the
+    # previous one serving — so a failed rollout and a successful one look identical to the
+    # pipeline. That has bitten twice (PR 11547, PR 11602), both times found by hand days later.
+    #
+    # Reads the ACTIVE revision's own image, never the app's properties.template, which reports the
+    # DESIRED spec and looks correct either way — see LibreChat_Image_Deployments.md §4.
+    #
+    # This stage asserts; it changes nothing. If it ever misfires, deleting it is safe.
+    jobs:
+      - job: VerifyImage
+        displayName: 'Poll the active revision until it matches the pinned digest'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Assert the active revision runs the pinned digest and is healthy'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -uo pipefail
+
+                PARAM_FILE="$(Build.SourcesDirectory)/ChatGptForEmployees.bicep/main.prod.bicepparam"
+                # Anchor on the trailing space: "^param libreChatImage" alone would also match a
+                # future `param libreChatImageTag`, making LINE multi-line and EXPECTED garbage.
+                LINE=$(grep -E "^param libreChatImage " "$PARAM_FILE")
+                EXPECTED=${LINE#*\'}
+                EXPECTED=${EXPECTED%\'*}
+
+                # Fail closed if the param could not be read. Without this, EXPECTED is empty and
+                # the image test degenerates to "" = "" whenever the az call also returns nothing —
+                # leaving HEALTH as the only thing standing between a broken deploy and a pass.
+                if [ -z "$EXPECTED" ]; then
+                  echo "##vso[task.logissue type=error]Could not read libreChatImage from $PARAM_FILE — cannot verify what should be running."
+                  exit 1
+                fi
+                echo "Expecting: $EXPECTED"
+
+                # ~5 minutes. A revision that is going to come up does so well inside that; one
+                # that never pulls stays put, which is the case worth failing on.
+                for i in $(seq 1 30); do
+                  # NOTE the query shape. `[?properties.active].[a,b,c]` returns a LIST OF
+                  # LISTS, which `-o tsv` renders as one tab-separated ROW per revision — which
+                  # is what `read` needs. Writing `[?properties.active]|[0].[a,b,c]` returns a
+                  # FLAT list, and tsv renders that as one value per LINE, so `read` captures
+                  # only the first field and every later comparison runs against an empty
+                  # string. That was this stage's first-run bug (2026-08-05): it reported the
+                  # image as missing on a deploy that had actually succeeded.
+                  #
+                  # The `tr -d` is belt-and-braces only: the CR appears when az runs on Windows,
+                  # and these agents are ubuntu-latest. It costs nothing and would matter if the
+                  # pool ever changed. It was NOT part of the first-run failure — that was the
+                  # query shape alone.
+                  #
+                  # ⚠️ DO NOT put a JMESPath literal in this query. A `trafficWeight>` + backtick-0
+                  # filter was tried on 2026-08-06 to pick the traffic-carrying revision
+                  # deterministically. It is valid JMESPath and invalid here: backticks inside the
+                  # double-quoted --query argument of an inline bash script are COMMAND
+                  # SUBSTITUTION, so bash ran `0`, stripped it, and az got a malformed filter —
+                  # which 2>/dev/null then hid. Second spurious failure of this stage, on a deploy
+                  # that was fine. If a literal is ever genuinely needed, single-quote the whole
+                  # --query argument and test it in a real run, not just locally.
+                  #
+                  # head -1 is therefore how the row is chosen. During a rollout two revisions are
+                  # briefly active and the ordering is undocumented, but both orderings are safe:
+                  # a stale revision fails the image test, and a new one carries 0% traffic, so
+                  # neither can produce a false pass. The worst case is one wasted poll cycle.
+                  read -r NAME IMAGE HEALTH RUNNING TRAFFIC <<<"$(az containerapp revision list \
+                    -n $(appNameEnvLibreChat) -g $(resourceGroup) \
+                    --query "[?properties.active].[name,properties.template.containers[0].image,properties.healthState,properties.runningState,properties.trafficWeight]" \
+                    -o tsv 2>/dev/null | head -1 | tr -d '\r')"
+
+                  # RUNNING is logged but deliberately NOT asserted. runningState is
+                  # RunningAtMaxScale when the app is at maxReplicas (2, see libreChat.bicep), so
+                  # requiring "Running" would fail a healthy deploy under load. Do not "finish"
+                  # this check by adding it.
+                  if [ "$IMAGE" = "$EXPECTED" ] && [ "$HEALTH" = "Healthy" ] && [ "$TRAFFIC" = "100" ]; then
+                    echo "OK: $NAME serving $IMAGE ($HEALTH/$RUNNING, $TRAFFIC%)"
+                    exit 0
+                  fi
+                  echo "  [$i/30] active=${NAME:-none} image=${IMAGE:-none} health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}"
+                  sleep 10
+                done
+
+                # Report every value the pass condition looks at, including TRAFFIC — a
+                # traffic-only failure previously printed "serving X … expected X", which reads
+                # as self-contradictory. And do not assert a cause: when IMAGE is empty the az
+                # call itself failed, and its reason was discarded by 2>/dev/null.
+                if [ -z "$IMAGE" ]; then
+                  echo "##vso[task.logissue type=error]Could not read the active revision of $(appNameEnvLibreChat) after 5 minutes (last: revision=${NAME:-none} health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}). The deploy may be fine — re-run this query by hand before assuming otherwise. See LibreChat_Image_Deployments.md section 4."
+                else
+                  echo "##vso[task.logissue type=error]$(appNameEnvLibreChat) is serving ${IMAGE} on revision ${NAME:-none} (health=${HEALTH:-?} running=${RUNNING:-?} traffic=${TRAFFIC:-?}%), expected ${EXPECTED} at 100% and Healthy. The deploy did NOT take: the previous revision is still handling traffic. See LibreChat_Image_Deployments.md section 4."
+                fi
+                exit 1
