@@ -14,7 +14,7 @@ it from drifting out of sync with reality.
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
 | **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | Tour model step + dark-mode button colours. ACR tag `26023`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `dev` → `test` promotes.** Image imported automatically by `test.yml`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | First promotion onto our fork build. Revision `ca-librechat-test--0000006`, Healthy, 100%. Registry tag `7f4b246df2d7` (digest-derived — see note below). |
 | **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
 
 > **ACR tags differ between registries.** The `Since`/`ACR tag` values above are the *dev* build's
@@ -367,14 +367,21 @@ You can also ask the app itself: **Settings → About** reports the `BUILD_COMMI
   **If it ever comes back**, the detect step logs both halves — `Last successful build SHA:` and
   `Changed files:`. A baseline that isn't the previous env-branch tip is the tell.
 
-- **Test and prod are staged for our fork but not yet running it** — their params point at
-  the current digest in their own registries, but that only takes effect as the promotions reach
-  them. Until then both are still serving `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag.
-  The import is automatic now (§3), but the supply-chain hardening isn't done until both
-  promotions have completed and been verified (§4).
-- **`ImportLibreChatImage` has not run yet in either environment.** It ships unexercised. Watch the
-  first `dev` → `test` promotion for an authorization error against `acrcgfedev` — that's the one
-  thing about it that depends on role assignments we haven't confirmed.
+- **Prod is still on upstream's image.** `main` has not been promoted since 2026-07-27, so prod
+  continues to serve `ghcr.io/danny-avila/librechat:v0.8.6` by mutable tag. The supply-chain
+  hardening isn't finished until that promotion completes and is verified (§4). **Test is done** —
+  it moved onto our fork build on 2026-08-05.
+- **`ImportLibreChatImage` has run once, successfully** (`dev` → `test`, 2026-08-05). It copied the
+  pinned digest into `acrcgfetest`, and the app came up Healthy on it at 100% traffic. The role
+  grant that had blocked it — `Container Registry Data Importer and Data Reader` for
+  `ChatGptForEmployeesDevSC` — is therefore confirmed working for the test registry. **The prod
+  registry half is still unproven**: same grant, never exercised.
+- **`VerifyLibreChatImage` failed on that same run, spuriously.** The deploy was fine; the stage's
+  JMESPath returned a flat list, which `-o tsv` renders one value per line, so `read` populated only
+  the first variable and every comparison ran against an empty string. Fixed the same day, along
+  with a fail-closed guard on the expected value and a clearer failure message. Worth knowing
+  because the first instinct on seeing it was to delete the stage — the check was wrong, not the
+  thing it checks.
 - **ACR pull uses admin credentials** (mirroring the scheduled-jobs pattern) rather than a managed
   identity with `AcrPull`. The password is never exposed in the container environment — it's used by
   the Container Apps platform via `passwordSecretRef` — but identity-based pull is the target state.
