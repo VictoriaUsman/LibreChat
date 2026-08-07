@@ -13,9 +13,9 @@ it from drifting out of sync with reality.
 
 | Env | Image | Since | Fork commit | Notes |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | Tour model step + dark-mode button colours. ACR tag `26023`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | First promotion onto our fork build. Revision `ca-librechat-test--0000006`, Healthy, 100%. Registry tag `7f4b246df2d7` (digest-derived — see note below). |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:2473d02e5fe86a2a73afde0dcecca5167a35d6ac62120c99c1966de4013b96a2` | 2026-08-07 | `73a0ce22e` | Content-filter error handling. ACR tag `27154`. |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:2473d02e5fe86a2a73afde0dcecca5167a35d6ac62120c99c1966de4013b96a2` | *staged* | `73a0ce22e` | Set in `dev`; **deploys when `dev` → `test` promotes.** Previous: `sha256:7f4b246d…22e612c` since 2026-08-05. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:2473d02e…4013b96a2` | *staged* | `73a0ce22e` | Set in `dev`; **deploys when `test` → `main` promotes.** Prod has never run a fork build — still on the 2026-07-27 upstream `ghcr.io` image. |
 
 > **ACR tags differ between registries.** The `Since`/`ACR tag` values above are the *dev* build's
 > tag, assigned by the fork pipeline. The copy into test and prod tags the same manifest with the
@@ -31,6 +31,31 @@ it from drifting out of sync with reality.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-07 — Dev — `sha256:2473d02e…4013b96a2`
+
+- **Fork commit:** `73a0ce22e` (fork `main` after PR 11836) · **ACR tag:** `27154` · **arch:** amd64
+- **What's in it:** upstream provider errors no longer reach the user verbatim. A content-policy
+  rejection now renders as a written explanation instead of LiteLLM's raw exception string, and —
+  the wider half of the change — *every* unclassified upstream failure renders as a generic
+  message. LiteLLM formats its rate-limit, auth and deployment errors with the same envelope as
+  the content-filter one (model-group names, the `fallbacks=[...]` table, backup deployment
+  names), and 429s and 401s are far more common than policy rejections, so the two paths that
+  previously interpolated `err.message` were both leaking internal topology on the *common* case.
+  Detail is still logged server-side.
+- **Paired infra change:** none beyond this digest bump.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr manifest show-metadata`),
+  tag `27154`, built 2026-08-07 20:18 UTC.
+- **Not covered by automated tests:** the fork's Jest suites still have not been run against any
+  build in this series — this one *adds* four tests it never executed. Detection logic was
+  verified out-of-band by replaying the detector against 18 error shapes (18/18), which covers the
+  matcher but not the Jest wiring.
+- **Expect a delay before the message appears.** LiteLLM still retries a filtered prompt and fails
+  over to the backup deployment before giving up, because `content_policy_fallbacks` is not set
+  (§5). Roughly 10 extra seconds. That config change is deferred, not done.
+- **Manual check:** send a prompt that trips the Azure filter and confirm the new copy renders —
+  and specifically that no `ROMTech AI …` model-group name or `fallbacks=[…]` table appears.
+- **Rollback:** restore `sha256:7f4b246d…22e612c` and redeploy — still in the registry.
 
 ### 2026-08-05 — Dev — `sha256:7f4b246d…22e612c`
 
