@@ -2053,6 +2053,10 @@ export enum ErrorTypes {
    * SSE stream 404 — job completed, expired, or was deleted before the subscriber connected
    */
   STREAM_EXPIRED = 'stream_expired',
+  /**
+   * Upstream provider (e.g. Azure OpenAI) rejected the request due to its content filter
+   */
+  CONTENT_FILTER = 'content_filter',
 }
 
 /**

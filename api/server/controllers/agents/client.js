@@ -37,6 +37,7 @@ const {
   buildAgentScopedContext,
   buildSkillPrimeContentParts,
   buildInitialToolSessions,
+  isAzureContentFilterError,
 } = require('@librechat/api');
 const {
   Callback,
@@ -48,6 +49,7 @@ const {
 } = require('@librechat/agents');
 const {
   Constants,
+  ErrorTypes,
   Permissions,
   VisionModes,
   ContentTypes,
@@ -1124,9 +1126,19 @@ class AgentClient extends BaseClient {
           '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
           err,
         );
+        // Never interpolate the upstream error into user-visible text. LiteLLM formats its
+        // rate-limit, auth and deployment errors with the same envelope as the content-filter one
+        // that motivated this patch — model_group names, the full fallbacks=[...] table, backup
+        // deployment names. A 429 on a busy deployment or a 401 during key rotation would leak
+        // exactly what this patch exists to hide, and those are far more frequent than policy
+        // rejections. The detail is already logged server-side immediately above, so support
+        // keeps full visibility; only the user-facing string is generic.
+        const errorText = isAzureContentFilterError(err)
+          ? JSON.stringify({ type: ErrorTypes.CONTENT_FILTER })
+          : 'An error occurred while processing the request. Please try again, or submit an IT helpdesk ticket if it keeps happening.';
         this.contentParts.push({
           type: ContentTypes.ERROR,
-          [ContentTypes.ERROR]: `An error occurred while processing the request${err?.message ? `: ${err.message}` : ''}`,
+          [ContentTypes.ERROR]: errorText,
         });
       }
     } finally {

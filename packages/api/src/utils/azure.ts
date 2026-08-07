@@ -124,3 +124,87 @@ export function constructAzureURL({
 
   return finalURL;
 }
+
+/** Shape of the structured fields Azure/LiteLLM attach to a content-filter rejection */
+interface AzureContentFilterErrorLike {
+  code?: string;
+  status?: number;
+  message?: string;
+  innererror?: { code?: string };
+  error?: {
+    code?: string;
+    message?: string;
+    innererror?: { code?: string; content_filter_result?: unknown };
+    content_filter_result?: unknown;
+  };
+  content_filter_result?: unknown;
+  response?: { data?: { error?: { message?: string } } };
+}
+
+const isFilterResult = (value: unknown): boolean => typeof value === 'object' && value != null;
+
+/**
+ * Fixed, non-config-derived identifiers that only ever appear in a genuine content-filter
+ * rejection: Azure's own compliance copy and LiteLLM's dedicated exception class name. Unlike
+ * model/model-group names (which are config-driven and change per environment), these strings
+ * are hardcoded in Azure OpenAI and LiteLLM themselves, so matching them is stable across envs.
+ * Needed because once LiteLLM exhausts its configured fallbacks, it flattens the original
+ * structured Azure error (code/innererror/content_filter_result) into a single message string,
+ * so the structured-field checks below no longer have anything to match on.
+ */
+const CONTENT_FILTER_MESSAGE_MARKERS = [
+  'ContentPolicyViolationError',
+  'ResponsibleAIPolicyViolation',
+  // Anchored to Azure's full phrase on purpose. Matching the bare words "content management
+  // policy" would also fire on any upstream error that happens to quote request context back —
+  // context-length errors quote the offending messages, guardrail and proxy errors echo params —
+  // so a benign failure could be reported to the user as a policy violation. That is the worse
+  // direction to be wrong in, and the other two markers are vendor-specific identifiers that
+  // cannot appear by accident.
+  "Azure OpenAI's content management policy",
+];
+
+/**
+ * Detects whether an error thrown by the LLM provider (surfaced through LiteLLM/Azure OpenAI)
+ * represents a content-filter rejection. Prefers Azure's structured `code`/`innererror.code`
+ * fields, falling back to fixed LiteLLM/Azure identifiers embedded in the message when LiteLLM
+ * has flattened the structured error away (e.g. after exhausting its fallback chain) — never to
+ * fragile substring matching on model group names, which are config-driven and will change.
+ * @param error - The error thrown by the upstream provider/SDK.
+ * @returns Whether the error is an Azure content-filter rejection.
+ */
+export function isAzureContentFilterError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const err = error as AzureContentFilterErrorLike;
+  const nested = err.error;
+
+  if (
+    err.code === 'content_filter' ||
+    nested?.code === 'content_filter' ||
+    err.innererror?.code === 'ResponsibleAIPolicyViolation' ||
+    nested?.innererror?.code === 'ResponsibleAIPolicyViolation' ||
+    // Azure's real body nests this under error.innererror.content_filter_result; the other two
+    // locations are kept because LiteLLM and the SDKs reshape errors between us and Azure.
+    (err.status === 400 &&
+      (isFilterResult(nested?.innererror?.content_filter_result) ||
+        isFilterResult(err.content_filter_result) ||
+        isFilterResult(nested?.content_filter_result)))
+  ) {
+    return true;
+  }
+
+  // Scan every place the human-readable text can land. LiteLLM's proxy returns an OpenAI-style
+  // envelope with the text at `error.message`, and whether it is hoisted to a top-level `message`
+  // depends on which client layer wrapped it — openai-node's APIError hoists, an agents/LangChain
+  // wrapper may not. Checking only the top level silently drops back to the raw dump.
+  const candidates = [err.message, nested?.message, err.response?.data?.error?.message];
+
+  return candidates.some(
+    (text) =>
+      typeof text === 'string' &&
+      CONTENT_FILTER_MESSAGE_MARKERS.some((marker) => text.includes(marker)),
+  );
+}

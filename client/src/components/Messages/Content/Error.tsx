@@ -37,6 +37,7 @@ type TGenericError = {
 };
 
 const errorMessages = {
+  [ErrorTypes.CONTENT_FILTER]: 'com_error_content_filter',
   [ErrorTypes.MODERATION]: 'com_error_moderation',
   [ErrorTypes.NO_USER_KEY]: 'com_error_no_user_key',
   [ErrorTypes.INVALID_USER_KEY]: 'com_error_invalid_user_key',

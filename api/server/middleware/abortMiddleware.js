@@ -7,6 +7,7 @@ const {
   GenerationJobManager,
   recordCollectedUsage,
   sanitizeMessageForTransmit,
+  isAzureContentFilterError,
 } = require('@librechat/api');
 const { truncateText, smartTruncateText } = require('~/app/clients/prompts');
 const clearPendingReq = require('~/cache/clearPendingReq');
@@ -207,7 +208,18 @@ const handleAbortError = async (res, req, error, data) => {
     );
   }
 
-  let errorText = error?.message?.includes('"type"')
+  // Only forward an upstream message when it is one of OUR OWN typed payloads, which the
+  // branches below and the client's error map both understand. The previous test was
+  // `includes('"type"')`, which also matched LiteLLM's OpenAI-style proxy envelope
+  // ({"error":{"message":...,"type":"invalid_request_error"}}). That body has no TOP-LEVEL
+  // code/type, so `Error.tsx` fails to map it and falls through to
+  // "Something went wrong. Here's the specific error message we encountered: <raw body>" —
+  // printing deployment and model-group names straight to the user.
+  const isOwnTypedPayload =
+    typeof error?.message === 'string' &&
+    /^\s*\{\s*"type"\s*:/.test(error.message);
+
+  let errorText = isOwnTypedPayload
     ? error.message
     : 'An error occurred while processing your request. Please contact the Admin.';
 
@@ -217,6 +229,12 @@ const handleAbortError = async (res, req, error, data) => {
 
   if (error?.message?.includes("does not support 'system'")) {
     errorText = `{"type":"${ErrorTypes.NO_SYSTEM_MESSAGES}"}`;
+  }
+
+  // Checked last so it wins over the generic INVALID_REQUEST branch above, since Azure
+  // content-filter rejections are also surfaced with `type: "invalid_request_error"`.
+  if (isAzureContentFilterError(error)) {
+    errorText = JSON.stringify({ type: ErrorTypes.CONTENT_FILTER });
   }
 
   /**

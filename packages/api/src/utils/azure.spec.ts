@@ -4,6 +4,7 @@ import {
   constructAzureURL,
   sanitizeModelName,
   genAzureEndpoint,
+  isAzureContentFilterError,
 } from './azure';
 import type { GenericClient } from '~/types';
 
@@ -265,5 +266,101 @@ describe('constructAzureURL', () => {
       },
     });
     expect(url).toBe('https://instance1.openai.azure.com/openai/deployments/deployment1');
+  });
+});
+
+describe('isAzureContentFilterError', () => {
+  test('detects a top-level content_filter code', () => {
+    expect(isAzureContentFilterError({ code: 'content_filter' })).toBe(true);
+  });
+
+  test('detects a nested error.code of content_filter', () => {
+    expect(isAzureContentFilterError({ error: { code: 'content_filter' } })).toBe(true);
+  });
+
+  test('detects a top-level innererror.code of ResponsibleAIPolicyViolation', () => {
+    expect(
+      isAzureContentFilterError({ innererror: { code: 'ResponsibleAIPolicyViolation' } }),
+    ).toBe(true);
+  });
+
+  test('detects a nested error.innererror.code of ResponsibleAIPolicyViolation', () => {
+    expect(
+      isAzureContentFilterError({
+        error: { innererror: { code: 'ResponsibleAIPolicyViolation' } },
+      }),
+    ).toBe(true);
+  });
+
+  test('detects a content_filter_result payload on a 400 response', () => {
+    expect(
+      isAzureContentFilterError({ status: 400, content_filter_result: { violence: {} } }),
+    ).toBe(true);
+  });
+
+  test('does not flag a 400 response without a content_filter_result payload', () => {
+    expect(isAzureContentFilterError({ status: 400, message: 'bad request' })).toBe(false);
+  });
+
+  test('does not flag an unrelated invalid_request_error', () => {
+    expect(
+      isAzureContentFilterError({ type: 'invalid_request_error', code: 'model_not_found' }),
+    ).toBe(false);
+  });
+
+  test('detects a LiteLLM ContentPolicyViolationError after fallbacks are exhausted', () => {
+    // Real-world shape: once LiteLLM's router exhausts every fallback for a content-filter
+    // rejection, it flattens the original structured Azure error into a single message string
+    // with no surviving code/innererror/content_filter_result fields.
+    const error = new Error(
+      'litellm.BadRequestError: litellm.ContentPolicyViolationError: The response was filtered ' +
+        "due to the prompt triggering Azure OpenAI's content management policy. Please modify " +
+        'your prompt and retry. model=ROMTech AI Fast. content_policy_fallback=None. ' +
+        "fallbacks=[{'ROMTech AI Standard': ['ROMTech AI Standard Backup']}, " +
+        "{'ROMTech AI Fast': ['ROMTech AI Fast Backup']}]. No fallback model group found for " +
+        'original model_group=ROMTech AI Fast Backup.',
+    );
+    expect(isAzureContentFilterError(error)).toBe(true);
+  });
+
+  test('detects a bare Azure content-filter message without any structured fields', () => {
+    const error = new Error(
+      "The response was filtered due to the prompt triggering Azure OpenAI's content " +
+        'management policy. innererror: ResponsibleAIPolicyViolation',
+    );
+    expect(isAzureContentFilterError(error)).toBe(true);
+  });
+
+  test('does not flag an error that merely quotes the words back at us', () => {
+    // The marker is anchored to Azure's full phrase precisely so this stays false. Upstream
+    // errors routinely echo request context — context-length errors quote the offending
+    // messages — so an unanchored "content management policy" would report a benign failure to
+    // the user as a policy violation, which is the worse direction to be wrong in.
+    const error = new Error(
+      "This model's maximum context length is 64000 tokens. Your messages resulted in 70000 " +
+        'tokens: "summarise our content management policy for the new intranet"',
+    );
+    expect(isAzureContentFilterError(error)).toBe(false);
+  });
+
+  test('detects the marker when it is nested at error.message rather than hoisted', () => {
+    // LiteLLM's proxy returns an OpenAI-style envelope; whether the text is hoisted to a
+    // top-level `message` depends on which client layer wrapped it.
+    expect(
+      isAzureContentFilterError({
+        status: 400,
+        error: { message: 'litellm.ContentPolicyViolationError: blocked' },
+      }),
+    ).toBe(true);
+  });
+
+  test('does not flag an unrelated Error with no content-filter markers', () => {
+    expect(isAzureContentFilterError(new Error('connect ECONNREFUSED 127.0.0.1:4000'))).toBe(false);
+  });
+
+  test('handles non-object and nullish input', () => {
+    expect(isAzureContentFilterError(null)).toBe(false);
+    expect(isAzureContentFilterError(undefined)).toBe(false);
+    expect(isAzureContentFilterError('some string error')).toBe(false);
   });
 });
