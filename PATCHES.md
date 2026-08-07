@@ -1103,3 +1103,167 @@ Then:
   the branch → PR → build → deploy loop, and how to verify a change actually landed.
 - **`ChatGptForEmployees.docs/LibreChat_Image_Deployments.md`** (infra repo) — which build is
   deployed where, how to bump it, and the test/prod promotion guardrails.
+
+### Content-filter rejections show generic copy, not the raw LiteLLM/Azure error
+
+- **Work item:** 12941
+- **Added:** 2026-08-07 by Ian Tristan, revised the same day after review
+- **Files touched:** `packages/data-provider/src/config.ts`,
+  `packages/api/src/utils/azure.ts`,
+  `packages/api/src/utils/azure.spec.ts`,
+  `api/server/middleware/abortMiddleware.js`,
+  `api/server/middleware/abortMiddleware.handleAbortError.spec.js` (new),
+  `api/server/controllers/agents/client.js`,
+  `client/src/components/Messages/Content/Error.tsx`,
+  `client/src/locales/en/translation.json`
+- **What:** When Azure's content filter rejects a prompt, the raw LiteLLM exception was rendered
+  verbatim in the chat bubble — including our internal model group names (`ROMTech AI Fast`,
+  `ROMTech AI Fast Backup`), the whole `fallbacks=[...]` routing table, and the
+  `content_filter_result` payload. Four additive pieces replace it with one sentence:
+  1. `ErrorTypes.CONTENT_FILTER = 'content_filter'` added to the enum (`config.ts:2059`).
+  2. New `isAzureContentFilterError()` (`azure.ts:168`) — a detector, exported through
+     `@librechat/api`. It prefers Azure's **structured** fields (`code === 'content_filter'`,
+     `innererror.code === 'ResponsibleAIPolicyViolation'`, or a `content_filter_result` object on a
+     400), then falls back to three **fixed** string markers (`azure.ts:153`):
+     `ContentPolicyViolationError`, `ResponsibleAIPolicyViolation`, `content management policy`.
+     Those three are hardcoded in Azure OpenAI and LiteLLM themselves, so they are stable across
+     environments — deliberately **not** model or model-group names, which are `librechat.yaml`
+     config and differ per env.
+  3. Both server leak paths substitute `{"type":"content_filter"}` for the error text:
+     `handleAbortError()` (`abortMiddleware.js:225`) and `AgentClient.sendCompletion()`'s own catch
+     (`client.js:1129`). **Two patches, not one, and the second is the one that actually fires for
+     our chats** — see "Why both" below.
+  4. Client maps the new type to `com_error_content_filter` (`Error.tsx:40`) with the copy
+     *"I'm unable to assist with requests that violate our content policies. Please modify your
+     prompt and try again."*
+- **Why a new `CONTENT_FILTER` rather than reusing `MODERATION`:** different producer, different
+  stage, different remedy. `ErrorTypes.MODERATION` comes from `moderateText.js`, LibreChat's own
+  pre-flight moderation middleware — our code, before the request leaves us. `CONTENT_FILTER` is
+  the upstream provider rejecting a request we already sent. Collapsing them would make a local
+  pre-flight block indistinguishable from a provider rejection in logs and telemetry, and would
+  force one string to serve both — `com_error_moderation` talks about "our community guidelines",
+  which is wrong for a provider-side filter. Two near-identical enum members look like a mistake;
+  they aren't. Don't merge them.
+- **Why the string-marker fallback exists (the non-obvious part):** the structured checks alone
+  do **not** catch our production case. LiteLLM's router retries the configured
+  `content_policy_fallback` chain first; once every fallback is exhausted it re-wraps everything
+  into a single flattened `litellm.BadRequestError: litellm.ContentPolicyViolationError: ...`
+  message string, and Azure's original `code` / `innererror` / `content_filter_result` fields are
+  **gone** by the time the error reaches us. A structural-only detector returns `false` and the raw
+  dump goes straight through — which is exactly what happened on the first attempt at this fix.
+- **Why both server paths:** `handleAbortError()` only runs for request-level failures. A
+  content-filter rejection mid-generation is caught by `AgentClient.sendCompletion()`'s own
+  try/catch, which pushes `err.message` into a `ContentTypes.ERROR` content part — bypassing
+  `abortMiddleware` entirely. That second path is the one custom-endpoint (LiteLLM Gateway) chats
+  actually take, so patching only `abortMiddleware` looks correct and fixes nothing.
+- **⚠️ Revised after review: the leak is closed for ALL errors, not just content-filter ones.**
+  The first version sanitised the content-filter case and left every other upstream failure
+  interpolating `err.message` into user-visible text. That is not a safe boundary here: LiteLLM
+  formats its rate-limit, auth and deployment errors with the *same* envelope as the
+  content-filter one — model-group names, the full `fallbacks=[...]` table, backup deployment
+  names — and 429s during busy periods and 401s during key rotation are far more common than
+  policy rejections. Both call sites now emit a generic string for anything they cannot classify,
+  and the detail is still logged server-side, so support keeps full visibility.
+  `handleAbortError()` additionally no longer forwards an upstream body just because it contains
+  the substring `"type"`: LiteLLM's OpenAI-style proxy envelope matched that test, and since it
+  carries no *top-level* `code`/`type`, `Error.tsx` failed to map it and printed the raw body
+  after "Something went wrong. Here's the specific error message we encountered:". The check is
+  now anchored to our own `{"type": ...}` payloads.
+- **Deliberately NOT patched:** the same raw-`error.message` pattern exists in
+  `api/server/controllers/assistants/chatV1.js:202` and
+  `api/server/controllers/assistants/errors.js:146`. Both are on the OpenAI **Assistants** flow,
+  which no environment configures (`ENDPOINTS=custom`, no `assistants`/`azureAssistants` endpoint,
+  enforced `modelSpecs` → everything routes through the LiteLLM Gateway custom endpoint), so they
+  are unreachable and were left alone to keep the patch small. **If Assistants is ever enabled,
+  these two leak the same way** and need the same treatment.
+- **Why config couldn't do it:** no `librechat.yaml` or env-var surface controls error-message
+  text. `interface.customWelcome` and friends cover static copy only; the error string is built in
+  server code and consumed by a client component keyed on `ErrorTypes`. LiteLLM's own
+  `content_policy_fallback` is also not a substitute — it changes *routing*, not what the user is
+  shown once routing gives up.
+- **Existing behaviour preserved:** the `INVALID_REQUEST`, `NO_SYSTEM_MESSAGES`, and moderation
+  branches are untouched. The new `abortMiddleware` check is ordered **after** the existing
+  `INVALID_REQUEST` branch on purpose: Azure content-filter errors also carry
+  `type: "invalid_request_error"`, so checking first would let the generic branch overwrite the
+  sanitised text. There is a regression test for exactly that ordering.
+- **⚠️ The soft marker is anchored on purpose.** The message scan matches
+  `"Azure OpenAI's content management policy"`, not the bare words `content management policy`.
+  Upstream errors routinely quote request context back — context-length errors quote the
+  offending messages, guardrail and proxy errors echo params — so the unanchored form would
+  report a benign failure to the user as a policy violation. That is the worse direction to be
+  wrong in, and it is reachable without any cooperation from our own code. The other two markers
+  are vendor identifiers that cannot appear by accident. There is a regression test for exactly
+  this (a context-length error quoting a user asking about a content management policy).
+- **The scan covers nested message shapes.** LiteLLM's proxy puts the human-readable text at
+  `error.message`; whether it is hoisted to a top-level `message` depends on which client layer
+  wrapped it. Checking only the top level would silently drop back to the raw dump after a
+  LiteLLM upgrade, so `error.message` and `response.data.error.message` are checked too.
+- **Known gap (pre-existing, not introduced here):** `handleAbortError()` returns early via
+  `abortMessage()` when there is partial text, discarding `errorText`. An OUTPUT-side filter
+  tripping mid-stream therefore shows the truncated partial with no error at all — and output
+  filtering is the case most likely to have partial text. Not addressed in this patch.
+- **How to verify:** ⚠️ **rebuild and restart in the right order first, or you will "verify" stale
+  code.** `nodemonConfig.ignore` includes `packages/`, so a `packages/api` rebuild does *not*
+  restart the backend: run `npm run build:data-provider && npm run build:api`, **then** restart the
+  backend, and confirm the server process started *after* the `dist` write time. Then in a chat,
+  send a prompt that trips Azure's filter. Expect the single sentence above — and grep the rendered
+  bubble for `ROMTech`, `fallbacks=`, `litellm`, `content_filter_result`: **zero hits**. Confirm the
+  full raw error is still in the server log (ops visibility is intentional; only the client text is
+  sanitised). Note the client bundle matters too: on `:3080` a stale `client/dist` lacks
+  `com_error_content_filter` and will render `{"type":"content_filter"}` instead of the copy (no
+  leak, wrong text) — use `:3090` (Vite HMR) or `npm run build:client`. Unit side:
+  `cd packages/api && npx jest src/utils/azure.spec.ts` (31/31, includes the real flattened
+  production message) and `cd api && npx jest server/middleware/abortMiddleware` (12/12, includes
+  the three no-regression cases).
+- **Not yet done at the time of writing:** manual regression of the three pre-existing error types
+  (invalid request, no-system-messages, moderation-flagged) in the running app — they are covered by
+  unit tests only. The PBI's DoD asks for a manual pass on those before QA sign-off.
+- **Upstream status:** not submitted — **good upstreaming candidate.** Leaking a raw provider
+  exception into the chat bubble is an upstream bug, not a ROMTech-specific need; only the copy is
+  ours. If upstream adds native content-filter handling, **drop this patch** and keep only the
+  localisation string.
+- **Merge notes:** All four pieces are additive — a new enum member, a new exported function, one
+  new `if` in each of two error handlers, one new map entry — so conflicts should be small and
+  resolvable by re-adding rather than reasoning. **The fragile piece is
+  `CONTENT_FILTER_MESSAGE_MARKERS`:** it depends on LiteLLM's exception class name and Azure's
+  compliance sentence staying byte-identical. If content-filter errors ever start rendering as the
+  raw dump again after a LiteLLM upgrade, check those three strings first — that is the failure
+  mode. Re-check `client.js`'s catch block on every upstream merge: if upstream refactors
+  `sendCompletion`'s error handling, the `isAzureContentFilterError` guard must move with it, and
+  losing it silently restores the leak with no test failure in `/api` to catch it.
+
+<!-- new entries go here -->
+
+---
+
+## Upstream merge procedure
+
+When pulling a new upstream release:
+
+```bash
+git fetch upstream --tags
+git checkout -b chore/merge-upstream-vX.Y.Z main
+git merge vX.Y.Z              # upstream's release tag
+```
+
+Then:
+
+1. **Walk every entry in "Current patches" above.** For each one, confirm the patch survived the
+   merge (or was deliberately dropped). Conflicts are expected exactly where entries say they'd be.
+2. **Delete entries whose "Upstream status" says merged upstream** — remove the patch and the entry
+   together.
+3. **Re-verify each surviving patch** using its "How to verify" steps, in dev, after deploying the
+   new image.
+4. **Update this file's entries** with anything the merge taught you (new adjacent upstream code,
+   changed file paths).
+5. Build → get the digest → wire it into `main.dev.bicepparam` → deploy dev → smoke test → promote.
+   See `LibreChat_Fork_Runbook.md` §4 and §6.
+
+---
+
+## Related docs
+
+- **[`ROMCHAT_DEV_GUIDE.md`](./ROMCHAT_DEV_GUIDE.md)** (this repo) — start here: what this fork is,
+  the branch → PR → build → deploy loop, and how to verify a change actually landed.
+- **`ChatGptForEmployees.docs/LibreChat_Image_Deployments.md`** (infra repo) — which build is
+  deployed where, how to bump it, and the test/prod promotion guardrails.
