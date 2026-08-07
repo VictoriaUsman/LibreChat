@@ -26,7 +26,7 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 //
 // Rollback: restore sha256:308082f9… (fork `main` @ 84ad8d651, tag 25780, 2026-08-04) and
 // redeploy — still in the registry, as is sha256:12c7731e… before it.
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c'
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:2473d02e5fe86a2a73afde0dcecca5167a35d6ac62120c99c1966de4013b96a2'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
