@@ -11,26 +11,86 @@ it from drifting out of sync with reality.
 
 ## Current state
 
-| Env | Image | Since | Fork commit | Notes |
-|---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | Tour model step + dark-mode button colours. ACR tag `26023`. |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246df2d70f6c8ee93026e4f27e5cee310b8305b847fbef4e2cbd422e612c` | 2026-08-05 | `a4e71a966` | First promotion onto our fork build. Revision `ca-librechat-test--0000006`, Healthy, 100%. Registry tag `7f4b246df2d7` (digest-derived — see note below). |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | *staged* | `a4e71a966` | Set in `dev`; **deploys when `test` → `main` promotes.** Image imported automatically by `prod.yml`. |
+Two different things get confused here, so they get their own columns. **Running now** is what Azure
+was actually serving when this was last verified. **Staged in `dev`** is what the bicepparam files on
+the `dev` branch pin — which is what *will* run once each branch promotion reaches that environment.
+They are equal only when every promotion has caught up.
 
-> **ACR tags differ between registries.** The `Since`/`ACR tag` values above are the *dev* build's
-> tag, assigned by the fork pipeline. The copy into test and prod tags the same manifest with the
-> first 12 hex characters of its digest instead, so `az acr repository show-tags` will disagree
-> across registries. The **digest** is identical everywhere, and the digest is what deploys.
+| Env | Running now | Since | Fork commit | Staged in `dev` |
+|---|---|---|---|---|
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-05 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — **deploys on merge to `dev`.** |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-05 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — deploys when `dev` → `test` promotes. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-06 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — deploys when `test` → `main` promotes. |
+
+**Verified 2026-08-07** against Azure (`az containerapp list`): all three on the same digest, each on a
+single active revision at 100% and Healthy — `ca-librechat-dev--0000024`, `ca-librechat-test--0000006`,
+`ca-librechat-prod--0000004`. **`a4e71a966` is the first fork build to reach prod**, on 2026-08-06 via
+PR 11767; before that prod ran the upstream `ghcr.io` image.
+
+> **ACR tags differ between registries.** The fork pipeline assigns the *dev* build's tag (here
+> `26023`). The copy into test and prod tags the same manifest with the first 12 hex characters of its
+> digest instead, so `az acr repository show-tags` will disagree across registries. The **digest** is
+> identical everywhere, and the digest is what deploys.
 >
-> **This table is a convenience, not the source of truth.** The authoritative record is
-> `ChatGptForEmployees.bicep/main.<env>.bicepparam` — that file is what actually deploys. To see what
-> is *genuinely* running right now, query Azure (§4).
+> **Neither column is the source of truth.** `ChatGptForEmployees.bicep/main.<env>.bicepparam` on the
+> branch that owns each environment is what actually deploys; Azure is what is actually serving. This
+> table is a snapshot of both, and it is only as fresh as the "Verified" date above it. A staged digest
+> is *not* evidence a deploy happened — on 2026-08-05 one silently did not (§5). Re-query before
+> trusting it (§4).
 
 ---
 
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-07 — Dev — `sha256:2473d02e…4013b96a2`
+
+- **Fork commit:** `73a0ce22e` (fork `main` after PR 11836) · **ACR tag:** `27154` · **arch:** amd64
+- **What's in it:** upstream provider errors no longer reach the user verbatim. A content-policy
+  rejection now renders as a written explanation instead of LiteLLM's raw exception string, and —
+  the wider half of the change — *every* unclassified upstream failure renders as a generic
+  message. LiteLLM formats its rate-limit, auth and deployment errors with the same envelope as
+  the content-filter one (model-group names, the `fallbacks=[...]` table, backup deployment
+  names), and 429s and 401s are far more common than policy rejections, so the two paths that
+  previously interpolated `err.message` were both leaking internal topology on the *common* case.
+  Detail is still logged server-side.
+- **Paired infra change:** none beyond this digest bump.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr manifest show-metadata`),
+  tag `27154`, built 2026-08-07 20:18 UTC.
+- **Not covered by automated tests:** the fork's Jest suites still have not been run against any
+  build in this series — this one *adds* four tests it never executed. Detection logic was
+  verified out-of-band by replaying the detector against 18 error shapes (18/18), which covers the
+  matcher but not the Jest wiring.
+- **Expect a delay before the message appears.** LiteLLM still retries a filtered prompt and fails
+  over to the backup deployment before giving up, because `content_policy_fallbacks` is not set
+  (§5). Roughly 10 extra seconds. That config change is deferred, not done.
+- **Manual check:** send a prompt that trips the Azure filter and confirm the new copy renders —
+  and specifically that no `ROMTech AI …` model-group name or `fallbacks=[…]` table appears.
+- **Rollback:** restore `sha256:7f4b246d…22e612c` and redeploy — still in the registry.
+
+### 2026-08-06 — Prod — `sha256:7f4b246d…22e612c`
+
+- **Fork commit:** `a4e71a966` · **promoted by:** PR 11767 (`test` → `main`)
+- **First fork build ever to reach prod.** Prod ran the upstream `ghcr.io` LibreChat image until
+  this promotion; everything in the dev entries below — the guided tour, the ROMChat branding, the
+  model-selector work — reached production here, in one step, rather than incrementally.
+- **Verified:** revision `ca-librechat-prod--0000004`, Healthy, Running, 100% traffic, created
+  2026-08-06 21:13 UTC. Image confirmed as `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…`,
+  i.e. the manifest was imported into the prod registry as designed.
+- **Logged retroactively on 2026-08-07.** This promotion happened without a history entry, and the
+  current-state table above went on claiming prod had never run a fork build. That is the exact
+  drift the rule at the top of this document exists to prevent: **update this log in the same PR as
+  the promotion**, including promotion PRs that carry no digest change of their own.
+
+### 2026-08-05 — Test — `sha256:7f4b246d…22e612c`
+
+- **Fork commit:** `a4e71a966` · **promoted by:** `dev` → `test`
+- **Verified:** revision `ca-librechat-test--0000006`, Healthy, Running, 100% traffic, created
+  2026-08-05 22:53 UTC.
+- Later `dev` → `test` promotions (PR 11708, PR 11716) carried no image change; this digest has
+  been serving test continuously since.
+- **Logged retroactively on 2026-08-07**, same gap as the prod entry above.
 
 ### 2026-08-05 — Dev — `sha256:7f4b246d…22e612c`
 
