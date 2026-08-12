@@ -148,7 +148,16 @@ const MessageEndpointIcon: React.FC<IconProps> = (props) => {
       name: alternateName[EModelEndpoint.bedrock],
     },
     [EModelEndpoint.custom]: {
-      icon: <CustomMinimalIcon size={size * 0.7} />,
+      /**
+       * Same colour fix as the `default` entry below, for the same reason — but note
+       * this branch is UNREACHABLE for any *named* custom endpoint, because the map
+       * is keyed by the raw endpoint string and a named custom endpoint carries its
+       * name, not "custom". It fires only if someone literally names an endpoint
+       * `custom` in YAML. Kept as a guard: if upstream ever keys this map on
+       * `endpointType ?? endpoint`, this branch goes live and would otherwise
+       * reintroduce the bug. Safe to drop if that guard isn't wanted.
+       */
+      icon: <CustomMinimalIcon size={size * 0.7} className="text-text-primary" />,
       name: 'Custom',
     },
     null: { icon: <GPTIcon size={size * 0.7} />, bg: 'grey', name: 'N/A' },
@@ -156,10 +165,21 @@ const MessageEndpointIcon: React.FC<IconProps> = (props) => {
       icon: (
         <div className="h-6 w-6">
           <div className="overflow-hidden rounded-full">
+            {/**
+             * `text-text-primary` is the real fix for the invisible-in-light-mode bot
+             * glyph. This map is keyed by the raw endpoint string, and a named custom
+             * endpoint carries its *name* ("LiteLLM Gateway"), never the literal
+             * "custom" — `custom` is only its `type`. So ROMChat lands here, and
+             * UnknownIcon falls through to a `currentColor`-stroked CustomMinimalIcon
+             * that would otherwise inherit the wrapper's `text-white` onto a
+             * transparent background. Safe for the other branches: xAI/Moonshot append
+             * their own colour so twMerge drops this one, and the `<img>` branches
+             * ignore a text colour.
+             */}
             <UnknownIcon
               iconURL={iconURL}
               endpoint={endpoint ?? ''}
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain text-text-primary"
               context="message"
             />
           </div>
