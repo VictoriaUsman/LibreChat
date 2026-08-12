@@ -14,19 +14,20 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // summary block, which also lists the node:20-alpine base-image digest under
 // `runtime-dependency`. That one is provenance, not deployable.
 //
-// This digest = guided tour model step + dark-mode button colours (fork `main` @ a4e71a966,
-// PR 11602, ACR tag 26023, amd64, built 2026-08-05). Adds a fifth tour step covering ROMChat
-// Fast vs Standard, and fixes the tour's Back/Next buttons in dark mode — Next was below
-// WCAG AA contrast on the green submit surface.
+// This digest = light-mode fix for the bot icon beside each response (fork `main` @ de8c5f078,
+// PR 12024, ACR tag 29854, amd64, built 2026-08-12). The glyph was rendering in white on a
+// white page: the endpoint entry that serves ROMChat sets no background, the shared wrapper
+// hard-codes `text-white`, and the glyph is stroked with `currentColor`. Now themed via
+// `text-text-primary`. WI 13121.
 //
 // Changing this line is now enough to deploy: the pipelines pass `bicepDetectFolder: ''`, so
 // the incremental gate that used to skip BicepCreate no longer applies. If you ever see a
 // green run that did NOT change the running image, check that first — history in
 // main.bicep's header and LibreChat_Image_Deployments.md §5.
 //
-// Rollback: restore sha256:308082f9… (fork `main` @ 84ad8d651, tag 25780, 2026-08-04) and
-// redeploy — still in the registry, as is sha256:12c7731e… before it.
-param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:2473d02e5fe86a2a73afde0dcecca5167a35d6ac62120c99c1966de4013b96a2'
+// Rollback: restore sha256:2473d02e… (fork `main` @ 73a0ce22e, tag 27154, 2026-08-07) and
+// redeploy — still in the registry, as is sha256:7f4b246d… before it.
+param libreChatImage = 'acrcgfedev.azurecr.io/librechat@sha256:1c67d91df0700b8639e8310eb6c7b1632c38beab1342025100677902437da6a1'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param oktaOrgUrl = 'https://romtech.okta.com'
