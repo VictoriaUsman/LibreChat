@@ -1232,6 +1232,67 @@ Then:
   `sendCompletion`'s error handling, the `isAzureContentFilterError` guard must move with it, and
   losing it silently restores the leak with no test failure in `/api` to catch it.
 
+### Assistant message icon invisible in light mode
+
+- **Work item:** 13121
+- **Added:** 2026-08-12 by Behnam Bozorgi
+- **Files touched:** `client/src/components/Endpoints/MessageEndpointIcon.tsx`
+- **What:** Added `text-text-primary` to the `className` on the `UnknownIcon` in the map's
+  `default` entry. The same class is also set on the `custom` entry's `CustomMinimalIcon`, but see
+  the caveat below — that branch is dead code for us and is a guard only.
+- **Why:** The bot glyph beside the assistant's name did not appear in light mode. It was rendering
+  the whole time, in white. Three upstream facts combine: the entry ROMChat actually hits supplies
+  no `bg`, so the shared wrapper falls back to `background: 'transparent'`; that same wrapper
+  hard-codes `text-white`; and the glyph is stroked with `currentColor`. White strokes on a
+  transparent background read fine against dark mode's page and vanish against light mode's. Every
+  other endpoint in the map sets a `bg` — Azure a gradient, OpenAI a computed colour, Anthropic
+  `#d09a74`, Bedrock `#268672` — so white-on-a-tile is right for them. Setting the colour on the
+  icon itself beats the inherited `text-white`, and `--text-primary` already resolves per theme
+  (`gray-800` light, `gray-100` dark), so no `dark:` variant is needed and the icon matches the
+  message title beside it, which uses the same token.
+- **⚠️ Which branch actually renders — the non-obvious part.** `endpointIcons` is keyed on the **raw
+  endpoint string**, and a *named* custom endpoint carries its **name**, never the literal
+  `"custom"` — `custom` is only its `type` (`packages/api/src/endpoints/custom/config.ts`:
+  `customEndpointsConfig[name] = { type: EModelEndpoint.custom, … }`). ROMChat's endpoint is named
+  `"LiteLLM Gateway"`, and both modelSpecs pin `endpoint: "LiteLLM Gateway"`, so that string is what
+  reaches the message. `getIconEndpoint` never substitutes the type. So `endpointIcons["LiteLLM
+  Gateway"]` is undefined, the lookup falls to `default` → `UnknownIcon` → no matching
+  `knownEndpointAssets` entry → `CustomMinimalIcon` again. **Same glyph, different line**, which is
+  why fixing the `custom` entry alone looks identical in a screenshot and changes nothing. The rest
+  of the codebase writes `endpointType ?? endpoint` where it needs the type; this map does not, and
+  `MessageIcon` never passes `endpointType`.
+- **Why config was rejected, not impossible.** Fork rule 2 prefers config, so this was checked
+  properly: setting `iconURL` on the custom endpoint in `librechat.yaml` **would** fix the main chat
+  view, because the `default` branch does honour it (`UnknownIcon` renders `<img src={iconURL}>`
+  before reaching the glyph). It does **not** fix the shared-conversation view —
+  `client/src/components/Share/MessageIcon.tsx` calls `getIconEndpoint` with
+  `endpointsConfig: undefined` and passes only the avatar URL, so shared links fall through to the
+  uncoloured glyph regardless. Config would fix one surface and leave the other broken, so the
+  patch covers both.
+- **How to verify:** In light mode, send any message and look at the bot glyph to the left of the
+  response's name — it must be dark grey and clearly visible against the page. Switch to dark mode
+  and confirm it is still visible (near-white). Then open a shared conversation link and check the
+  same glyph there, since that view reaches this component by a different route. To confirm *which*
+  branch rendered, inspect the glyph: the `default` branch wraps it in the `h-6 w-6` /
+  `overflow-hidden rounded-full` div pair.
+- **Not affected, deliberately:** `client/src/components/Endpoints/MinimalIcon.tsx` renders the same
+  glyph and has the same keying flaw (its `custom` entry is equally unreachable, so ROMChat gets its
+  `default` → `UnknownIcon` branch), but its wrapper uses `text-text-secondary`, which is already
+  theme-aware. No bug there; left alone.
+- **Upstream status:** not submitted — this is an upstream bug, not a ROMTech preference, and it hits
+  anyone running a named custom endpoint in light mode. Good upstreaming candidate, ideally together
+  with the keying flaw. If either merges, revisit this patch.
+- **Merge notes:** Sits in the `endpointIcons` map, which upstream edits whenever it adds a provider
+  (`GPT-5.1`, `o4-mini` and the 2026 UI refresh all touched this file). A conflict is likely and the
+  resolution is trivial: keep upstream's map, re-add `text-text-primary` to the `default` entry's
+  `UnknownIcon` className. **Two things would make this patch wrong rather than merely redundant:**
+  (1) upstream keying the map on `endpointType ?? endpoint`, which makes the `custom` branch live —
+  that is exactly what the guard on the `custom` entry is for, so keep both classes in sync; and
+  (2) upstream giving the `default` entry a `bg`, which would put a dark glyph on a coloured tile —
+  in that case drop the class and let `text-white` apply again. Do **not** "simplify" this by giving
+  `default` a `bg` instead: that branch also serves endpoints whose logos render as `<img>` from
+  `knownEndpointAssets`, so a tile would land behind DeepSeek/Ollama/Mistral logos too.
+
 <!-- new entries go here -->
 
 ---
