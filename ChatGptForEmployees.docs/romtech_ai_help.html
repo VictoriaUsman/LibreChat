@@ -124,10 +124,13 @@
   <details class="card">
     <summary><h2>Is it safe to put sensitive information in?</h2></summary>
     <p>
-      <span class="yes">Yes.</span> ROMChat runs on ROMTech's approved, secure
-      infrastructure — it's built for confidential and sensitive work. You should use it
-      <strong>instead of</strong> public tools like ChatGPT or Claude for anything confidential,
-      because those public tools are not approved for ROMTech information.
+      <span class="yes">Yes.</span> ROMChat runs on <strong>HIPAA-eligible Azure OpenAI</strong>
+      services under a Microsoft Business Associate Agreement (BAA). That means it's approved for
+      confidential, regulated, and sensitive information — including <strong>PHI</strong>, client
+      data, and trade secrets. Use ROMChat <strong>instead of</strong> public tools like ChatGPT
+      or Claude for this kind of content, since those tools are not approved for ROMTech
+      confidential or regulated data. Conversations may be reviewed under ROMTech's Acceptable
+      Use Policy.
     </p>
   </details>
 
@@ -145,56 +148,51 @@
   </details>
 
   <details class="card">
+    <summary><h2>What was that walkthrough when I first opened ROMChat?</h2></summary>
+    <p>
+      The first time you use ROMChat in a browser, a short guided tour points out the paperclip
+      (for uploading documents), the <span class="pill">tools</span> dropdown (File Search and
+      Artifacts), the Fast/Standard model buttons, the sidebar, and the account menu.
+    </p>
+    <p>
+      It only appears once per browser, and there's no button to bring it back —
+      this Help &amp; FAQ page covers the same ground, so you can always come back here instead.
+    </p>
+  </details>
+
+  <details class="card">
     <summary><h2>How do I ask questions about a document?</h2></summary>
-    <p>To have the assistant read a file and answer questions about it, use <strong>File Search</strong>:</p>
+    <p>To have the assistant read a file and answer questions about it:</p>
     <ol>
-      <li>Click the <span class="pill">tools</span> button next to the message box and switch on <strong>File Search</strong>.</li>
-      <li>Click the <span class="pill">paperclip</span> and choose <strong>Upload for File Search</strong>.</li>
-      <li>Pick your file (PDF, Word, PowerPoint, Excel, or plain text).</li>
+      <li>Click the <span class="pill">paperclip</span> next to the message box.</li>
+      <li>Pick your file — PDF, Word, Excel, PowerPoint, plain text, CSV, or Markdown.</li>
       <li>Type your question about the document and send.</li>
     </ol>
     <div class="tip">
-      <strong>Tip:</strong> turn on File Search <em>before</em> you upload. File Search covers
-      the documents you've added in <em>this</em> conversation.
+      <strong>Tip:</strong> the paperclip turns on File Search for you automatically — there's
+      nothing to switch on first. File Search covers the documents you've added in <em>this</em>
+      conversation. If it's ever off, you'll find the toggle in the <span class="pill">tools</span>
+      dropdown next to the message box.
     </div>
   </details>
 
   <details class="card">
-    <summary><h2>What's the difference between the upload options?</h2></summary>
-    <p>When you attach a file you may see a few choices. Here's when to use each:</p>
-    <ul class="opts">
-      <li>
-        <span class="name">Upload for File Search</span> <span class="rec">— recommended for documents</span><br>
-        Works with PDF, Word, PowerPoint, Excel, and text files. The assistant reads your file and
-        pulls out the parts relevant to your question — best for most documents, including long ones.
-      </li>
-      <li>
-        <span class="name">Upload as Text</span><br>
-        Pulls the text out of a document (such as a PDF, Word, or text file) and adds it straight
-        into your message. Good for shorter documents you want the assistant to see in full.
-      </li>
-      <li>
-        <span class="name">Upload to Provider</span><br>
-        This option only accepts images and PDFs — it can't be used for Word, Excel, or text files.
-        On ROMChat you won't need it: images aren't supported, and PDFs work better with the two
-        options above. For any document, use <strong>Upload for File Search</strong> or
-        <strong>Upload as Text</strong>.
-      </li>
-    </ul>
-    <p class="bottomline">Bottom line: for documents, choose <strong>Upload for File Search</strong>.</p>
-  </details>
-
-  <details class="card">
     <summary><h2>What kinds of files can I upload?</h2></summary>
-    <p><strong>Supported:</strong> PDF, Word, PowerPoint, Excel, and plain-text files.</p>
-    <p><strong>Not supported:</strong> images and photos (JPG, PNG, etc.).</p>
+    <p><strong>Supported:</strong> PDF, Word (.docx), Excel (.xlsx and legacy .xls), PowerPoint
+      (.pptx), plain text (.txt), CSV, and Markdown (.md).</p>
+    <p><strong>Not supported:</strong> images and photos (JPG, PNG, etc.), and older Word (.doc)
+      or PowerPoint (.ppt) files saved in the legacy binary format.</p>
   </details>
 
   <details class="card">
     <summary><h2>I uploaded a document but it didn't seem to read it</h2></summary>
     <ul>
-      <li>Make sure <strong>File Search is turned on</strong> before uploading (step 1 above).</li>
-      <li>When attaching, choose <strong>“Upload for File Search.”</strong></li>
+      <li>Check that <strong>File Search</strong> is switched on in the
+        <span class="pill">tools</span> dropdown next to the message box — it turns on
+        automatically when you upload, but it may have been turned off earlier in the
+        conversation.</li>
+      <li>Make sure the file type is one of the supported types above — older <strong>.doc</strong>
+        and <strong>.ppt</strong> files aren't readable.</li>
       <li>Scanned or photo-based PDFs (no selectable text) may not be readable.</li>
     </ul>
   </details>
@@ -221,7 +219,8 @@
       them in a live preview next to your chat.
     </p>
     <ol>
-      <li>Turn on <strong>Artifacts</strong> using the <span class="pill">+</span> button.</li>
+      <li>Turn on <strong>Artifacts</strong> in the <span class="pill">tools</span> dropdown
+        next to the message box.</li>
       <li>Ask for what you want — for example, <em>“Create a flowchart of our onboarding process”</em>
         or <em>“Build a simple web page with a contact form.”</em></li>
     </ol>
@@ -229,6 +228,14 @@
       <strong>Tip:</strong> Artifacts only appears when you ask for something it can build (like a
       diagram or a page). A normal question just gives you a normal answer.
     </div>
+  </details>
+
+  <details class="card">
+    <summary><h2>Can I have a response read aloud?</h2></summary>
+    <p>
+      Yes. Hover over any assistant response and click the <strong>speaker</strong> icon to hear
+      it read aloud in a natural AI voice — nothing to set up first.
+    </p>
   </details>
 
   <details class="card">
