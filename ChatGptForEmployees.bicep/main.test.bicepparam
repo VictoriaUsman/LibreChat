@@ -18,7 +18,7 @@ param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
 // registry copy, never a rebuild, so test runs the bit-identical image that dev validated.
 // The stage runs before BicepCreate, so the image is present when the app is repointed; see
 // LibreChat_Image_Deployments.md §3.
-param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:2473d02e5fe86a2a73afde0dcecca5167a35d6ac62120c99c1966de4013b96a2'
+param libreChatImage = 'acrcgfetest.azurecr.io/librechat@sha256:1c67d91df0700b8639e8310eb6c7b1632c38beab1342025100677902437da6a1'
 param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 
 param flagshipModelName = 'gpt-5'

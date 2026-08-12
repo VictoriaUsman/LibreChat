@@ -18,14 +18,21 @@ They are equal only when every promotion has caught up.
 
 | Env | Running now | Since | Fork commit | Staged in `dev` |
 |---|---|---|---|---|
-| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-05 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — **deploys on merge to `dev`.** |
-| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-05 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — deploys when `dev` → `test` promotes. |
-| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:7f4b246d…22e612c` | 2026-08-06 | `a4e71a966` | `sha256:2473d02e…4013b96a2` — deploys when `test` → `main` promotes. |
+| **Dev** | `acrcgfedev.azurecr.io/librechat@sha256:2473d02e…4013b96a2` | 2026-08-07 | `73a0ce22e` | `sha256:1c67d91d…437da6a1` — **deploys on merge to `dev`.** |
+| **Test** | `acrcgfetest.azurecr.io/librechat@sha256:2473d02e…4013b96a2` | 2026-08-10 | `73a0ce22e` | `sha256:1c67d91d…437da6a1` — deploys when `dev` → `test` promotes. |
+| **Prod** | `acrcgfeprod.azurecr.io/librechat@sha256:2473d02e…4013b96a2` | 2026-08-10 | `73a0ce22e` | `sha256:1c67d91d…437da6a1` — deploys when `test` → `main` promotes. |
 
-**Verified 2026-08-07** against Azure (`az containerapp list`): all three on the same digest, each on a
-single active revision at 100% and Healthy — `ca-librechat-dev--0000024`, `ca-librechat-test--0000006`,
-`ca-librechat-prod--0000004`. **`a4e71a966` is the first fork build to reach prod**, on 2026-08-06 via
-PR 11767; before that prod ran the upstream `ghcr.io` image.
+**Verified 2026-08-12** against Azure (`az containerapp list` + `az containerapp revision list`): all
+three on the same digest, each on a single active revision at 100% and Healthy —
+`ca-librechat-dev--0000025` (created 2026-08-07 20:47 UTC), `ca-librechat-test--0000007` and
+`ca-librechat-prod--0000005` (both 2026-08-10, 15:13 and 15:24 UTC). **`a4e71a966` was the first fork
+build to reach prod**, on 2026-08-06 via PR 11767; before that prod ran the upstream `ghcr.io` image.
+
+> **The rows above were stale until 2026-08-12** — they still showed `7f4b246d…` as running everywhere
+> while `2473d02e…` had in fact reached dev on 08-07 and test + prod on 08-10. The digest bump (PR
+> 11842) added its History entry but did not refresh this table, and the two promotions that carried it
+> to test and prod logged nothing at all. Same drift the rule at the top of this document exists to
+> prevent: **a promotion PR updates this table even when it changes no digest of its own.**
 
 > **ACR tags differ between registries.** The fork pipeline assigns the *dev* build's tag (here
 > `26023`). The copy into test and prod tags the same manifest with the first 12 hex characters of its
@@ -43,6 +50,38 @@ PR 11767; before that prod ran the upstream `ghcr.io` image.
 ## History
 
 Newest first. One entry per image change per environment.
+
+### 2026-08-12 — Dev — `sha256:1c67d91d…437da6a1`
+
+- **Fork commit:** `de8c5f078` (fork `main` after PR 12024) · **ACR tag:** `29854` · **arch:** amd64
+- **Work item:** 13121
+- **What's in it:** the bot glyph beside each response was invisible in light mode. It was never
+  failing to load — it rendered the whole time, in white, on a white page. The `endpointIcons`
+  entry that serves ROMChat sets no `bg`, so the shared wrapper falls back to a transparent
+  background; that same wrapper hard-codes `text-white`; and the glyph is stroked with
+  `currentColor`. Now coloured with `text-text-primary`, which already resolves per theme
+  (gray-800 light / gray-100 dark) and matches the message title beside it.
+- **Where the fix had to go, which is not where it looks like it should.** `endpointIcons` is keyed
+  on the **raw endpoint string**, and a named custom endpoint carries its **name**
+  (`"LiteLLM Gateway"`), never the literal `"custom"` — `custom` is only its *type*. So the map's
+  `custom` entry is unreachable for us and the fix lives on the `default` branch, which falls
+  through to the identical glyph via `UnknownIcon`. Both branches draw the same lucide bot, so a
+  screenshot cannot tell them apart — an earlier cut of this patch targeted the `custom` entry and
+  would have shipped as a silent no-op.
+- **Paired infra change:** none beyond this digest bump.
+- **Verified before deploy:** digest present in `acrcgfedev` (`az acr manifest show-metadata`),
+  tag `29854`, built 2026-08-12 14:42 UTC, amd64. Resolving in *our* registry is itself the check
+  that rules out the `node:20-alpine` base-image digest, which does not exist there.
+- **Not covered by automated tests:** the fork's Jest suites still have not been run against any
+  build in this series, and this change adds none. `node_modules` was absent from the dev checkout,
+  so nothing was built or typechecked locally either — the reasoning was settled statically from
+  source (CSS cascade, token resolution, twMerge behaviour, endpoint keying).
+- **Manual check:** in light mode, confirm the bot glyph left of a response is dark grey and clearly
+  visible; switch to dark mode and confirm it is still visible; then open a shared conversation link
+  and check the same glyph, since that view reaches the component by a different route. To confirm
+  the *right* branch rendered, inspect the glyph — the `default` branch wraps it in the `h-6 w-6` /
+  `overflow-hidden rounded-full` div pair.
+- **Rollback:** restore `sha256:2473d02e…4013b96a2` and redeploy — still in the registry.
 
 ### 2026-08-07 — Dev — `sha256:2473d02e…4013b96a2`
 
