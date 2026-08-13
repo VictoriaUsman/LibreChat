@@ -143,16 +143,6 @@ endpoints:
 # -----------------------------------------------------------------------
 # System prompt — PBI 9575
 # -----------------------------------------------------------------------
-# STATUS: DRAFT — awaiting sign-off from Legal, HR, and Compliance.
-#
-# DO NOT deploy to any user-facing environment (ACA nonprod or prod) until
-# sign-off is documented in the PR that merges this change.
-#
-# Sign-off checklist (record approver name + date in the PR description):
-#   [ ] Legal
-#   [ ] HR
-#   [ ] Compliance
-#
 # Implementation notes:
 #   - promptPrefix is set inside each modelSpec preset so it is applied to
 #     every conversation regardless of which model the user selects.
@@ -253,7 +243,10 @@ modelSpecs:
 interface:
   endpointsMenu: false
   # false: the header model dropdown was a second, redundant control alongside
-  # the enforced modelSpecs buttons (Standard/Fast) for the same choice. Also
+  # the enforced modelSpec selector — the single button in the chat header that
+  # shows the current spec (ROMChat Standard / ROMChat Fast) and opens a menu to
+  # switch. Note ModelSelector still renders while modelSpecs exist; this flag
+  # only removes the endpoint/model dropdown beside it. Also
   # hides the API-key gear icon. PBI: Remove Redundant Model Selector.
   modelSelect: false
   agents: false
