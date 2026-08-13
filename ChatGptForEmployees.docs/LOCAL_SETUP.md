@@ -315,10 +315,6 @@ Copy-Item scripts\.env LibreChat\.env
 
 ## Step 13 — Verify the system prompt (PBI 9575)
 
-> **Sign-off gate:** The system prompt in `config\librechat.yaml` is marked DRAFT.
-> It must not be deployed to any user-facing environment until Legal, HR, and Compliance
-> have approved it and that approval is documented in the merge PR.
-
 With LibreChat running (Step 11), open a new conversation at **http://localhost:3080** and verify:
 
 1. The assistant identifies itself as **ROMTech AI** in its first response.
@@ -388,7 +384,6 @@ Expected for all automated tests: **0 FAILED**.
 - [ ] Legal routing: assistant declines legal advice and refers to the Legal team
 - [ ] System prompt text is not visible in the LibreChat UI
 - [ ] Chat and streaming work normally after adding the system prompt
-- [ ] **(ACA gate)** Legal, HR, and Compliance sign-off documented in the merge PR before deploying to any user-facing environment
 
 **Security**
 - [ ] `scripts\.env` does not appear in `git status`

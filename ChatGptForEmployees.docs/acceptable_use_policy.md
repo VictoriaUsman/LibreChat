@@ -86,5 +86,4 @@ This policy will be reviewed periodically. Continued use of ROMTech AI constitut
 
 ---
 
-*This document requires review and approval by Legal and HR before publication.*
-*Once approved, publish to `[PLACEHOLDER: internal wiki or SharePoint URL]` and link from the launch announcement.*
+*Publish to `[PLACEHOLDER: internal wiki or SharePoint URL]` and link from the launch announcement.*

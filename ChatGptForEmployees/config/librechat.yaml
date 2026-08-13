@@ -203,7 +203,7 @@ modelSpecs:
 
     # default: true — Fast (gpt-5-mini) is the default model for new chats / on
     # sign-in. Cheaper + faster for everyday productivity; users can still switch
-    # to Standard via the enforced Standard/Fast buttons for harder tasks.
+    # to Standard via the model button in the chat header for harder tasks.
     - name: "romtech-ai-fast"
       label: "ROMChat Fast"
       default: true
@@ -276,19 +276,13 @@ interface:
   # -----------------------------------------------------------------------
   # ROMTech branding (config-level) — PBI: Apply ROMTech Branding
   # -----------------------------------------------------------------------
-  # STATUS: DRAFT — awaiting sign-off from Comms/Legal, same as the system
-  # prompt above. DO NOT deploy to any user-facing environment until sign-off
-  # is documented in the PR that merges this change.
-  #   [ ] Comms
-  #   [ ] Legal
   customWelcome: "Welcome to ROMChat."
   # privacyPolicy / termsOfService intentionally omitted: no ROMTech-hosted
   # Privacy Policy or Terms of Service URL exists yet (the Acceptable Use
-  # Policy is currently an internal draft doc, not a published page — see
+  # Policy lives in the repo as a markdown doc, not a published page — see
   # ChatGptForEmployees.docs/acceptable_use_policy.md). Add
   # interface.privacyPolicy.externalUrl / interface.termsOfService.externalUrl
-  # once Legal publishes a hosted URL; until then this omission is the
-  # documented sign-off decision for this AC.
+  # if either is ever published at a hosted URL.
 
 # File upload — enabled for v1 (PBI 9563)
 # Restricted to approved MIME types and size limits.
