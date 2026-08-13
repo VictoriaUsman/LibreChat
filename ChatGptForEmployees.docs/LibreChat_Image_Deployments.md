@@ -260,6 +260,12 @@ target environment's registry. Order is load-bearing: **build → copy digest �
 (For dev that is the whole story. For test and prod the copy happens *inside* the deploy run, as
 the **first** stage — before `BicepCreate` repoints the app. See §3.)
 
+0. **If the fork commit changes anything a user can see or click** (a menu, an upload flow, TTS,
+   the guided tour, model names, file types — anything the Help & FAQ page describes), check
+   `ChatGptForEmployees.docs/romtech_ai_help.html` against the change and update it **in the same
+   PR**, deploying through the pipeline's `DeployHelpPage` stage alongside the image bump. This
+   page drifted silently out of sync with the shipped app for weeks before PBI 13138 caught it —
+   treat it as part of the user-facing surface being shipped, not a standalone doc that can lag.
 1. Merge the change in the **fork** repo → its pipeline builds and prints the digest.
 
    ⚠️ **The build log contains two digests. Only one is ours.** `az acr build` emits a summary
