@@ -49,11 +49,10 @@ If you are unsure whether a use is permitted, do not proceed — contact `[PLACE
 
 - Your conversations (prompts and responses) are stored in ROMTech's infrastructure
 - Any files you upload are retained as part of the conversation log
-- Logs are retained for **[PLACEHOLDER: retention period, e.g. 90 days / 1 year]** in accordance with ROMTech's data retention policy
-- Logs may be accessed by authorised ROMTech personnel for security, compliance, audit, or support purposes
+- **Your conversations are kept until you delete them.** Deleting a conversation in ROMTech AI is what removes it (temporary chats are the exception — see the in-app Help & FAQ)
+- Access is tightly restricted: conversation data may be accessed only by a small number of authorised personnel, from approved systems, and only for security, compliance, audit, or support purposes
+- **Being your manager does not grant access.** Managers, executives, and colleagues have no route to read your conversations
 - Conversation data is processed by Microsoft Azure OpenAI under ROMTech's enterprise agreement — it is not used to train Microsoft or OpenAI models
-
-Do not enter anything in ROMTech AI that you would not be comfortable with ROMTech IT, Legal, or your manager reading.
 
 ---
 
