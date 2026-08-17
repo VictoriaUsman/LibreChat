@@ -132,7 +132,54 @@ param openIdSessionSecret string
 // (the env bicepparam supplies the real Key Vault value only when enabling the job).
 param oktaApiToken string = ''
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
-var minReplicas = 1
+
+// ─── Container App sizing ────────────────────────────────────────────────────────────
+// Prod is sized for the company-wide rollout; dev and test stay at the smallest useful
+// footprint. Before this, all three services ran 0.5 vCPU / 1 GiB, min 1 / max 2 in EVERY
+// environment with no scale rule, so prod inherited a dev-sized app tier: 2 replicas
+// totalling 1 vCPU per service, with no way to add capacity under load, while the Azure
+// OpenAI deployments below are provisioned for ~950K TPM. Compute was the bottleneck, not
+// tokens.
+//
+// Note what the old ceiling did NOT do: `concurrentRequests` is a scale-out TRIGGER, not
+// admission control. The implicit default of 10 never rejected or queued an 11th request —
+// it asked for another replica, which maxReplicas: 2 then refused. So the old tier accepted
+// everything sent to it and let it contend for 1 vCPU. The symptom was latency collapse
+// under load, not refused connections.
+//
+// ⚠️ cpu and memory MUST stay in ACA's 1:2 vCPU:GiB ratio (0.5/1Gi, 1/2Gi, 1.5/3Gi, 2/4Gi).
+// The valid-combination list is closed, so a mismatched pair fails the deployment; they are
+// kept in one object here rather than as two values that can drift apart. Our ceiling is
+// 2 vCPU / 4 GiB, NOT the 4/8Gi you'll see quoted for the Consumption workload profile:
+// containerAppsEnvironment.bicep declares no `workloadProfiles`, which makes this a
+// Consumption-ONLY environment, and those cap at 2 cores / 4Gi per app.
+var isProd = environmentName == 'Prod'
+var containerSize = isProd ? { cpu: '1.0', memory: '2Gi' } : { cpu: '0.5', memory: '1Gi' }
+
+// min is the always-on floor and is billed continuously; max is a ceiling that only costs
+// while it is actually in use. LibreChat and LiteLLM floor at 2 in prod so a rolling revision
+// swap never leaves one replica serving alone. RAG API is deliberately left at 1: it is not on
+// every turn (only File Search upload and retrieval), and losing it briefly degrades one
+// feature rather than stopping chat. Raise it to 2 if File Search becomes load-bearing.
+//
+// `concurrency` is the per-replica in-flight request count that triggers a scale-out, measured
+// over a 15-second window. It is tuned per service:
+//   LibreChat — Node relays streams on an event loop, but the same container also serves the
+//     SPA and handles uploads, and 2 GiB is near Node's default old-space ceiling. 15 is a
+//     trusted number at 1 vCPU; 20+ was optimistic.
+//   LiteLLM  — must be AT OR BELOW LibreChat's, never above: every chat turn becomes a LiteLLM
+//     request, so a higher threshold here means the downstream service scales out later than
+//     the one feeding it. It also runs a SINGLE uvicorn worker (no --num_workers in its args),
+//     so all of it is one GIL-bound process that parses SSE, counts tokens, prices each chunk
+//     from model_info, and writes a spend row per request. It queues on CPU well before a high
+//     threshold would trip. Raise this only together with --num_workers.
+//   RAG API  — most conservative, and the heavy part is document parsing/chunking on upload,
+//     where 2 GiB is the binding constraint. Embedding calls themselves are remote (Azure
+//     OpenAI), so they are I/O waits rather than local compute.
+var libreChatScale = { min: isProd ? 2 : 1, max: isProd ? 10 : 2, concurrency: 15 }
+var liteLlmScale   = { min: isProd ? 2 : 1, max: isProd ? 10 : 2, concurrency: 12 }
+var ragApiScale    = { min: 1,              max: isProd ? 5 : 2,  concurrency: 10 }
+// ─────────────────────────────────────────────────────────────────────────────────────
 
 module applicationInsights 'applicationInsights.bicep' = {
   name: 'applicationInsights'
@@ -220,7 +267,11 @@ module liteLlm 'liteLlm.bicep' = {
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
     liteLlmImage: liteLlmImage
-    minReplicas: minReplicas
+    minReplicas: liteLlmScale.min
+    maxReplicas: liteLlmScale.max
+    concurrentRequests: liteLlmScale.concurrency
+    containerCpu: containerSize.cpu
+    containerMemory: containerSize.memory
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
@@ -279,7 +330,11 @@ module ragApi 'ragApi.bicep' = {
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
     ragApiImage: ragApiImage
-    minReplicas: minReplicas
+    minReplicas: ragApiScale.min
+    maxReplicas: ragApiScale.max
+    concurrentRequests: ragApiScale.concurrency
+    containerCpu: containerSize.cpu
+    containerMemory: containerSize.memory
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
     embeddingsDeploymentName: aiFoundry.outputs.embeddingsDeploymentName
@@ -311,7 +366,11 @@ module libreChat 'libreChat.bicep' = {
     defaultDomain: containerAppsEnvironment.outputs.defaultDomain
     libreChatImage: libreChatImage
     acrName: acr.outputs.name
-    minReplicas: minReplicas
+    minReplicas: libreChatScale.min
+    maxReplicas: libreChatScale.max
+    concurrentRequests: libreChatScale.concurrency
+    containerCpu: containerSize.cpu
+    containerMemory: containerSize.memory
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     liteLlmInternalUrl: liteLlm.outputs.fqdn
     ragApiInternalUrl: ragApi.outputs.fqdn

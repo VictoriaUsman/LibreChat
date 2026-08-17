@@ -6,6 +6,14 @@ param libreChatImage string
 // Per-env ACR (acrcgfe<env>) that now hosts the LibreChat image. Wired from main.bicep.
 param acrName string
 param minReplicas int = 0
+param maxReplicas int = 2
+// In-flight requests per replica that trigger a scale-out (ACA's default is 10 when no rule
+// is declared). Set from main.bicep, which tunes it per service.
+param concurrentRequests int = 10
+// cpu is a string so it can be passed through json() below (the ARM property is numeric).
+// cpu:memory must hold ACA's 1:2 vCPU:GiB ratio — main.bicep pairs them in one object.
+param containerCpu string = '0.5'
+param containerMemory string = '1Gi'
 param appInsightsConnectionString string
 param liteLlmInternalUrl string
 param ragApiInternalUrl string
@@ -102,8 +110,8 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'librechat'
           image: libreChatImage
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json(containerCpu)
+            memory: containerMemory
           }
           env: [
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
@@ -192,9 +200,26 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
           storageName: 'librechat-data-store'
         }
       ]
+      // Declaring an explicit rule replaces ACA's implicit default (HTTP, 10 concurrent
+      // requests per replica). A chat stream occupies its connection for the whole answer,
+      // so concurrency here is really "people mid-response per replica", not requests/sec.
+      //
+      // Note this scales alongside the sticky-session affinity set on ingress above: a
+      // newly-added replica only picks up NEW sessions, so a scale-out relieves arriving
+      // users rather than redistributing the ones already connected.
       scale: {
         minReplicas: minReplicas
-        maxReplicas: 2
+        maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'http-concurrency'
+            http: {
+              metadata: {
+                concurrentRequests: string(concurrentRequests)
+              }
+            }
+          }
+        ]
       }
     }
   }
