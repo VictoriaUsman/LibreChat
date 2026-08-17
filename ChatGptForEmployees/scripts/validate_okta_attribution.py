@@ -36,6 +36,7 @@ Optional:
 """
 
 import os
+import re
 import sys
 import subprocess
 
@@ -67,7 +68,22 @@ TEST_EMAIL = os.environ.get("OKTA_TEST_USER_EMAIL", "")
 # them. Every reference below is schema-qualified rather than relying on
 # search_path, so a mismatch fails loudly instead of silently inspecting the
 # wrong (or a non-existent) table.
-ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+def _resolve_attribution_schema() -> str:
+    """Normalize and validate the target schema. Must match
+    sync_okta_attribution.py's copy -- see there for the full rationale. The
+    lowercasing matters here specifically: table_columns() compares this string
+    against information_schema, which Postgres stores down-folded."""
+    name = os.environ.get("ATTRIBUTION_SCHEMA", "attribution").strip().lower()
+    if name == "public" or not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_SCHEMA={name!r} is invalid: must be a simple identifier "
+            "and must not be `public` -- LiteLLM's Prisma push drops unrecognized "
+            "objects in `public` on every container restart."
+        )
+    return name
+
+
+ATTRIBUTION_SCHEMA = _resolve_attribution_schema()
 
 
 def q(table):

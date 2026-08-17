@@ -30,6 +30,7 @@ Required environment variables (same .env as setup_dept_spend_views.py):
 """
 
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -58,7 +59,23 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # Must match sync_okta_attribution.py / setup_dept_spend_views.py. The bridge
 # tables and the reporting views live outside `public` so LiteLLM's Prisma push
 # can't drop them; "LiteLLM_SpendLogs" stays in `public` because it is Prisma's.
-ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+def _resolve_attribution_schema() -> str:
+    """Normalize and validate the target schema. Must match
+    sync_okta_attribution.py's copy -- see there for the full rationale. The
+    lowercasing matters here specifically: the information_schema lookups below
+    compare this string against catalog values, which Postgres stores
+    down-folded."""
+    name = os.environ.get("ATTRIBUTION_SCHEMA", "attribution").strip().lower()
+    if name == "public" or not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_SCHEMA={name!r} is invalid: must be a simple identifier "
+            "and must not be `public` -- LiteLLM's Prisma push drops unrecognized "
+            "objects in `public` on every container restart."
+        )
+    return name
+
+
+ATTRIBUTION_SCHEMA = _resolve_attribution_schema()
 
 if not DATABASE_URL:
     print("ERROR: Missing required environment variable: DATABASE_URL")
@@ -111,7 +128,7 @@ def fail(label, detail=""):
 def insert_spend_row(cur, request_id, end_user, spend, start_time):
     cur.execute(
         """
-        INSERT INTO "LiteLLM_SpendLogs"
+        INSERT INTO public."LiteLLM_SpendLogs"
             (request_id, call_type, spend, total_tokens, prompt_tokens,
              completion_tokens, model, "startTime", "endTime", end_user)
         VALUES (%s, 'completion', %s, 10, 7, 3, 'test-fixture-model', %s, %s, %s)
@@ -151,9 +168,17 @@ def seed(conn):
 
 
 def cleanup(conn):
+    # seed() commits its fixture rows, so they outlive any later failure. If a
+    # test raised mid-transaction (e.g. the views don't exist yet), the
+    # connection is in INFAILEDSQLTRANSACTION and every DELETE below would
+    # raise InFailedSqlTransaction -- masking the real error AND skipping the
+    # cleanup, leaving fixture rows in "LiteLLM_SpendLogs" permanently, where
+    # they show up in the real department='Unknown' rollup. Roll back first so
+    # cleanup always runs on a usable connection.
+    conn.rollback()
     with conn.cursor() as cur:
         cur.execute(
-            'DELETE FROM "LiteLLM_SpendLogs" WHERE request_id = ANY(%s)',
+            'DELETE FROM public."LiteLLM_SpendLogs" WHERE request_id = ANY(%s)',
             (list(FIXTURE_ROW_IDS),),
         )
         cur.execute(

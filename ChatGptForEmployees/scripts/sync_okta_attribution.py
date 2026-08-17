@@ -56,6 +56,16 @@ Optional:
                               dept_map, user_directory and sync_run_log. Must
                               NOT be `public`: LiteLLM's Prisma push owns that
                               schema and drops anything it doesn't recognize.
+                              Rejected at startup if set to `public` or to
+                              anything that isn't a simple identifier.
+  ATTRIBUTION_READER_ROLE    unset by default -- if set, an existing Postgres
+                              role granted USAGE on the schema and SELECT on
+                              its tables (plus ALTER DEFAULT PRIVILEGES, so
+                              the reporting views created later by
+                              setup_dept_spend_views.py are covered too).
+                              Needed for any read-only BI/reporting role: a
+                              dedicated schema grants nothing by default,
+                              unlike `public`.
   DEPT_MAP_MIN_RATIO         default 0.5 -- abort the dept_map sync if the
                               Okta fetch returns fewer than this fraction of
                               the table's current active row count.
@@ -78,6 +88,7 @@ Exit codes:
 """
 
 import os
+import re
 import sys
 import time
 import logging
@@ -123,7 +134,49 @@ SYNC_RETRY_BASE_DELAY_SECONDS = float(os.environ.get("SYNC_RETRY_BASE_DELAY_SECO
 # is schema-qualified explicitly rather than relying on search_path -- an
 # implicit search_path is what makes "the table exists but I can't see it"
 # hard to diagnose in the first place.
-ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+def _resolve_attribution_schema() -> str:
+    """Normalize and validate the target schema at import time.
+
+    Lowercased because Postgres down-folds unquoted identifiers: with
+    ATTRIBUTION_SCHEMA=Attribution the DDL and DML here both fold to
+    `attribution` and work fine, but anything comparing this raw Python string
+    against a catalog value (information_schema.table_schema) would find
+    nothing and report a healthy install as missing.
+
+    `public` is rejected outright rather than merely discouraged -- it is the
+    schema Prisma manages, so pointing these tables back at it silently
+    reintroduces the exact data loss this schema move exists to prevent, while
+    every run still logs status=success and exits 0.
+    """
+    name = os.environ.get("ATTRIBUTION_SCHEMA", "attribution").strip().lower()
+    if name == "public" or not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_SCHEMA={name!r} is invalid: must be a simple identifier "
+            "and must not be `public` -- LiteLLM's Prisma push drops unrecognized "
+            "objects in `public` on every container restart."
+        )
+    return name
+
+
+ATTRIBUTION_SCHEMA = _resolve_attribution_schema()
+
+
+def _resolve_reader_role() -> str:
+    """Optional read-only role to grant SELECT on the attribution schema.
+
+    Empty (the default) disables the grant entirely. Validated as a plain
+    identifier for the same reason as the schema name -- it is interpolated
+    into SQL, since GRANT cannot take a parameterized role.
+    """
+    name = os.environ.get("ATTRIBUTION_READER_ROLE", "").strip().lower()
+    if name and not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_READER_ROLE={name!r} is invalid: must be a simple identifier."
+        )
+    return name
+
+
+ATTRIBUTION_READER_ROLE = _resolve_reader_role()
 
 DDL = f"""
 CREATE SCHEMA IF NOT EXISTS {ATTRIBUTION_SCHEMA};
@@ -161,10 +214,38 @@ def get_db_name(uri: str) -> str:
 def ensure_tables(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(DDL)
+        _grant_reader(cur)
     conn.commit()
     log.info(
         "DDL applied: %s.dept_map, %s.user_directory, %s.sync_run_log present.",
         ATTRIBUTION_SCHEMA, ATTRIBUTION_SCHEMA, ATTRIBUTION_SCHEMA,
+    )
+
+
+def _grant_reader(cur) -> None:
+    """Grant read access on the attribution schema to ATTRIBUTION_READER_ROLE.
+
+    No-op unless that variable is set. Under `public` any role got USAGE for
+    free; a dedicated schema grants nothing by default, so a future read-only
+    reporting/BI role would hit "permission denied for schema attribution".
+    ALTER DEFAULT PRIVILEGES covers objects created later -- notably the views
+    from setup_dept_spend_views.py, which this script never creates itself.
+
+    Fails loudly if the role doesn't exist: a silently-skipped grant is how
+    permissions problems become someone else's confusing afternoon.
+    """
+    if not ATTRIBUTION_READER_ROLE:
+        return
+    cur.execute(
+        f"GRANT USAGE ON SCHEMA {ATTRIBUTION_SCHEMA} TO {ATTRIBUTION_READER_ROLE};"
+        f"GRANT SELECT ON ALL TABLES IN SCHEMA {ATTRIBUTION_SCHEMA} "
+        f"    TO {ATTRIBUTION_READER_ROLE};"
+        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {ATTRIBUTION_SCHEMA} "
+        f"    GRANT SELECT ON TABLES TO {ATTRIBUTION_READER_ROLE};"
+    )
+    log.info(
+        "Granted read access on schema %s to role %s.",
+        ATTRIBUTION_SCHEMA, ATTRIBUTION_READER_ROLE,
     )
 
 

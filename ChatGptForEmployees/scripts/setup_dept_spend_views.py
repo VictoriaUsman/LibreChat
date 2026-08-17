@@ -47,6 +47,7 @@ Required environment variables (scripts/.env):
 """
 
 import os
+import re
 import sys
 import logging
 
@@ -71,7 +72,21 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # schema it manages on every container restart. Must match
 # sync_okta_attribution.py's ATTRIBUTION_SCHEMA. See that script for the full
 # rationale.
-ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+def _resolve_attribution_schema() -> str:
+    """Normalize and validate the target schema. Must match
+    sync_okta_attribution.py's copy -- see there for the full rationale
+    (Postgres down-folds unquoted identifiers; `public` is Prisma's)."""
+    name = os.environ.get("ATTRIBUTION_SCHEMA", "attribution").strip().lower()
+    if name == "public" or not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_SCHEMA={name!r} is invalid: must be a simple identifier "
+            "and must not be `public` -- LiteLLM's Prisma push drops unrecognized "
+            "objects in `public` on every container restart."
+        )
+    return name
+
+
+ATTRIBUTION_SCHEMA = _resolve_attribution_schema()
 
 # Pinned reporting timezone (see module docstring). Change here and re-run to
 # repin -- CREATE OR REPLACE VIEW makes this idempotent.
@@ -133,9 +148,34 @@ def main() -> int:
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
-            # The sync job creates this too, but this script can legitimately
-            # run first on a fresh environment.
+            # CREATE SCHEMA is idempotent and the sync job issues it too, but
+            # creating the schema is NOT enough to make this script safe to run
+            # first: both views reference <schema>.user_directory and
+            # <schema>.dept_map, so CREATE VIEW fails outright if the sync job
+            # has not yet created them. Rollout order per environment is
+            # sync_okta_attribution.py first, then this script. Checked
+            # explicitly so that ordering mistake produces a clear instruction
+            # instead of a bare UndefinedTable traceback.
             cur.execute(DDL_SCHEMA)
+
+            cur.execute(
+                "SELECT to_regclass(%s), to_regclass(%s)",
+                (f"{ATTRIBUTION_SCHEMA}.user_directory", f"{ATTRIBUTION_SCHEMA}.dept_map"),
+            )
+            missing = [
+                name for name, exists in
+                zip(("user_directory", "dept_map"), cur.fetchone())
+                if exists is None
+            ]
+            if missing:
+                log.error(
+                    "Cannot create the views: %s missing in schema %r. Run "
+                    "sync_okta_attribution.py first -- it creates and populates "
+                    "the bridge tables these views join against.",
+                    ", ".join(missing), ATTRIBUTION_SCHEMA,
+                )
+                return 1
+
             cur.execute(DDL_WEEK_VIEW)
             cur.execute(DDL_MONTH_VIEW)
         conn.commit()
