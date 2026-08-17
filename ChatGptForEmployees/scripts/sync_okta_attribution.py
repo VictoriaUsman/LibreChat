@@ -8,7 +8,10 @@ LibreChat sends the Mongo user _id (not an email) as the OpenAI-compatible
 custom/initialize.ts:169), so LiteLLM_SpendLogs.end_user is keyed by an opaque
 ObjectId. Rather than fork LibreChat to change what it sends, this script
 populates two small lookup tables in the existing `litellm` Postgres database
-so a report can join _id -> email -> department/division with plain SQL:
+-- in a dedicated `attribution` schema, NOT `public`, because LiteLLM's Prisma
+schema push drops unknown tables in the schema it manages on every container
+restart (see ATTRIBUTION_SCHEMA below) -- so a report can join
+_id -> email -> department/division with plain SQL:
 
   dept_map        email (PK) -> department, division, is_active, removed_at.
                   Source: Okta Users API. Full refresh: users no longer
@@ -49,6 +52,10 @@ Required environment variables (scripts/.env):
   MONGO_URI         MongoDB connection string (already set)
 
 Optional:
+  ATTRIBUTION_SCHEMA         default "attribution" -- Postgres schema holding
+                              dept_map, user_directory and sync_run_log. Must
+                              NOT be `public`: LiteLLM's Prisma push owns that
+                              schema and drops anything it doesn't recognize.
   DEPT_MAP_MIN_RATIO         default 0.5 -- abort the dept_map sync if the
                               Okta fetch returns fewer than this fraction of
                               the table's current active row count.
@@ -102,8 +109,25 @@ USER_DIRECTORY_MIN_RATIO = float(os.environ.get("USER_DIRECTORY_MIN_RATIO", "0.5
 SYNC_RETRY_ATTEMPTS = int(os.environ.get("SYNC_RETRY_ATTEMPTS", "4"))
 SYNC_RETRY_BASE_DELAY_SECONDS = float(os.environ.get("SYNC_RETRY_BASE_DELAY_SECONDS", "60"))
 
-DDL = """
-CREATE TABLE IF NOT EXISTS dept_map (
+# These tables live in their own schema, NOT `public`. LiteLLM runs a Prisma
+# schema push against this same `litellm` database on every container start,
+# and Prisma drops anything in the schema it manages that isn't in its
+# schema.prisma -- which silently deleted all three of these tables in Prod
+# between sync runs (confirmed 2026-08-17 in Log Analytics: "You are about to
+# drop the `user_directory` table, which is not empty (4 rows)" at container
+# restart times, hours-to-days after a successful 05:00 sync). The job still
+# exited 0 and reported Succeeded every run, so the data loss was invisible.
+#
+# Prisma only manages the schema its connection targets (`public` by default),
+# so objects in a separate schema are out of its reach. Every reference below
+# is schema-qualified explicitly rather than relying on search_path -- an
+# implicit search_path is what makes "the table exists but I can't see it"
+# hard to diagnose in the first place.
+ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+
+DDL = f"""
+CREATE SCHEMA IF NOT EXISTS {ATTRIBUTION_SCHEMA};
+CREATE TABLE IF NOT EXISTS {ATTRIBUTION_SCHEMA}.dept_map (
     email       TEXT PRIMARY KEY,
     department  TEXT,
     division    TEXT,
@@ -111,12 +135,12 @@ CREATE TABLE IF NOT EXISTS dept_map (
     removed_at  TIMESTAMPTZ,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS user_directory (
+CREATE TABLE IF NOT EXISTS {ATTRIBUTION_SCHEMA}.user_directory (
     user_id     TEXT PRIMARY KEY,
     email       TEXT NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS sync_run_log (
+CREATE TABLE IF NOT EXISTS {ATTRIBUTION_SCHEMA}.sync_run_log (
     id                     BIGSERIAL PRIMARY KEY,
     run_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
     status                 TEXT NOT NULL,
@@ -125,7 +149,8 @@ CREATE TABLE IF NOT EXISTS sync_run_log (
     duration_seconds       NUMERIC(10,3) NOT NULL,
     detail                 TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_sync_run_log_run_at ON sync_run_log (run_at);
+CREATE INDEX IF NOT EXISTS idx_sync_run_log_run_at
+    ON {ATTRIBUTION_SCHEMA}.sync_run_log (run_at);
 """
 
 
@@ -137,7 +162,10 @@ def ensure_tables(conn) -> None:
     with conn.cursor() as cur:
         cur.execute(DDL)
     conn.commit()
-    log.info("DDL applied: dept_map, user_directory, sync_run_log present.")
+    log.info(
+        "DDL applied: %s.dept_map, %s.user_directory, %s.sync_run_log present.",
+        ATTRIBUTION_SCHEMA, ATTRIBUTION_SCHEMA, ATTRIBUTION_SCHEMA,
+    )
 
 
 class ConfigError(Exception):
@@ -234,7 +262,7 @@ def sync_dept_map(conn, users: list) -> int:
     not present in this fetch. Aborts without writing if the fetch looks
     suspiciously empty relative to the table's current active row count."""
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM dept_map WHERE is_active")
+        cur.execute(f"SELECT count(*) FROM {ATTRIBUTION_SCHEMA}.dept_map WHERE is_active")
         current_active = cur.fetchone()[0]
 
     if not users:
@@ -252,8 +280,9 @@ def sync_dept_map(conn, users: list) -> int:
         with conn.cursor() as cur:
             for u in users:
                 cur.execute(
-                    """
-                    INSERT INTO dept_map (email, department, division, is_active, removed_at, updated_at)
+                    f"""
+                    INSERT INTO {ATTRIBUTION_SCHEMA}.dept_map
+                        (email, department, division, is_active, removed_at, updated_at)
                     VALUES (%s, %s, %s, true, NULL, now())
                     ON CONFLICT (email) DO UPDATE SET
                         department = EXCLUDED.department,
@@ -265,8 +294,8 @@ def sync_dept_map(conn, users: list) -> int:
                     (u["email"], u["department"], u["division"]),
                 )
             cur.execute(
-                """
-                UPDATE dept_map SET is_active = false, removed_at = now()
+                f"""
+                UPDATE {ATTRIBUTION_SCHEMA}.dept_map SET is_active = false, removed_at = now()
                 WHERE is_active = true AND email <> ALL(%s)
                 """,
                 (emails,),
@@ -285,7 +314,7 @@ def sync_user_directory(conn, users: list) -> int:
     """Upsert-only, one transaction. Aborts without writing if the fetch
     looks suspiciously empty relative to the table's current row count."""
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM user_directory")
+        cur.execute(f"SELECT count(*) FROM {ATTRIBUTION_SCHEMA}.user_directory")
         current_count = cur.fetchone()[0]
 
     if not users:
@@ -302,8 +331,8 @@ def sync_user_directory(conn, users: list) -> int:
         with conn.cursor() as cur:
             for u in users:
                 cur.execute(
-                    """
-                    INSERT INTO user_directory (user_id, email, updated_at)
+                    f"""
+                    INSERT INTO {ATTRIBUTION_SCHEMA}.user_directory (user_id, email, updated_at)
                     VALUES (%s, %s, now())
                     ON CONFLICT (user_id) DO UPDATE SET
                         email = EXCLUDED.email,
@@ -366,8 +395,8 @@ def main() -> int:
         status = "success" if ok else "failed"
         with conn.cursor() as cur:
             cur.execute(
-                """
-                INSERT INTO sync_run_log
+                f"""
+                INSERT INTO {ATTRIBUTION_SCHEMA}.sync_run_log
                     (status, dept_map_synced, user_directory_synced, duration_seconds, detail)
                 VALUES (%s, %s, %s, %s, %s)
                 """,

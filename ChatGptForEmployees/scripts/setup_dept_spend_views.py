@@ -12,9 +12,10 @@ rows aggregated differently. This script ships that as two reusable views:
                           division -> total_spend, request_count
   v_spend_by_dept_month  same, period = first-of-month
 
-Join path: LiteLLM_SpendLogs.end_user -> user_directory.user_id -> email ->
-dept_map.email -> department/division (see sync_okta_attribution.py for how
-those two bridge tables are populated). Both joins are LEFT JOINs and
+Join path: public."LiteLLM_SpendLogs".end_user -> attribution.user_directory.user_id
+-> email -> attribution.dept_map.email -> department/division (see
+sync_okta_attribution.py for how those two bridge tables are populated, and for
+why they and these views live outside `public`). Both joins are LEFT JOINs and
 dept_map is NOT filtered on is_active -- dept_map soft-deletes (not drops) a
 user who leaves Okta specifically so their historical spend still resolves
 to a department. department/division are COALESCEd to 'Unknown' so any
@@ -65,20 +66,30 @@ log = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
+# Both the bridge tables and these views live in the `attribution` schema, NOT
+# `public` -- LiteLLM's Prisma schema push drops unrecognized objects in the
+# schema it manages on every container restart. Must match
+# sync_okta_attribution.py's ATTRIBUTION_SCHEMA. See that script for the full
+# rationale.
+ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+
 # Pinned reporting timezone (see module docstring). Change here and re-run to
 # repin -- CREATE OR REPLACE VIEW makes this idempotent.
 REPORT_TIMEZONE = "America/New_York"
 
-_JOIN = """
-FROM "LiteLLM_SpendLogs" sl
-LEFT JOIN user_directory ud ON ud.user_id = sl.end_user
-LEFT JOIN dept_map dm ON dm.email = ud.email
+# "LiteLLM_SpendLogs" stays in `public` -- it is Prisma's, not ours.
+_JOIN = f"""
+FROM public."LiteLLM_SpendLogs" sl
+LEFT JOIN {ATTRIBUTION_SCHEMA}.user_directory ud ON ud.user_id = sl.end_user
+LEFT JOIN {ATTRIBUTION_SCHEMA}.dept_map dm ON dm.email = ud.email
 """
 
 _LOCAL_START_TIME = f'(sl."startTime" AT TIME ZONE \'UTC\') AT TIME ZONE \'{REPORT_TIMEZONE}\''
 
+DDL_SCHEMA = f"CREATE SCHEMA IF NOT EXISTS {ATTRIBUTION_SCHEMA};"
+
 DDL_WEEK_VIEW = f"""
-CREATE OR REPLACE VIEW v_spend_by_dept_week AS
+CREATE OR REPLACE VIEW {ATTRIBUTION_SCHEMA}.v_spend_by_dept_week AS
 SELECT
     date_trunc('week', {_LOCAL_START_TIME}) AS period,
     COALESCE(dm.department, 'Unknown') AS department,
@@ -90,7 +101,7 @@ GROUP BY 1, 2, 3;
 """
 
 DDL_MONTH_VIEW = f"""
-CREATE OR REPLACE VIEW v_spend_by_dept_month AS
+CREATE OR REPLACE VIEW {ATTRIBUTION_SCHEMA}.v_spend_by_dept_month AS
 SELECT
     date_trunc('month', {_LOCAL_START_TIME}) AS period,
     COALESCE(dm.department, 'Unknown') AS department,
@@ -122,14 +133,19 @@ def main() -> int:
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
+            # The sync job creates this too, but this script can legitimately
+            # run first on a fresh environment.
+            cur.execute(DDL_SCHEMA)
             cur.execute(DDL_WEEK_VIEW)
             cur.execute(DDL_MONTH_VIEW)
         conn.commit()
     finally:
         conn.close()
 
-    log.info("Created/replaced view: v_spend_by_dept_week (period=week, tz=%s)", REPORT_TIMEZONE)
-    log.info("Created/replaced view: v_spend_by_dept_month (period=month, tz=%s)", REPORT_TIMEZONE)
+    log.info("Created/replaced view: %s.v_spend_by_dept_week (period=week, tz=%s)",
+             ATTRIBUTION_SCHEMA, REPORT_TIMEZONE)
+    log.info("Created/replaced view: %s.v_spend_by_dept_month (period=month, tz=%s)",
+             ATTRIBUTION_SCHEMA, REPORT_TIMEZONE)
     log.info("All-time/running-total query (not a view, for ad-hoc use):\n%s", RUNNING_TOTAL_QUERY)
     return 0
 

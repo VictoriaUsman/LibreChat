@@ -62,6 +62,19 @@ OKTA_ORG_URL = os.environ.get("OKTA_ORG_URL", "").rstrip("/")
 OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN", "")
 TEST_EMAIL = os.environ.get("OKTA_TEST_USER_EMAIL", "")
 
+# Must match sync_okta_attribution.py's ATTRIBUTION_SCHEMA -- the attribution
+# tables deliberately live outside `public` so LiteLLM's Prisma push can't drop
+# them. Every reference below is schema-qualified rather than relying on
+# search_path, so a mismatch fails loudly instead of silently inspecting the
+# wrong (or a non-existent) table.
+ATTRIBUTION_SCHEMA = os.environ.get("ATTRIBUTION_SCHEMA", "attribution")
+
+
+def q(table):
+    """Schema-qualified table name."""
+    return f"{ATTRIBUTION_SCHEMA}.{table}"
+
+
 SYNC_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sync_okta_attribution.py")
 
 if not DATABASE_URL:
@@ -95,8 +108,9 @@ def finding(label):
 def table_columns(conn, table):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
-            (table,),
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s",
+            (ATTRIBUTION_SCHEMA, table),
         )
         return {row[0] for row in cur.fetchall()}
 
@@ -113,7 +127,7 @@ SNAPSHOT_COLUMNS = {
 
 def table_snapshot(conn, table, order_by):
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {SNAPSHOT_COLUMNS[table]} FROM {table} ORDER BY {order_by}")
+        cur.execute(f"SELECT {SNAPSHOT_COLUMNS[table]} FROM {q(table)} ORDER BY {order_by}")
         return cur.fetchall()
 
 
@@ -159,7 +173,7 @@ okta_configured = bool(OKTA_ORG_URL and OKTA_API_TOKEN)
 for table in expected:
     try:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT count(*) FROM {table}")
+            cur.execute(f"SELECT count(*) FROM {q(table)}")
             count = cur.fetchone()[0]
         if count > 0:
             ok(f'"{table}" has {count} row(s)')
@@ -185,7 +199,7 @@ else:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT department, division, is_active FROM dept_map WHERE email = %s",
+                f"SELECT department, division, is_active FROM {q('dept_map')} WHERE email = %s",
                 (TEST_EMAIL,),
             )
             row = cur.fetchone()
@@ -237,7 +251,7 @@ run_log_count_after = None
 
 try:
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM sync_run_log")
+        cur.execute(f"SELECT count(*) FROM {q('sync_run_log')}")
         run_log_count_before = cur.fetchone()[0]
 
     rc1, out1, err1 = run_sync()
@@ -267,7 +281,7 @@ try:
                     fail(f'"{table}" changed between runs', "table state is not idempotent")
 
             with conn.cursor() as cur:
-                cur.execute("SELECT count(*) FROM sync_run_log")
+                cur.execute(f"SELECT count(*) FROM {q('sync_run_log')}")
                 run_log_count_after = cur.fetchone()[0]
 except Exception as e:
     fail("Idempotency check failed", str(e))
@@ -302,7 +316,7 @@ else:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT status, duration_seconds, detail FROM sync_run_log "
+                f"SELECT status, duration_seconds, detail FROM {q('sync_run_log')} "
                 "ORDER BY run_at DESC LIMIT 2"
             )
             last_two = cur.fetchall()
