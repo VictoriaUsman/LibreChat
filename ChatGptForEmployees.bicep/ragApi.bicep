@@ -3,6 +3,14 @@ param location string = 'eastus'
 param environmentId string
 param ragApiImage string
 param minReplicas int = 0
+param maxReplicas int = 2
+// In-flight requests per replica that trigger a scale-out (ACA's default is 10 when no rule
+// is declared). Set from main.bicep, which tunes it per service.
+param concurrentRequests int = 10
+// cpu is a string so it can be passed through json() below (the ARM property is numeric).
+// cpu:memory must hold ACA's 1:2 vCPU:GiB ratio — main.bicep pairs them in one object.
+param containerCpu string = '0.5'
+param containerMemory string = '1Gi'
 param azureOpenAiEndpoint string
 @secure()
 param azureOpenAiApiKey string
@@ -45,8 +53,8 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'rag-api'
           image: ragApiImage
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json(containerCpu)
+            memory: containerMemory
           }
           env: [
             { name: 'HOST', value: '0.0.0.0' }
@@ -86,9 +94,25 @@ resource ragApiApp 'Microsoft.App/containerApps@2024-03-01' = {
           ]
         }
       ]
+      // Declaring an explicit rule replaces ACA's implicit default (HTTP, 10 concurrent
+      // requests per replica). This is the most conservative threshold of the three and tops
+      // out lowest: traffic arrives only on document upload and File Search retrieval, not on
+      // every turn. The embedding calls themselves are remote (EMBEDDINGS_PROVIDER: azure), so
+      // those are I/O waits — the genuinely heavy work is parsing and chunking a large upload,
+      // where memory is the binding constraint rather than CPU.
       scale: {
         minReplicas: minReplicas
-        maxReplicas: 2
+        maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'http-concurrency'
+            http: {
+              metadata: {
+                concurrentRequests: string(concurrentRequests)
+              }
+            }
+          }
+        ]
       }
     }
   }

@@ -3,6 +3,14 @@ param location string = 'eastus'
 param environmentId string
 param liteLlmImage string
 param minReplicas int = 0
+param maxReplicas int = 2
+// In-flight requests per replica that trigger a scale-out (ACA's default is 10 when no rule
+// is declared). Set from main.bicep, which tunes it per service.
+param concurrentRequests int = 10
+// cpu is a string so it can be passed through json() below (the ARM property is numeric).
+// cpu:memory must hold ACA's 1:2 vCPU:GiB ratio — main.bicep pairs them in one object.
+param containerCpu string = '0.5'
+param containerMemory string = '1Gi'
 param appInsightsConnectionString string
 param azureOpenAiEndpoint string
 @secure()
@@ -40,8 +48,8 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'litellm'
           image: liteLlmImage
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json(containerCpu)
+            memory: containerMemory
           }
           args: [
             '--config'
@@ -89,9 +97,43 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
           storageName: 'litellm-config-store'
         }
       ]
+      // Declaring an explicit rule replaces ACA's implicit default (HTTP, 10 concurrent
+      // requests per replica). The threshold is deliberately AT OR BELOW LibreChat's, not
+      // above it: every chat turn becomes a request here, and the container runs a single
+      // uvicorn worker (no --num_workers in the args above), so one GIL-bound process does
+      // the SSE parsing, token counting, per-chunk pricing, and spend-log write. It contends
+      // on CPU long before a generous threshold would trip. See main.bicep for the numbers.
+      //
+      // ⚠️ Running more than one replica means the router's in-memory state is PER REPLICA,
+      // not shared:
+      //   • rate-limit / TPM tracking — each replica admits up to its own limit, so N replicas
+      //     admit N× what a single instance would.
+      //   • deployment cooldown — after a primary 429s, each replica learns that independently,
+      //     so a sustained Azure throttle has every replica burn its own num_retries before
+      //     failing over. Extra retry pressure on an already-throttling endpoint, not a
+      //     correctness break.
+      // Harmless while nothing enforcement-shaped is in the request path — spend logging goes
+      // to Postgres and is transactional, so it is unaffected — but a shared Redis cache is a
+      // prerequisite before turning budget or rate-limit enforcement on for real traffic.
+      //
+      // ⚠️ That "nothing enforced" claim is about the CONFIG, which sets no max_budget and no
+      // per-model rpm/tpm. Budgets and limits can also be attached at runtime to the virtual
+      // key LibreChat authenticates with (liteLlmVirtualKey). If that key carries a budget or
+      // rate limit, enforcement IS in the request path and the per-replica caveat above
+      // applies for real. Verify the key's settings in LiteLLM before scaling prod out.
       scale: {
         minReplicas: minReplicas
-        maxReplicas: 2
+        maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'http-concurrency'
+            http: {
+              metadata: {
+                concurrentRequests: string(concurrentRequests)
+              }
+            }
+          }
+        ]
       }
     }
   }
