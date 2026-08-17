@@ -30,6 +30,7 @@ Required environment variables (same .env as setup_dept_spend_views.py):
 """
 
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -54,6 +55,27 @@ except ImportError:
     REPORT_TIMEZONE = "America/New_York"  # fallback; keep in sync with setup_dept_spend_views.py
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Must match sync_okta_attribution.py / setup_dept_spend_views.py. The bridge
+# tables and the reporting views live outside `public` so LiteLLM's Prisma push
+# can't drop them; "LiteLLM_SpendLogs" stays in `public` because it is Prisma's.
+def _resolve_attribution_schema() -> str:
+    """Normalize and validate the target schema. Must match
+    sync_okta_attribution.py's copy -- see there for the full rationale. The
+    lowercasing matters here specifically: the information_schema lookups below
+    compare this string against catalog values, which Postgres stores
+    down-folded."""
+    name = os.environ.get("ATTRIBUTION_SCHEMA", "attribution").strip().lower()
+    if name == "public" or not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        raise ValueError(
+            f"ATTRIBUTION_SCHEMA={name!r} is invalid: must be a simple identifier "
+            "and must not be `public` -- LiteLLM's Prisma push drops unrecognized "
+            "objects in `public` on every container restart."
+        )
+    return name
+
+
+ATTRIBUTION_SCHEMA = _resolve_attribution_schema()
 
 if not DATABASE_URL:
     print("ERROR: Missing required environment variable: DATABASE_URL")
@@ -106,7 +128,7 @@ def fail(label, detail=""):
 def insert_spend_row(cur, request_id, end_user, spend, start_time):
     cur.execute(
         """
-        INSERT INTO "LiteLLM_SpendLogs"
+        INSERT INTO public."LiteLLM_SpendLogs"
             (request_id, call_type, spend, total_tokens, prompt_tokens,
              completion_tokens, model, "startTime", "endTime", end_user)
         VALUES (%s, 'completion', %s, 10, 7, 3, 'test-fixture-model', %s, %s, %s)
@@ -119,8 +141,8 @@ def insert_spend_row(cur, request_id, end_user, spend, start_time):
 def seed(conn):
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO dept_map (email, department, division, is_active, updated_at)
+            f"""
+            INSERT INTO {ATTRIBUTION_SCHEMA}.dept_map (email, department, division, is_active, updated_at)
             VALUES (%s, %s, %s, true, now())
             ON CONFLICT (email) DO UPDATE SET
                 department = EXCLUDED.department,
@@ -132,8 +154,8 @@ def seed(conn):
             (TEST_EMAIL, TEST_DEPARTMENT, TEST_DIVISION),
         )
         cur.execute(
-            """
-            INSERT INTO user_directory (user_id, email, updated_at)
+            f"""
+            INSERT INTO {ATTRIBUTION_SCHEMA}.user_directory (user_id, email, updated_at)
             VALUES (%s, %s, now())
             ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, updated_at = now()
             """,
@@ -146,13 +168,27 @@ def seed(conn):
 
 
 def cleanup(conn):
+    # seed() commits its fixture rows, so they outlive any later failure. If a
+    # test raised mid-transaction (e.g. the views don't exist yet), the
+    # connection is in INFAILEDSQLTRANSACTION and every DELETE below would
+    # raise InFailedSqlTransaction -- masking the real error AND skipping the
+    # cleanup, leaving fixture rows in "LiteLLM_SpendLogs" permanently, where
+    # they show up in the real department='Unknown' rollup. Roll back first so
+    # cleanup always runs on a usable connection.
+    conn.rollback()
     with conn.cursor() as cur:
         cur.execute(
-            'DELETE FROM "LiteLLM_SpendLogs" WHERE request_id = ANY(%s)',
+            'DELETE FROM public."LiteLLM_SpendLogs" WHERE request_id = ANY(%s)',
             (list(FIXTURE_ROW_IDS),),
         )
-        cur.execute("DELETE FROM user_directory WHERE user_id = %s", (TEST_USER_ID,))
-        cur.execute("DELETE FROM dept_map WHERE email = %s", (TEST_EMAIL,))
+        cur.execute(
+            f"DELETE FROM {ATTRIBUTION_SCHEMA}.user_directory WHERE user_id = %s",
+            (TEST_USER_ID,),
+        )
+        cur.execute(
+            f"DELETE FROM {ATTRIBUTION_SCHEMA}.dept_map WHERE email = %s",
+            (TEST_EMAIL,),
+        )
     conn.commit()
 
 
@@ -170,7 +206,9 @@ try:
     with conn.cursor() as cur:
         for view in ("v_spend_by_dept_week", "v_spend_by_dept_month"):
             cur.execute(
-                "SELECT 1 FROM information_schema.views WHERE table_name = %s", (view,)
+                "SELECT 1 FROM information_schema.views "
+                "WHERE table_schema = %s AND table_name = %s",
+                (ATTRIBUTION_SCHEMA, view),
             )
             if cur.fetchone():
                 ok(f'"{view}" exists')
@@ -187,8 +225,8 @@ try:
     print("2. Seeded rows across two months land in the correct v_spend_by_dept_month bucket")
     with conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT period, total_spend FROM v_spend_by_dept_month
+            f"""
+            SELECT period, total_spend FROM {ATTRIBUTION_SCHEMA}.v_spend_by_dept_month
             WHERE department = %s AND division = %s
             ORDER BY period
             """,
@@ -215,8 +253,8 @@ try:
     print("3. Seeded row lands in the correct v_spend_by_dept_week bucket")
     with conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT period, total_spend FROM v_spend_by_dept_week
+            f"""
+            SELECT period, total_spend FROM {ATTRIBUTION_SCHEMA}.v_spend_by_dept_week
             WHERE department = %s AND division = %s
             ORDER BY period
             """,
@@ -240,7 +278,7 @@ try:
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            SELECT total_spend FROM v_spend_by_dept_month
+            SELECT total_spend FROM {ATTRIBUTION_SCHEMA}.v_spend_by_dept_month
             WHERE department = 'Unknown'
               AND period = date_trunc('month', (%s::timestamp AT TIME ZONE 'UTC') AT TIME ZONE '{REPORT_TIMEZONE}')
             """,
