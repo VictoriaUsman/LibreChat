@@ -50,6 +50,13 @@ param openIdSessionSecret      = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff
 param deployJobs               = true
 param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-prod-shared', 'kv-romtech-prod', 'ChatGptForEmployeesProd-OktaApiToken')
 // Scheduled-job failure alert recipients (sync + cleanup jobs). See jobAlerts.bicep.
+
+// ADO 11662 — a NEW address here requires one-time passcode verification.
+// APPEND to the end of this list; do not insert (receivers are named
+// positionally in jobAlerts.bicep, so inserting rewrites the others).
+// The new recipient must complete the passcode within 30 minutes of the
+// deploy or they will silently receive nothing, with no deployment error.
+// After deploying, run 04-verify-receivers.sh and confirm exit 0.
 param alertEmailAddresses      = [
   'behnam.bozorgi@romtech.com'
   'andrea.tiamson@romtech.com'
