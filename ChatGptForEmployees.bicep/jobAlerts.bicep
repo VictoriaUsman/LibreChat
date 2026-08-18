@@ -19,6 +19,42 @@
 // failure, then `union` an execution-failure clause into `failureQuery`. Left out
 // here deliberately rather than shipped as unverified KQL. (Tracked as a follow-up.)
 
+
+// ── OTP VERIFICATION REQUIREMENT (ADO 11662) ─────────────────────────────────
+// Since 17 Jul 2026 Azure Monitor requires a one-time passcode before a NEWLY
+// added email address receives anything from an action group. A pipeline cannot
+// receive or enter that passcode, so a deploy that introduces a new address
+// SUCCEEDS while that recipient silently receives nothing. Azure still reports
+// the action group as healthy. There is no error to catch.
+//
+// Rules for changing alertEmailAddresses:
+//
+//  1. APPEND ONLY — never insert. Receivers are named positionally
+//     (jobalerts-${i}), so inserting an address anywhere but the end renames
+//     every receiver after it. Azure then sees receivers changing identity
+//     rather than one being added, which may re-challenge people who were
+//     already verified. Add new addresses to the END of the array.
+//
+//  2. A brand-new address needs a human to complete the passcode within 30
+//     MINUTES of the deploy. Schedule the deploy for when that person is at
+//     their desk. If the code expires, use Resend on the action group blade —
+//     do not redeploy to force a new code.
+//
+//  3. Verification persists per address per TENANT, across existing and future
+//     action groups. An address already verified anywhere in ROMTech needs no
+//     further action here.
+//
+//  4. Do NOT add a `status` property to emailReceivers. It is response-side;
+//     writing 'Enabled' does not bypass verification.
+//
+//  5. AFTER any deploy that changes alertEmailAddresses, run the check:
+//       ./scripts/04-verify-receivers.sh --verified ./state/verified-addresses.txt
+//     exit 0 = clear · exit 3 = an unverified recipient · exit 2 = incomplete
+//     coverage, which is NOT a pass.
+//
+// Runbook: <https://dev.azure.com/ROMTechInc/ROMTech%20Solutions/_wiki/wikis/ROMTech-Solutions.wiki/1059/Adding-an-email-recipient-to-an-Azure-Monitor-action-group-(OTP-verification)>      
+// Work item: ADO 11662
+
 param envName string = 'Dev'
 param location string = 'eastus'
 // Log Analytics workspace the ACA environment logs to (main.bicep: cdb-workspace-<env>).

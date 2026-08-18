@@ -63,6 +63,13 @@ param deployJobs               = true
 param oktaApiToken             = getSecret('e64069c2-4b14-4c32-a1f0-3493457f0eff', 'rg-dev-shared', 'kv-romtech-dev', 'ChatGptForEmployeesDev-OktaApiToken')
 // Scheduled-job failure alert recipients. Azure Monitor emails these on a sync or
 // cleanup job failure (jobAlerts.bicep). Empty [] = no alert deployed.
+
+// ADO 11662 — a NEW address here requires one-time passcode verification.
+// APPEND to the end of this list; do not insert (receivers are named
+// positionally in jobAlerts.bicep, so inserting rewrites the others).
+// The new recipient must complete the passcode within 30 minutes of the
+// deploy or they will silently receive nothing, with no deployment error.
+// After deploying, run 04-verify-receivers.sh and confirm exit 0.
 param alertEmailAddresses      = [
   'behnam.bozorgi@romtech.com'
   'andrea.tiamson@romtech.com'
