@@ -1,7 +1,7 @@
 const passport = require('passport');
 const session = require('express-session');
 const { CacheKeys } = require('librechat-data-provider');
-const { isEnabled, shouldUseSecureCookie } = require('@librechat/api');
+const { isEnabled, shouldUseSecureCookie, sessionCookieSameSite } = require('@librechat/api');
 const { logger, DEFAULT_SESSION_EXPIRY } = require('@librechat/data-schemas');
 const {
   openIdJwtLogin,
@@ -36,6 +36,9 @@ async function configureOpenId(app) {
     cookie: {
       maxAge: sessionExpiry,
       secure: shouldUseSecureCookie(),
+      // Spread rather than assign: undefined is the default and must leave express-session's
+      // behaviour byte-identical, because every existing deployment relies on it.
+      ...(sessionCookieSameSite() ? { sameSite: sessionCookieSameSite() } : {}),
     },
   };
   app.use(session(sessionOptions));
@@ -106,6 +109,9 @@ const configureSocialLogins = async (app) => {
       cookie: {
         maxAge: sessionExpiry,
         secure: shouldUseSecureCookie(),
+        // Spread rather than assign: undefined is the default and must leave express-session's
+        // behaviour byte-identical, because every existing deployment relies on it.
+        ...(sessionCookieSameSite() ? { sameSite: sessionCookieSameSite() } : {}),
       },
     };
     app.use(session(sessionOptions));

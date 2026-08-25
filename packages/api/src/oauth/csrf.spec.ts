@@ -1,4 +1,4 @@
-import { shouldUseSecureCookie } from './csrf';
+import { shouldUseSecureCookie, sessionCookieSameSite } from './csrf';
 
 describe('shouldUseSecureCookie', () => {
   const originalEnv = process.env;
@@ -124,5 +124,57 @@ describe('shouldUseSecureCookie', () => {
       process.env.DOMAIN_SERVER = 'http://LOCALHOST:3080';
       expect(shouldUseSecureCookie()).toBe(false);
     });
+  });
+});
+
+describe('sessionCookieSameSite', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.SESSION_COOKIE_SAME_SITE;
+    delete process.env.SESSION_COOKIE_SECURE;
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('is undefined when unset, so existing deployments are unchanged', () => {
+    // The load-bearing case. Every deployment that has never heard of this variable must keep the
+    // exact cookie it has today; returning a value here would change behaviour for all of them.
+    expect(sessionCookieSameSite()).toBeUndefined();
+  });
+
+  it('is undefined for an unrecognised value rather than passing it through', () => {
+    process.env.SESSION_COOKIE_SAME_SITE = 'yes-please';
+    expect(sessionCookieSameSite()).toBeUndefined();
+  });
+
+  it('accepts lax and strict, case- and whitespace-insensitively', () => {
+    process.env.SESSION_COOKIE_SAME_SITE = '  LAX ';
+    expect(sessionCookieSameSite()).toBe('lax');
+    process.env.SESSION_COOKIE_SAME_SITE = 'Strict';
+    expect(sessionCookieSameSite()).toBe('strict');
+  });
+
+  it('honours none when the cookie is Secure', () => {
+    process.env.SESSION_COOKIE_SAME_SITE = 'none';
+    process.env.SESSION_COOKIE_SECURE = 'true';
+    expect(sessionCookieSameSite()).toBe('none');
+  });
+
+  it('refuses none when the cookie is NOT Secure, because the browser would drop it', () => {
+    // SameSite=None without Secure is rejected outright by browsers. Falling back to the default is
+    // recoverable and visible; emitting a cookie that silently never arrives is neither.
+    process.env.SESSION_COOKIE_SAME_SITE = 'none';
+    process.env.SESSION_COOKIE_SECURE = 'false';
+    expect(sessionCookieSameSite()).toBeUndefined();
+  });
+
+  it('still allows lax without Secure — only none has the Secure requirement', () => {
+    process.env.SESSION_COOKIE_SAME_SITE = 'lax';
+    process.env.SESSION_COOKIE_SECURE = 'false';
+    expect(sessionCookieSameSite()).toBe('lax');
   });
 });

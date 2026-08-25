@@ -47,6 +47,30 @@ export function shouldUseSecureCookie(): boolean {
   return isProduction && !isLocalhost;
 }
 
+/**
+ * The SameSite attribute for the login session cookie, or `undefined` to leave it unset.
+ *
+ * Unset is the default and preserves express-session's existing behaviour exactly, which browsers
+ * treat as SameSite=Lax. Only set SESSION_COOKIE_SAME_SITE when the app is EMBEDDED in a page served
+ * from a different site: a Lax cookie is not sent on cross-site subresource requests, so the OIDC
+ * state written before the provider redirect cannot be read back at the callback, and login fails
+ * with an opaque "Unknown OAuth error".
+ *
+ * `none` REQUIRES a Secure cookie — browsers reject SameSite=None without it — so it is only honoured
+ * when {@link shouldUseSecureCookie} agrees. Returning `undefined` instead of silently downgrading is
+ * deliberate: a cookie the browser drops is harder to diagnose than one that behaves as it always has.
+ */
+export function sessionCookieSameSite(): 'lax' | 'strict' | 'none' | undefined {
+  const raw = process.env.SESSION_COOKIE_SAME_SITE?.trim().toLowerCase();
+  if (raw !== 'lax' && raw !== 'strict' && raw !== 'none') {
+    return undefined;
+  }
+  if (raw === 'none' && !shouldUseSecureCookie()) {
+    return undefined;
+  }
+  return raw;
+}
+
 /** Generates an HMAC-based token for OAuth CSRF protection */
 export function generateOAuthCsrfToken(flowId: string, secret?: string): string {
   const key = secret || process.env.JWT_SECRET;
