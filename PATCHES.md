@@ -1070,6 +1070,39 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 <!-- new entries go here -->
 
+### Configurable SameSite on the login session cookie
+
+- **Work item:** ROMTech Staff App — architecture assistant (embedded ROMChat)
+- **Added:** 2026-08-25 by Jack Stanley
+- **Files touched:** `packages/api/src/oauth/csrf.ts`, `packages/api/src/oauth/csrf.spec.ts`, `api/server/socialLogins.js`
+- **What:** Adds `sessionCookieSameSite()` beside the existing `shouldUseSecureCookie()`, reading a new
+  optional `SESSION_COOKIE_SAME_SITE` env var, and spreads its result into the OpenID **and** SAML session
+  cookie options. Unset — the default, and what every current deployment has — returns `undefined` and leaves
+  express-session's behaviour byte-identical.
+- **Why:** ROMChat is being embedded as an iframe in the ROMTech Staff App's Integrations Diagram page. The
+  iframe is served from a different site (`*.azurecontainerapps.io` inside `*.azurewebsites.net`), so
+  `connect.sid` — which has no SameSite attribute and is therefore treated as `Lax` — is never sent on the
+  cross-site request. The OIDC state written before the Okta redirect cannot be read back at the callback, and
+  login fails with an opaque `Error in OAuth authentication: Unknown OAuth error`. Config could not do it:
+  there is no existing env var for the session cookie's SameSite, which is why this is a patch rather than a
+  setting. Everything else about the deployment was verified correct first — client secret (Okta returns
+  `invalid_grant`, not `invalid_client`), redirect URI (matches character for character), and
+  `DOMAIN_SERVER`.
+- **How to verify:** In a deployment with `SESSION_COOKIE_SAME_SITE=none` and a Secure cookie, request any
+  page and inspect the response: `set-cookie: connect.sid=...; SameSite=None; Secure`. Without the variable
+  the same request must show **no** SameSite attribute at all — that absence is the regression test for every
+  existing ROMChat deployment. `none` is deliberately ignored when the cookie would not be Secure, because
+  browsers reject that combination outright and a dropped cookie is harder to diagnose than the default.
+- **Upstream status:** not submitted — worth upstreaming; it is small, additive and generally useful to
+  anyone embedding LibreChat.
+- **Merge notes:** Sits directly beside upstream's `shouldUseSecureCookie()` in `oauth/csrf.ts` and follows
+  its `SESSION_COOKIE_SECURE` convention, so it should read as native code at merge time. The
+  `socialLogins.js` change is three lines inside two `cookie: {}` literals that upstream touches
+  occasionally (last: PKCE #12364, admin-auth #12472) — expect conflicts there, not in the helper. **Drop this
+  patch entirely** if upstream adds any SameSite control of its own; the env var name is ours, so prefer
+  upstream's spelling over keeping this.
+
+
 ---
 
 ## Upstream merge procedure
