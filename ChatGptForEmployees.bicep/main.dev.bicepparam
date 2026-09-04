@@ -5,7 +5,13 @@ param rgName = 'rg-dev-shared'
 param location = 'eastus2'
 param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 
-param liteLlmImage = 'ghcr.io/berriai/litellm:main-v1.57.4'
+// Bumped from main-v1.57.4 to v1.99.0 to pick up fixes for CVE-2026-42208 (pre-auth SQL
+// injection via a crafted Authorization header, CVSS 9.3) and CVE-2026-42271 (command
+// injection/RCE chain via the MCP test endpoint, CVSS 8.7-10.0), both of which affect every
+// version from 1.57.4 through 1.83.6. Patched upstream in v1.83.7-stable; v1.99.0 is the
+// latest published release. Note the tag format itself changed (main-vX.Y.Z -> vX.Y.Z)
+// somewhere after 1.57.4 — verified v1.99.0 exists in ghcr.io/berriai/litellm before pinning it.
+param liteLlmImage = 'ghcr.io/berriai/litellm:v1.99.0'
 // LibreChat runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from our
 // ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
 // run the fork's build pipeline, copy the digest it prints, and paste it here.
