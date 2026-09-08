@@ -15,6 +15,7 @@ jest.mock('@librechat/api', () => ({
   isEmailDomainAllowed: jest.fn(),
   math: jest.fn((val, fallback) => (val ? Number(val) : fallback)),
   shouldUseSecureCookie: jest.fn(() => false),
+  sessionCookieSameSite: jest.fn(() => undefined),
   resolveAppConfigForUser: jest.fn(async (_getAppConfig, _user) => ({})),
   setCloudFrontCookies: jest.fn(() => true),
   getCloudFrontConfig: jest.fn(() => ({
@@ -63,6 +64,7 @@ jest.mock('~/server/utils', () => ({ sendEmail: jest.fn() }));
 const {
   checkEmailConfig,
   shouldUseSecureCookie,
+  sessionCookieSameSite,
   isEmailDomainAllowed,
   resolveAppConfigForUser,
   setCloudFrontCookies,
@@ -286,6 +288,43 @@ describe('setOpenIDAuthTokens', () => {
       expect(result).toBe('new-access-token');
       expect(req.session.openidTokens.idToken).toBe(nearExpiryIdToken);
       expect(req.session.openidTokens.accessToken).toBe('new-access-token');
+    });
+  });
+
+  describe('cookie sameSite follows SESSION_COOKIE_SAME_SITE (ROMTech patch, PATCHES.md)', () => {
+    afterEach(() => {
+      sessionCookieSameSite.mockReturnValue(undefined);
+    });
+
+    it('defaults every cookie to strict when the variable is unset, so existing deployments are unchanged', () => {
+      const tokenset = { id_token: 'the-id-token', access_token: 'the-access-token', refresh_token: 'the-refresh-token' };
+      const req = mockRequest();
+      const res = mockResponse();
+
+      setOpenIDAuthTokens(tokenset, req, res, 'user-123');
+
+      expect(Object.keys(res._cookies)).toEqual(expect.arrayContaining(['refreshToken', 'token_provider']));
+      for (const [name, cookie] of Object.entries(res._cookies)) {
+        expect({ name, sameSite: cookie.options.sameSite }).toEqual({ name, sameSite: 'strict' });
+      }
+    });
+
+    it('applies the configured value to every cookie, including the no-session fallback ones', () => {
+      // An embedded deployment sets the variable to none; a cookie left at strict is never sent from an iframe.
+      sessionCookieSameSite.mockReturnValue('none');
+      const tokenset = { id_token: 'the-id-token', access_token: 'the-access-token', refresh_token: 'the-refresh-token' };
+      const req = mockRequest();
+      req.session = null;
+      const res = mockResponse();
+
+      setOpenIDAuthTokens(tokenset, req, res, 'user-123');
+
+      expect(Object.keys(res._cookies)).toEqual(
+        expect.arrayContaining(['refreshToken', 'token_provider', 'openid_access_token', 'openid_id_token', 'openid_user_id']),
+      );
+      for (const [name, cookie] of Object.entries(res._cookies)) {
+        expect({ name, sameSite: cookie.options.sameSite }).toEqual({ name, sameSite: 'none' });
+      }
     });
   });
 
