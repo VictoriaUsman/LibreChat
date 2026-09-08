@@ -1107,7 +1107,7 @@ Keep the patch set as small as possible. Add entries below as patches land.
 - **Work item:** ROMTech Staff App — architecture assistant (embedded ROMChat)
 - **Added:** 2026-09-08 by Jack Stanley
 - **Files touched:** `api/server/services/AuthService.js`, `api/server/services/AuthService.spec.js`
-- **What:** The six auth cookies `setAuthTokens` and `setOpenIDAuthTokens` write (`refreshToken`,
+- **What:** The seven auth-cookie writes in `setAuthTokens` and `setOpenIDAuthTokens` (five names: `refreshToken`,
   `token_provider`, `openid_access_token`, `openid_id_token`, `openid_user_id`) were hard-coded
   `sameSite: 'strict'`. They now use `sessionCookieSameSite() ?? 'strict'` — the SAME env var the patch above
   introduced, with the SAME default. Unset, every cookie is byte-identical to today.
@@ -1124,8 +1124,8 @@ Keep the patch set as small as possible. Add entries below as patches land.
   `token_provider`. Without the variable both must still read `SameSite=Strict` — the spec pins both halves.
   The end-to-end proof is the embedded panel reaching the chat box after ONE `login success` line.
 - **Upstream status:** not submitted — belongs with the patch above if that is ever upstreamed; on its own it
-  is six one-line changes.
-- **Merge notes:** Six identical one-line edits inside cookie option literals in `AuthService.js`, which
+  is seven one-line changes.
+- **Merge notes:** Seven identical one-line edits inside cookie option literals in `AuthService.js`, which
   upstream touches when it changes token storage (last: session-stored OIDC tokens). A conflict is a rebase of
   `sameSite: sessionCookieSameSite() ?? 'strict'` onto whatever the literal became. **Drop this patch
   entirely** together with the one above if upstream adds SameSite control of its own.
