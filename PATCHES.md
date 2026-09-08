@@ -1102,6 +1102,34 @@ Keep the patch set as small as possible. Add entries below as patches land.
   patch entirely** if upstream adds any SameSite control of its own; the env var name is ours, so prefer
   upstream's spelling over keeping this.
 
+### The same SameSite setting on the auth cookies (refreshToken, token_provider, openid_*)
+
+- **Work item:** ROMTech Staff App — architecture assistant (embedded ROMChat)
+- **Added:** 2026-09-08 by Jack Stanley
+- **Files touched:** `api/server/services/AuthService.js`, `api/server/services/AuthService.spec.js`
+- **What:** The seven auth-cookie writes in `setAuthTokens` and `setOpenIDAuthTokens` (five names: `refreshToken`,
+  `token_provider`, `openid_access_token`, `openid_id_token`, `openid_user_id`) were hard-coded
+  `sameSite: 'strict'`. They now use `sessionCookieSameSite() ?? 'strict'` — the SAME env var the patch above
+  introduced, with the SAME default. Unset, every cookie is byte-identical to today.
+- **Why:** The patch above got the embedded sign-in as far as the Okta callback, and then it looped. Measured
+  in the ROMStaff dev assistant on 2026-09-08: `[openidStrategy] login success` THREE times in four seconds for
+  one person, then `Too many login attempts, please try again after 5 minutes` from the login limiter. The
+  callback succeeded and set `refreshToken` and `token_provider` — `SameSite=Strict` — so the cross-site iframe
+  never sent them back; `/api/auth/refresh` found no cookie, the client believed it was signed out,
+  `OPENID_AUTO_REDIRECT` sent it to Okta again, Okta's session answered instantly, and the loop ran until the
+  limiter stopped it. Fixing `connect.sid` alone moved the failure from the callback to the first request after
+  it. ROMChat never sees this because it is only ever used top-level, where Strict cookies are always sent.
+- **How to verify:** With `SESSION_COOKIE_SAME_SITE=none` and a Secure cookie, complete a sign-in and inspect
+  the callback response: `set-cookie: refreshToken=...; SameSite=None; Secure` and the same on
+  `token_provider`. Without the variable both must still read `SameSite=Strict` — the spec pins both halves.
+  The end-to-end proof is the embedded panel reaching the chat box after ONE `login success` line.
+- **Upstream status:** not submitted — belongs with the patch above if that is ever upstreamed; on its own it
+  is seven one-line changes.
+- **Merge notes:** Seven identical one-line edits inside cookie option literals in `AuthService.js`, which
+  upstream touches when it changes token storage (last: session-stored OIDC tokens). A conflict is a rebase of
+  `sameSite: sessionCookieSameSite() ?? 'strict'` onto whatever the literal became. **Drop this patch
+  entirely** together with the one above if upstream adds SameSite control of its own.
+
 
 ---
 
