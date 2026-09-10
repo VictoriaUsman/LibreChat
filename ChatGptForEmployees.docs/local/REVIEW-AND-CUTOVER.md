@@ -597,7 +597,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to scale down ca-litellm-dev; stop." }
 Confirm zero running revisions/replicas via `az containerapp replica list`
 before continuing. Both scheduled jobs are already paused from Step 2.
 
-**Step 3b — Capture pre-remediation baseline.**
+**Step 3.5 — Capture pre-remediation baseline.**
 
 Row counts and view resolution recorded here are what Step 8's "before vs.
 after" verification compares against — without this step, that later check
@@ -768,13 +768,13 @@ Then:
   partway).
 - **Preserved historical data and views:** row counts on `LiteLLM_SpendLogs`,
   `LiteLLM_UserTable`, `LiteLLM_VerificationToken`, and `LiteLLM_OrganizationTable`
-  must match the pre-remediation baseline captured in Step 3b
+  must match the pre-remediation baseline captured in Step 3.5
   (`$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt`) — remediation
   and migration only add columns/tables, they must not have changed row
   counts; the `attribution` schema's two rollup views must still resolve
   (`SELECT count(*) FROM attribution.v_spend_by_dept_week;` and `SELECT
   count(*) FROM attribution.v_spend_by_dept_month;`), and their counts should
-  match Step 3b's baseline too (same file).
+  match Step 3.5's baseline too (same file).
 - **Prompt-storage check:** restart `ca-litellm-dev` using the scale settings
   captured in Step 3 (`$env:TEMP\romchat-cutover\ca-litellm-dev-original-scale.json`) rather than an
   assumed value — e.g. `az containerapp update -n ca-litellm-dev -g
