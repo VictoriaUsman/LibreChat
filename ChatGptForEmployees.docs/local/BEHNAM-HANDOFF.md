@@ -19,14 +19,25 @@ authorized handoff.
    paths all showed empty `{}` under the default-off case; §1b — with
    `general_settings.store_prompts_in_spend_logs: false` explicit AND
    `STORE_PROMPTS_IN_SPEND_LOGS=true`, the `response` column was populated
-   with real content, confirming the OR-gate). **Tracked config change made:**
-   both `store_prompts_in_spend_logs: false` (in `litellm_routing_config.yaml`
-   and the local override) and `STORE_PROMPTS_IN_SPEND_LOGS=false` (in
-   `liteLlm.bicep`'s env array) are now pinned explicitly, since either one
-   alone is insufficient. The YAML value still wins over a DB-cached value on
-   reload, so this pin is reload-safe. `turn_off_message_logging` is confirmed
+   with real content, confirming the OR-gate; §1c newly confirms the same
+   `{}` result under the exact configuration actually being shipped — both
+   controls `false` together, not just the default-absent case). **Tracked
+   config change made:** both `store_prompts_in_spend_logs: false` (in
+   `litellm_routing_config.yaml`, plus the local-only override file — see the
+   note below) and `STORE_PROMPTS_IN_SPEND_LOGS=false` (in `liteLlm.bicep`'s
+   env array) are now pinned explicitly, since either one alone is
+   insufficient. The YAML value still wins over a DB-cached value on reload,
+   so this pin is reload-safe. `turn_off_message_logging` is confirmed
    separate. The dev verification query is still pending your migration and
-   real traffic.
+   real traffic. Because `litellm_routing_config.yaml` deploys to every
+   environment from one file, and `liteLlm.bicep`'s env array is identical
+   across environments, both pins land in Test and Prod on their next
+   respective deploy too — not only dev (same shared-module point as item 3
+   below). **Note on the local override:** the edit to
+   `litellm_routing_config.local.yaml` is untracked (its own header says "DO
+   NOT COMMIT, DO NOT DEPLOY") — it exists only on this developer's machine
+   and is not a deployed control, unlike the committed
+   `litellm_routing_config.yaml` and `liteLlm.bicep` changes.
 2. **Environment guard** — rewritten to require an explicit
    `-v target_env=dev`, checked via `set_config`/`current_setting` (psql
    doesn't interpolate inside `DO $$ $$`). Verified locally in an isolated
@@ -60,15 +71,27 @@ authorized handoff.
    history-resolved boundaries are laid out with a phase/state table. No blind
    reruns, no history deletion, no auto-resolve after failure.
 6. **Artifacts in repo** — this file, `REVIEW-AND-CUTOVER.md`,
-   `scripts/01-baseline-remediation.sql`, and `liteLlm.bicep` (the
-   `DISABLE_SCHEMA_UPDATE` change) are committed at the tracked paths the
-   guide specifies, on branch `fix/litellm-cve-upgrade-v1.99.0-dev`, as five
-   local commits:
+   `scripts/01-baseline-remediation.sql`, `liteLlm.bicep` (the
+   `DISABLE_SCHEMA_UPDATE` change), and the review guide itself
+   (`LiteLLM-v1.99.0-Review-Implementation-Guide.md`) are committed at the
+   tracked paths the guide specifies, on branch
+   `fix/litellm-cve-upgrade-v1.99.0-dev`, as eight local commits (in order;
+   current as of `git log --oneline` at the time of this round of fixes):
    - `b7995cd` — corrected remediation SQL with target_env guard
    - `b824cee` — disable automatic schema mutation on startup
    - `20dc3fb` — finalized cutover and rollback runbook
    - `88cabc9` — add executed synthetic test evidence for spend-log storage
    - `7e8f4af` — short handoff response (this file)
+   - `cff94a7` — address final review findings across runbook/handoff/bicep
+   - `e75b04d` — docs: fix five findings from the 2026-09-11 review addendum
+   - `247ae17` — track the review guide itself (it was never committed,
+     despite being listed in its own artifact table)
+
+   Note: `ChatGptForEmployees/config/litellm_routing_config.local.yaml` is
+   edited on this developer's machine as part of this work but is
+   **untracked** (its own file header says "DO NOT COMMIT, DO NOT DEPLOY") —
+   it is not one of the committed artifacts above and is not a deployed
+   control; the edit exists only on this checkout.
 
    These commits are **local to this checkout only** — nothing has been
    pushed. Pushing the branch or opening a PR is a separate, not-yet-authorized
@@ -81,9 +104,12 @@ authorized handoff.
    Capturing/confirming the actual schedule now uses `az containerapp job
    show` (separately from `execution list`, which still checks
    currently-running executions). Pause/resume itself is still written up as
-   owner-executed/pending verification since Azure CLI access isn't available
-   in this preparation environment — this document does not invent an
-   untested specific pause command.
+   owner-executed and **unverified** — Azure CLI access isn't available in
+   this preparation environment — but is no longer left as an abstract
+   description: `REVIEW-AND-CUTOVER.md` §7 now names a concrete candidate
+   (`az containerapp job update --cron-expression "0 0 31 2 *"`, a
+   never-fire February 31st sentinel), explicitly flagged as untested against
+   a real job and requiring confirmation before the maintenance window.
 
 **What's still outstanding and owner-led, not done here:**
 
