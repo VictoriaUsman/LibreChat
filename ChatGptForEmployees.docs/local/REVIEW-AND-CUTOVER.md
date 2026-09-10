@@ -1007,16 +1007,19 @@ prose, is the actual "all 157 rows, not a sample" gate.
   index's validity, in one file (double-quoted identifiers, so `-f` not
   `-c`, per Step 3.5's quoting note):
 
-  ```powershell
-  @'
-  SELECT to_regclass('public."LiteLLM_CredentialsTable"');
-  SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');
-  SELECT column_name FROM information_schema.columns WHERE table_name='LiteLLM_UserTable' AND column_name='sso_user_id';
-  SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid = 'public."LiteLLM_HealthCheckTable_model_id_model_name_checked_at_idx"'::regclass;
-  '@ | Set-Content -Path "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" -Encoding utf8
-  psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-schema-checks.txt"
-  if ($LASTEXITCODE -ne 0) { throw "Post-migration schema check failed to run; stop." }
-  ```
+  (here-string left unindented — see the column-0 note after the checksum
+  script above)
+
+```powershell
+@'
+SELECT to_regclass('public."LiteLLM_CredentialsTable"');
+SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');
+SELECT column_name FROM information_schema.columns WHERE table_name='LiteLLM_UserTable' AND column_name='sso_user_id';
+SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid = 'public."LiteLLM_HealthCheckTable_model_id_model_name_checked_at_idx"'::regclass;
+'@ | Set-Content -Path "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" -Encoding utf8
+psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-schema-checks.txt"
+if ($LASTEXITCODE -ne 0) { throw "Post-migration schema check failed to run; stop." }
+```
 
   Expected: the table's regclass (not `NULL`), `2`, `sso_user_id`, and
   `indisvalid = t` (not `f`, which would mean the `CREATE INDEX CONCURRENTLY`
@@ -1044,16 +1047,18 @@ prose, is the actual "all 157 rows, not a sample" gate.
 
   Row counts remain useful as a quick first look but are not the gate:
 
-  ```powershell
-  @'
-  SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public."LiteLLM_SpendLogs"
-  UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public."LiteLLM_UserTable"
-  UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public."LiteLLM_VerificationToken"
-  UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public."LiteLLM_OrganizationTable";
-  '@ | Set-Content -Path "$env:TEMP\romchat-cutover\06-post-row-counts.sql" -Encoding utf8
-  psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\06-post-row-counts.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt"
-  psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view_name, count(*) FROM attribution.v_spend_by_dept_week UNION ALL SELECT 'attribution.v_spend_by_dept_month', count(*) FROM attribution.v_spend_by_dept_month;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt" -Append
-  ```
+  (here-string left unindented, same reason as above)
+
+```powershell
+@'
+SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public."LiteLLM_SpendLogs"
+UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public."LiteLLM_UserTable"
+UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public."LiteLLM_VerificationToken"
+UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public."LiteLLM_OrganizationTable";
+'@ | Set-Content -Path "$env:TEMP\romchat-cutover\06-post-row-counts.sql" -Encoding utf8
+psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\06-post-row-counts.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt"
+psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view_name, count(*) FROM attribution.v_spend_by_dept_week UNION ALL SELECT 'attribution.v_spend_by_dept_month', count(*) FROM attribution.v_spend_by_dept_month;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt" -Append
+```
 
   Compare both against Step 3.5's `pre-remediation-row-counts.txt`.
 
