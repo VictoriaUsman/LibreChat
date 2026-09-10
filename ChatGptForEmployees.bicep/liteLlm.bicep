@@ -72,7 +72,7 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
             // BEFORE the new image is allowed to start against the database.
             // A conflicting general_settings.disable_prisma_schema_update value
             // in litellm_routing_config.yaml would take precedence over this --
-            // confirmed absent as of this change (Step 1 above).
+            // confirmed absent in litellm_routing_config.yaml as of this change.
             { name: 'DISABLE_SCHEMA_UPDATE', value: 'true' }
           ]
           volumeMounts: [

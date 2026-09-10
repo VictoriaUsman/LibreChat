@@ -3,14 +3,18 @@
 ## Status and scope
 
 No remote DDL, migration resolution, migration deployment, Azure mutation,
-application request, or external message has been performed as part of this
-document or its preparation. All validation was run against ephemeral local
-Docker containers. Files were created only under the tracked repository paths
-listed in the implementation guide; no scratch or dump files were committed.
+application request, or external message has been performed against dev,
+Azure, or any other real environment, as part of this document or its
+preparation. All validation — including the synthetic application requests
+in §1a and a container-run `prisma migrate deploy` against a local ephemeral
+database (also §1a) — was run against ephemeral local Docker containers only;
+none of it touched dev, test, prod, or any Azure resource. Files were created
+only under the tracked repository paths listed in the implementation guide;
+no scratch or dump files were committed.
 
 | Requested item | Status |
 |---|---|
-| 1. Verify exact prompt/response storage behavior | Complete for the pinned image's source; dev result pending owner-led migration |
+| 1. Verify exact prompt/response storage behavior | Complete for the pinned image's source, corroborated by an executed local synthetic runtime test against the pinned image (§1a); dev result against real traffic still pending owner-led migration |
 | 2. Replace the database-name-only environment guard | Complete; SQL and local pass/fail evidence below |
 | 3. Persist manual-migration mode in Bicep | Complete; `DISABLE_SCHEMA_UPDATE=true` added to `liteLlm.bicep` |
 | 4. Rollback scope and timing | Documented below; full recovery rehearsal (sequences, owners, ACLs) still owner-led |
@@ -36,14 +40,14 @@ Both `True` and the case-insensitive string `"true"` are accepted as on;
 anything else (including `None`) is off.
 
 **What is actually written when off** (`_get_response_for_spend_logs_payload`,
-`_get_messages_for_spend_logs_payload`): the literal JSON string `"{}"` in
+`_get_messages_for_spend_logs_payload`): an empty JSON object `{}` in
 both the `response` and `messages` columns — not SQL `NULL`, not an omitted
-field.
+field, and not the two-character string `"{}"`.
 
 **Non-obvious finding:** even when storage IS enabled, `messages` is only ever
 populated for `call_type == "_arealtime"`. Every other call type — including
-ordinary streaming and non-streaming chat completions — writes `"{}"` to
-`messages` regardless of the setting. `response`, by contrast, is populated
+ordinary streaming and non-streaming chat completions — writes an empty JSON
+object `{}` to `messages` regardless of the setting. `response`, by contrast, is populated
 for any call type once storage is enabled.
 
 **Reload/precedence, verified in `proxy_server.py`
@@ -123,10 +127,17 @@ general_settings:
 The `mock_response` field is LiteLLM's own documented test feature: the proxy
 returns the canned string directly, without calling any real provider, so no
 Azure OpenAI credentials were needed and no real prompt content ever left the
-container. The container ran its own startup Prisma migration against the
+container. **This harness deliberately omitted `DISABLE_SCHEMA_UPDATE`** so
+the container would build its own schema from scratch against the fresh
+empty database — the opposite configuration from §3/§3a below, where that
+same env var is set specifically to prevent this automatic migration. The
+container ran its own startup Prisma migration against the
 empty fresh database (all migrations up through
 `20260819000000_add_spend_log_timestamps` applied cleanly) and reported
-`/health/liveliness` = `200` after about 30 seconds.
+`/health/liveliness` = `200` after about 30 seconds. Seeing the auto-migration
+actually run here — and confirming in §3a that it does **not** run when
+`DISABLE_SCHEMA_UPDATE=true` — is direct evidence that the startup
+auto-migration path §3 closes is real, not theoretical.
 
 **Three synthetic requests were sent** (all content is one of the fixed
 markers given in this task's instructions, never real conversation content),
@@ -206,12 +217,91 @@ psql -X -v ON_ERROR_STOP=1 -v target_env=dev -f ChatGptForEmployees/scripts/01-b
 `postgres:16-alpine` container (database name `dev_rehearsal`), never the real
 dev host.
 
-**Verified locally** (see Task 1 of the implementation plan for exact
-commands): missing, blank, `test`, and `prod` values for `target_env` all
-abort with a nonzero `psql` exit code before any DDL runs, leaving the fixture
-schema completely unchanged (`LiteLLM_CredentialsTable` absent,
-`messages`/`response` columns absent). `target_env=dev` against the fixture
-succeeds and produces exactly the expected schema.
+Note: the script's own header comment (inside
+`ChatGptForEmployees/scripts/01-baseline-remediation.sql` itself) shows the
+bare-filename form `-f 01-baseline-remediation.sql`, written for an operator
+whose shell is already inside `ChatGptForEmployees/scripts/`. Every invocation
+in this document uses the repo-root-relative form
+(`-f ChatGptForEmployees/scripts/01-baseline-remediation.sql`) instead, since
+that's the form that actually resolves when running from the repo root, which
+is how every command in this runbook is written to be run.
+
+**Verified locally**, using an isolated `postgres:16-alpine` container
+(`litellm-guard-test`, database `dev_rehearsal`) on a dedicated Docker bridge
+network (`litellm-guard-test-net`), loaded with a pre-remediation fixture (four
+bare tables — `LiteLLM_OrganizationTable`, `LiteLLM_UserTable`,
+`LiteLLM_VerificationToken`, `LiteLLM_SpendLogs` — with no other columns).
+Each case below ran the corrected script from the repo root against that
+fixture:
+
+```powershell
+$psqlBase = @('-h','litellm-guard-test','-U','postgres','-d','dev_rehearsal')
+
+# Case: missing target_env entirely
+psql @psqlBase -X -v ON_ERROR_STOP=1 -f /repo/ChatGptForEmployees/scripts/01-baseline-remediation.sql
+```
+**Result:** `ERROR:  syntax error at or near ":"` (the unsubstituted
+`:'target_env'` literal is invalid inside `set_config()`'s argument list),
+exit code 3.
+
+```powershell
+# Case: blank
+psql @psqlBase -X -v ON_ERROR_STOP=1 -v target_env= -f /repo/ChatGptForEmployees/scripts/01-baseline-remediation.sql
+```
+**Result:** `ERROR:  Wrong target environment; remediation aborted` (raised
+inside the `DO $$` block), exit code 3.
+
+```powershell
+# Case: test
+psql @psqlBase -X -v ON_ERROR_STOP=1 -v target_env=test -f /repo/ChatGptForEmployees/scripts/01-baseline-remediation.sql
+```
+**Result:** `ERROR:  Wrong target environment; remediation aborted`, exit
+code 3.
+
+```powershell
+# Case: prod
+psql @psqlBase -X -v ON_ERROR_STOP=1 -v target_env=prod -f /repo/ChatGptForEmployees/scripts/01-baseline-remediation.sql
+```
+**Result:** `ERROR:  Wrong target environment; remediation aborted`, exit
+code 3.
+
+After all four rejection cases, the fixture schema was confirmed unchanged:
+`SELECT to_regclass('public."LiteLLM_CredentialsTable"');` returned NULL, and
+`SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');`
+returned `0`.
+
+```powershell
+# Case: dev (passing)
+psql @psqlBase -X -v ON_ERROR_STOP=1 -v target_env=dev -f /repo/ChatGptForEmployees/scripts/01-baseline-remediation.sql
+```
+**Result:**
+```
+BEGIN
+SET
+SET
+SET
+ set_config
+-----------
+ dev
+(1 row)
+
+ DO
+ LOCK TABLE
+ CREATE TABLE
+ ALTER TABLE
+ ALTER TABLE
+ ALTER TABLE
+ CREATE INDEX
+ CREATE INDEX
+ ALTER TABLE
+ COMMIT
+Exit code: 0
+```
+
+Post-check confirmed the expected schema: `LiteLLM_CredentialsTable` now
+appears in `pg_tables` alongside the four fixture tables, and
+`information_schema.columns` returns both `messages` and `response` for
+`LiteLLM_SpendLogs`.
 
 **Limitation, stated explicitly:** passing `target_env=dev` expresses operator
 intent only. It does not, by itself, prove the psql connection is actually to
@@ -253,6 +343,115 @@ Prisma's management. It does not, by itself, guarantee that no future
 migration or manual change can ever affect `attribution` — that guarantee
 still depends on `attribution` never being declared in LiteLLM's own
 `schema.prisma`.
+
+**`liteLlm.json` is already stale, independent of this change.** The
+checked-in generated ARM template `ChatGptForEmployees.bicep/liteLlm.json` was
+not regenerated alongside this `liteLlm.bicep` edit — it was already out of
+sync with `liteLlm.bicep` before this change (confirmed against a prior,
+unrelated `liteLlm.bicep` edit that also isn't reflected in the JSON). This is
+not a blocking gap: the deploy pipeline consumes `bicepParamFile` →
+`main.bicep` directly at deploy time, never this checked-in JSON file. Noted
+here for completeness only.
+
+### 3a. Validation limitations and the executed `DISABLE_SCHEMA_UPDATE` test
+
+**(a) `bicep build` was not run locally, and cannot be in this environment.**
+Neither the `bicep` CLI nor the `az` CLI is available in this preparation
+environment (confirmed absent when this change was made — `Get-Command bicep`
+and `Get-Command az` both returned nothing). Syntax validation of
+`liteLlm.bicep` has therefore not happened locally and will not happen here;
+it will run in the deploy pipeline's existing `insert-stage-bicep-whatif.yml@templates`
+stage on the next push of this branch. Treat that pipeline stage — not this
+document — as the actual syntax gate for this file.
+
+**(b) The `DISABLE_SCHEMA_UPDATE=true` claim above was directly tested**, not
+just asserted from documentation. The pinned image was run with that env var
+set against a completely fresh, empty database, in an isolated Docker
+environment (not dev):
+
+```powershell
+docker network create disable-schema-test-net
+docker run --rm -d --name disable-schema-test-pg --network disable-schema-test-net -e POSTGRES_DB=disable_schema_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+docker run --rm -d --name disable-schema-test-litellm --network disable-schema-test-net -e DATABASE_URL="postgresql://postgres:postgres@disable-schema-test-pg:5432/disable_schema_test" -e DISABLE_SCHEMA_UPDATE=true -e LITELLM_MASTER_KEY=sk-disable-schema-test ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5
+docker logs disable-schema-test-litellm --tail 100
+docker run --rm --network disable-schema-test-net -e PGPASSWORD=postgres postgres:16-alpine psql -h disable-schema-test-pg -U postgres -d disable_schema_test -Atc "SELECT to_regclass('public.\"LiteLLM_UserTable\"');"
+```
+
+**Observed:** the container started and stayed running — it did not
+crash-loop. On startup it detected the schema difference and *printed* the
+full list of DDL it would need to run, but never executed any of it:
+
+```
+Changes to DB Schema detected
+Required SQL commands:
+CREATE TYPE "JobStatus" AS ENUM ('ACTIVE', 'INACTIVE');
+CREATE TABLE "LiteLLM_BudgetTable" ( ... );
+CREATE TABLE "LiteLLM_CredentialsTable" ( ... );
+... [~150 CREATE TYPE / CREATE TABLE / CREATE INDEX statements — the entire
+     LiteLLM schema — printed as text, never executed] ...
+```
+
+Direct query against the live database confirmed this: `SELECT
+to_regclass('public."LiteLLM_UserTable"')` returned an empty result (table
+absent), and follow-up checks confirmed zero rows in `pg_tables` for schema
+`public` and no `_prisma_migrations` table either — the database was left
+completely untouched.
+
+Because the tables genuinely do not exist, the rest of startup logged a
+series of background errors — each one a real, expected consequence of
+skipping schema creation on a truly empty database, not a defect in the env
+var itself:
+
+```
+16:08:14 - LiteLLM Proxy:WARNING: proxy_server.py:8617 - Could not read coordination_redis from the database: The table `public.LiteLLM_Config` does not exist in the current database.
+16:08:15 - LiteLLM Proxy:WARNING: proxy_server.py:1090 - Password migration skipped: The table `public.LiteLLM_UserTable` does not exist in the current database.
+16:08:16 - LiteLLM Proxy:ERROR: proxy_server.py:7366 - ...ProxyConfig:_init_mcp_servers_in_db - The table `public.LiteLLM_MCPServerTable` does not exist in the current database.
+16:08:16 - LiteLLM Proxy:ERROR: cloudzero_endpoints.py:279 - Error checking CloudZero status: The table `public.LiteLLM_Config` does not exist in the current database.
+16:08:16 - LiteLLM Proxy:ERROR: vantage_endpoints.py:261 - Error checking Vantage status: The table `public.LiteLLM_Config` does not exist in the current database.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+16:08:17 - LiteLLM Proxy:ERROR: utils.py:5658 - Error getting LiteLLM_SpendLogs row count: relation "LiteLLM_SpendLogs" does not exist
+```
+
+The process completed startup rather than crash-looping, and both
+`/health/liveliness` and `/health/readiness` returned HTTP 200 (readiness
+body: `{"status":"healthy","db":"connected"}`) despite zero application
+tables existing in the database.
+
+**Conclusion: `DISABLE_SCHEMA_UPDATE=true` works as claimed** — it suppresses
+schema mutation entirely rather than merely warning while still applying it.
+This directly confirms the "Standing requirement" claim above against actual
+runtime behavior, not just documentation.
+
+**Additional operational caveat found by this test, beyond the original
+claim:** on a genuinely unmigrated database, a container running with
+`DISABLE_SCHEMA_UPDATE=true` reports itself healthy (`/health/readiness` →
+200, `"db":"connected"`) while functionally broken for any database-backed
+request. Health-probe status alone is not sufficient evidence that a cutover
+succeeded — after any real cutover, verify actual table presence (e.g. the
+`to_regclass` query used above, or row counts on key tables) in addition to
+probe status, not instead of it.
+
+Environment torn down immediately after
+(`docker stop`/`docker network rm`); no state persisted from this test.
+
+### 3b. Tag-vs-digest cutover risk
+
+`ChatGptForEmployees.bicep/main.dev.bicepparam` currently pins `liteLlmImage`
+to the mutable tag `ghcr.io/berriai/litellm:v1.99.0`, **not** the exact digest
+(`sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`)
+that every finding in this runbook — including the `DISABLE_SCHEMA_UPDATE`
+test in §3a and the synthetic storage test in §1a — was verified against. The
+implementation plan's own Global Constraints note that during this review the
+`v1.99.0` tag was observed to resolve to different content than this pinned
+digest.
+
+**Recommendation:** before the maintenance window, either switch
+`main.dev.bicepparam` to reference the digest directly, or re-resolve the
+`v1.99.0` tag and diff its digest against
+`sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
+immediately before cutover. Do not assume the tag still resolves to the exact
+image validated by this document.
 
 ## 4. Rollback scope and timing
 
