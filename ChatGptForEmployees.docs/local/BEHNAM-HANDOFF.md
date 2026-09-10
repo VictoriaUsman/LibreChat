@@ -75,17 +75,33 @@ authorized handoff.
    `DISABLE_SCHEMA_UPDATE` change), and the review guide itself
    (`LiteLLM-v1.99.0-Review-Implementation-Guide.md`) are committed at the
    tracked paths the guide specifies, on branch
-   `fix/litellm-cve-upgrade-v1.99.0-dev`, as eight local commits (in order;
-   current as of `git log --oneline` at the time of this round of fixes):
-   - `b7995cd` — corrected remediation SQL with target_env guard
-   - `b824cee` — disable automatic schema mutation on startup
-   - `20dc3fb` — finalized cutover and rollback runbook
-   - `88cabc9` — add executed synthetic test evidence for spend-log storage
-   - `7e8f4af` — short handoff response (this file)
-   - `cff94a7` — address final review findings across runbook/handoff/bicep
-   - `e75b04d` — docs: fix five findings from the 2026-09-11 review addendum
-   - `247ae17` — track the review guide itself (it was never committed,
-     despite being listed in its own artifact table)
+   `fix/litellm-cve-upgrade-v1.99.0-dev`. A hardcoded commit count/list here
+   has gone stale in each of the last two rounds of fixes as new commits
+   landed, so rather than repeat that mistake: **run `git log --oneline
+   origin/main..HEAD` yourself to see the current, authoritative list** (local
+   `main` is a long-stale ref — hundreds of commits behind and from an earlier
+   repo layout — so it is not a useful comparison point here; `origin/main` is
+   the current, meaningful one).
+
+   As of this fix, that list is (newest first):
+   - `9e87a96` — litellm v1.99.0 review: fix round-2 critical/important findings
+   - `247ae17` — litellm v1.99.0 review: track the review guide itself (was never committed)
+   - `e75b04d` — docs: fix five findings from 2026-09-11 review addendum
+   - `cff94a7` — litellm v1.99.0 review: address final review findings across runbook/handoff/bicep
+   - `7e8f4af` — litellm v1.99.0 review: short handoff response
+   - `88cabc9` — litellm v1.99.0 review: add executed synthetic test evidence for spend-log storage
+   - `20dc3fb` — litellm v1.99.0 review: finalized cutover and rollback runbook
+   - `b824cee` — litellm v1.99.0 review: disable automatic schema mutation on startup
+   - `b7995cd` — litellm v1.99.0 review: corrected remediation SQL with target_env guard
+   - `525f8cd` — Bump dev litellm image to v1.99.0 to patch critical/high CVEs
+   - `cac938e` — Merged PR 12621: ADO 11662 — document the Azure Monitor OTP verification requirement for jobAlerts
+   - `b991743` — ADO 11662 — document the Azure Monitor OTP verification requirement for jobAlerts
+
+   The last two entries (`cac938e`, `b991743`) predate this LiteLLM v1.99.0
+   work — they're pre-existing commits this branch inherited from `dev` that
+   haven't been promoted to `main` yet, unrelated to this review. The review
+   and remediation work itself is the nine commits from `b7995cd` through
+   `9e87a96`.
 
    Note: `ChatGptForEmployees/config/litellm_routing_config.local.yaml` is
    edited on this developer's machine as part of this work but is
@@ -93,9 +109,11 @@ authorized handoff.
    it is not one of the committed artifacts above and is not a deployed
    control; the edit exists only on this checkout.
 
-   These commits are **local to this checkout only** — nothing has been
-   pushed. Pushing the branch or opening a PR is a separate, not-yet-authorized
-   next step.
+   Of the commits listed above, the nine review-work commits (`b7995cd`
+   through `9e87a96`) are **local to this checkout only** — `origin/fix/litellm-cve-upgrade-v1.99.0-dev`
+   is still at `525f8cd`, so none of this review's work has been pushed.
+   Pushing the branch or opening a PR is a separate, not-yet-authorized next
+   step.
 7. **Scheduling** — confirmed Tue/Fri 05:00 UTC for Okta sync (the nightly
    change never merged) and nightly 02:00 UTC for cleanup. Corrected: the
    procedure previously used `az containerapp job execution list` alone to

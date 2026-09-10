@@ -358,9 +358,9 @@ HTTP 200 with `content: "MOCK-RESPONSE-SHIPPED-TEST-2026"`.
 **Database inspection — actual output, verbatim:**
 
 ```
-     end_user       |     model     |  call_type  | messages | response
---------------------+---------------+-------------+----------+----------
- shipped-test-user  | gpt-3.5-turbo | acompletion | {}       | {}
+     end_user      |     model     |  call_type  | messages | response
+-------------------+---------------+-------------+----------+----------
+ shipped-test-user | gpt-3.5-turbo | acompletion | {}       | {}
 (1 row)
 ```
 
@@ -564,11 +564,16 @@ step.
 **Step 3 — Stop writers.**
 
 ```powershell
+# Scratch files this runbook writes during the real cutover go outside the
+# repo working tree, never at the repo root — this directory is not tracked
+# and is not part of the commit.
+New-Item -ItemType Directory -Force -Path "$env:TEMP\romchat-cutover" | Out-Null
+
 # Record the current scale settings BEFORE changing anything, so Step 8's
 # restart has real values to restore instead of an unfilled placeholder.
 az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "properties.template.scale" -o json | Tee-Object -Variable originalScale
-$originalScale | Out-File -FilePath ".\ca-litellm-dev-original-scale.json" -Encoding utf8
 if ($LASTEXITCODE -ne 0) { throw "Failed to capture original scale settings; stop before scaling down." }
+$originalScale | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-original-scale.json" -Encoding utf8
 ```
 
 **Note (unverified):** `--min-replicas 0 --max-replicas 0` below has not been
@@ -592,25 +597,28 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to scale down ca-litellm-dev; stop." }
 Confirm zero running revisions/replicas via `az containerapp replica list`
 before continuing. Both scheduled jobs are already paused from Step 2.
 
-**Step 3a — Capture pre-remediation baseline.**
+**Step 3b — Capture pre-remediation baseline.**
 
 Row counts and view resolution recorded here are what Step 8's "before vs.
 after" verification compares against — without this step, that later check
 has nothing to compare to.
 
 ```powershell
-psql -X -v ON_ERROR_STOP=1 -c "SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public.\"LiteLLM_SpendLogs\" UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public.\"LiteLLM_UserTable\" UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public.\"LiteLLM_VerificationToken\" UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public.\"LiteLLM_OrganizationTable\";" | Tee-Object -FilePath ".\pre-remediation-row-counts.txt"
+psql -X -v ON_ERROR_STOP=1 -c "SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public.\"LiteLLM_SpendLogs\" UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public.\"LiteLLM_UserTable\" UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public.\"LiteLLM_VerificationToken\" UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public.\"LiteLLM_OrganizationTable\";" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt"
 if ($LASTEXITCODE -ne 0) { throw "Failed to capture pre-remediation row counts; stop." }
 
-# Confirm the attribution rollup views resolve before remediation touches anything.
-psql -X -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM attribution.v_spend_by_dept_week; SELECT count(*) FROM attribution.v_spend_by_dept_month;"
+# Confirm the attribution rollup views resolve before remediation touches anything,
+# and append their counts into the same baseline file so Step 8 has something to
+# compare the post-migration view counts against.
+psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view_name, count(*) FROM attribution.v_spend_by_dept_week UNION ALL SELECT 'attribution.v_spend_by_dept_month', count(*) FROM attribution.v_spend_by_dept_month;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt" -Append
 if ($LASTEXITCODE -ne 0) { throw "attribution rollup views did not resolve pre-remediation; stop and investigate before proceeding." }
 ```
 
-Save both outputs (`pre-remediation-row-counts.txt` and the view-count
-results) somewhere the operator can compare against Step 8's post-migration
-counts — they are the actual baseline that step's "before vs. after"
-comparison requires.
+Both the table row counts and the view counts land in the same file
+(`$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt`, outside the repo
+working tree per this document's no-scratch-files-in-the-commit policy) —
+that file is the actual baseline Step 8's "before vs. after" comparison
+requires, for both the tables and the two attribution views.
 
 **Step 4 — Run `01-baseline-remediation.sql`.**
 
@@ -670,6 +678,15 @@ other extra env var was needed for this pinned v1.99.0 image; the recurring
 benign (image reports as the `wolfi` distro, prisma still resolves working
 engines) and appeared on every invocation without affecting the exit code.
 
+**One part of this invocation was not exercised by that local test:**
+`sslmode=require` and reachability of the real external Azure FQDN
+(`psql-db-cgfe-dev.postgres.database.azure.com`) — the local test's
+`DATABASE_URL` pointed at a non-TLS Postgres container reachable by
+docker-network container name, not a TLS-terminated external host. Everything
+else about the command (the `prisma` binary, schema path, `resolve`/`deploy`
+behavior, migration count and order, and exit-code handling) was tested and
+confirmed working as described above.
+
 **Step 6 — Resolve `20250326162113_baseline`, and only that migration, as applied.**
 
 ```powershell
@@ -715,6 +732,7 @@ docker run --rm `
   --entrypoint /app/.venv/bin/prisma `
   ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 `
   migrate status --schema /app/litellm-proxy-extras/litellm_proxy_extras/schema.prisma
+if ($LASTEXITCODE -ne 0) { throw "migrate status reported a non-zero exit after migrate deploy; stop and investigate per §5 before assuming the schema is fully up to date." }
 ```
 
 **Expected result:** all 156 remaining migrations (157 total including the
@@ -750,15 +768,15 @@ Then:
   partway).
 - **Preserved historical data and views:** row counts on `LiteLLM_SpendLogs`,
   `LiteLLM_UserTable`, `LiteLLM_VerificationToken`, and `LiteLLM_OrganizationTable`
-  must match the pre-remediation baseline captured in Step 3a
-  (`pre-remediation-row-counts.txt`) — remediation and migration only add
-  columns/tables, they must not have changed row counts; the `attribution`
-  schema's two rollup views must still resolve (`SELECT count(*) FROM
-  attribution.v_spend_by_dept_week;` and `SELECT count(*) FROM
-  attribution.v_spend_by_dept_month;`), and their counts should match Step
-  3a's baseline too.
+  must match the pre-remediation baseline captured in Step 3b
+  (`$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt`) — remediation
+  and migration only add columns/tables, they must not have changed row
+  counts; the `attribution` schema's two rollup views must still resolve
+  (`SELECT count(*) FROM attribution.v_spend_by_dept_week;` and `SELECT
+  count(*) FROM attribution.v_spend_by_dept_month;`), and their counts should
+  match Step 3b's baseline too (same file).
 - **Prompt-storage check:** restart `ca-litellm-dev` using the scale settings
-  captured in Step 3 (`.\ca-litellm-dev-original-scale.json`) rather than an
+  captured in Step 3 (`$env:TEMP\romchat-cutover\ca-litellm-dev-original-scale.json`) rather than an
   assumed value — e.g. `az containerapp update -n ca-litellm-dev -g
   rg-dev-shared --min-replicas <value from originalScale.minReplicas>
   --max-replicas <value from originalScale.maxReplicas>` (or, if Step 3 used
@@ -1052,6 +1070,9 @@ future run. The standard incident route is: stop, capture state, restore.
 - `ChatGptForEmployees.docs/local/BEHNAM-HANDOFF.md` — short review response.
 - `ChatGptForEmployees.bicep/liteLlm.bicep` — the `DISABLE_SCHEMA_UPDATE`
   change.
+- `ChatGptForEmployees.docs/local/LiteLLM-v1.99.0-Review-Implementation-Guide.md`
+  — the review guide itself, now tracked (it was never committed despite being
+  listed in its own artifact table).
 
 No dumps, no `migration-review/` scratch content, and no credentials are
 included in this commit. A local commit is not, by itself, evidence that a
