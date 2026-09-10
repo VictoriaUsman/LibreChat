@@ -532,16 +532,39 @@ Manually compare the printed host/IP against
 human verification step — the script cannot prove server identity by itself
 (§2's stated limitation).
 
-```powershell
-# Confirm the deployed LiteLLM image digest matches the pinned, reviewed digest.
-az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "properties.template.containers[0].image" -o tsv
-```
+**Distinguish two things explicitly, and record both — this is what Follow-up
+1 requires before proceeding:**
 
-Compare the output against
-`ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
-— the exact digest every finding in this document was verified against (see
-§3b's tag-vs-digest risk). **Stop if it does not match**: re-resolve and diff
-per §3b before continuing.
+1. **The currently deployed revision** — what `ca-litellm-dev` is actually
+   running right now, pre-upgrade. Capture it in full, not just the image:
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "$env:TEMP\romchat-cutover" | Out-Null
+   az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "{image:properties.template.containers[0].image, env:properties.template.containers[0].env, revision:properties.latestRevisionName, scale:properties.template.scale}" -o json | Tee-Object -Variable currentRevisionState
+   if ($LASTEXITCODE -ne 0) { throw "Failed to capture the currently deployed revision; stop." }
+   $currentRevisionState | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-pre-cutover-revision.json" -Encoding utf8
+   ```
+
+   This file is the recovery reference (what to compare against if something
+   goes wrong) and is also what Step 8's restart guidance means by "the
+   previous revision" that must **not** be reactivated once the database is
+   migrated.
+
+2. **The intended target artifact** — the pinned digest
+   `ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`,
+   with the Bicep changes already made in this repo
+   (`DISABLE_SCHEMA_UPDATE=true` and `STORE_PROMPTS_IN_SPEND_LOGS=false` in
+   `liteLlm.bicep`) — this is **not yet deployed** as of this step; it is
+   what Step 8b deploys after migration is verified. Confirm
+   `ChatGptForEmployees.bicep/main.dev.bicepparam`'s `liteLlmImage` currently
+   points at the mutable `v1.99.0` tag, not this digest (§3b) — re-resolve and
+   diff the tag against the digest now, and again immediately before Step 8b,
+   rather than assuming it still matches.
+
+Compare `currentRevisionState.image` above against the target digest. If they
+already match, this environment has already been upgraded — stop and
+reconcile before proceeding; this runbook assumes a pre-upgrade starting
+state.
 
 **Step 2 — Confirm complete recovery prerequisites are met.**
 
@@ -599,26 +622,132 @@ before continuing. Both scheduled jobs are already paused from Step 2.
 
 **Step 3.5 — Capture pre-remediation baseline.**
 
-Row counts and view resolution recorded here are what Step 8's "before vs.
-after" verification compares against — without this step, that later check
-has nothing to compare to.
+Everything captured here, while writers are stopped, is what Step 8a's
+required gate compares against — a mismatch there stops the procedure
+outright (§5, and Follow-up 3). Row counts alone (the previous version of
+this step) cannot detect a changed value in an existing row, only a changed
+row *count* — the fingerprint further below is what actually closes that
+gap.
+
+**PowerShell quoting note, applies to every SQL command in this section and
+the rest of this document:** backslash is not PowerShell's escape character
+inside a double-quoted string. `psql -c "SELECT ... public.\"Table\" ..."`
+looks like it embeds a double-quoted Postgres identifier, but PowerShell
+treats the unescaped `"` as the end of the string — the argument silently
+splits into two garbled pieces instead of one SQL string, and psql never
+sees valid SQL. Confirmed with a local argument-capture test (a stub `psql`
+function that echoes `$args`): the old form for this exact query produced two
+broken arguments, not one. Every command below that needs a double-quoted
+identifier is written into a `.sql` file in this session's scratch directory
+and run with `-f`, which sidesteps the whole class of bug rather than hand-
+tuning PowerShell escaping. A command using only single-quoted SQL string
+literals (no double-quoted identifiers) has no such bug and is left as `-c`.
 
 ```powershell
-psql -X -v ON_ERROR_STOP=1 -c "SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public.\"LiteLLM_SpendLogs\" UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public.\"LiteLLM_UserTable\" UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public.\"LiteLLM_VerificationToken\" UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public.\"LiteLLM_OrganizationTable\";" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt"
+# Row counts -- supporting evidence only now; the fingerprint below is the
+# actual required gate.
+@'
+SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public."LiteLLM_SpendLogs"
+UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public."LiteLLM_UserTable"
+UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public."LiteLLM_VerificationToken"
+UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public."LiteLLM_OrganizationTable";
+'@ | Set-Content -Path "$env:TEMP\romchat-cutover\01-pre-row-counts.sql" -Encoding utf8
+psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\01-pre-row-counts.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt"
 if ($LASTEXITCODE -ne 0) { throw "Failed to capture pre-remediation row counts; stop." }
 
-# Confirm the attribution rollup views resolve before remediation touches anything,
-# and append their counts into the same baseline file so Step 8 has something to
-# compare the post-migration view counts against.
+# Attribution rollup views -- unquoted lowercase identifiers only, no double-quoted
+# identifier, so this one was never affected by the quoting bug; left as -c.
 psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view_name, count(*) FROM attribution.v_spend_by_dept_week UNION ALL SELECT 'attribution.v_spend_by_dept_month', count(*) FROM attribution.v_spend_by_dept_month;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt" -Append
 if ($LASTEXITCODE -ne 0) { throw "attribution rollup views did not resolve pre-remediation; stop and investigate before proceeding." }
 ```
 
-Both the table row counts and the view counts land in the same file
-(`$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt`, outside the repo
-working tree per this document's no-scratch-files-in-the-commit policy) —
-that file is the actual baseline Step 8's "before vs. after" comparison
-requires, for both the tables and the two attribution views.
+**All previously-documented views must resolve, not just the two attribution
+rollups above (Follow-up 3).** 10 views were previously documented as
+existing (8 in `public`, 2 in `attribution` — the two just counted). Record
+the actual current list and count rather than assuming the prior number still
+holds:
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -Atc "SELECT table_schema, table_name FROM information_schema.views WHERE table_schema IN ('public','attribution') ORDER BY 1,2;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-views.txt"
+if ($LASTEXITCODE -ne 0) { throw "Failed to enumerate views pre-remediation; stop." }
+```
+
+**Stop condition:** if this doesn't come back as 10 rows (8 `public` + 2
+`attribution`), stop and reconcile before proceeding — either the previously-
+documented count is stale or something on this host already differs from
+what was reviewed, and either way Step 8a's later view check cannot be
+trusted against an unreconciled baseline.
+
+**Full historical-data fingerprint (Follow-up 3).** This is what actually
+detects a changed value in an existing row, not just a changed row count.
+Rather than hand-listing the ~19 original table names (error-prone, and this
+runbook has already been caught transcribing a migration name wrong once —
+see Finding 5), generate one deterministic fingerprint query per table
+currently in `public`/`attribution` directly from the live catalog:
+
+```powershell
+@'
+SELECT format(
+  'SELECT %L::text AS table_name, md5(coalesce(string_agg(md5(t.*::text), '''' ORDER BY %s), ''__EMPTY__'')) AS fingerprint FROM (SELECT %s FROM %I.%I) t;',
+  n.nspname || '.' || c.relname,
+  coalesce(pk.pk_cols, all_cols.col_list),
+  all_cols.col_list,
+  n.nspname, c.relname
+) AS fingerprint_sql
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN LATERAL (
+  SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY a.attnum) AS col_list
+  FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+) all_cols ON true
+LEFT JOIN LATERAL (
+  SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY a.attname) AS pk_cols
+  FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+  WHERE i.indrelid = c.oid AND i.indisprimary
+) pk ON true
+WHERE n.nspname IN ('public','attribution') AND c.relkind = 'r'
+ORDER BY 1;
+'@ | Set-Content -Path "$env:TEMP\romchat-cutover\02-generate-fingerprint-sql.sql" -Encoding utf8
+psql -X -v ON_ERROR_STOP=1 -Atc (Get-Content "$env:TEMP\romchat-cutover\02-generate-fingerprint-sql.sql" -Raw) | Set-Content -Path "$env:TEMP\romchat-cutover\03-fingerprint-frozen.sql" -Encoding utf8
+if ($LASTEXITCODE -ne 0) { throw "Failed to generate the frozen fingerprint SQL; stop." }
+```
+
+Because this generator runs **before** `01-baseline-remediation.sql`, the
+per-table queries it writes into `03-fingerprint-frozen.sql` can only
+reference columns that exist right now — they cannot possibly select
+`messages`, `response`, `sso_user_id`, `organization_id`, `created_by`, or
+`updated_by` (the columns remediation is about to add), so Follow-up 3's
+required exclusion of remediation-added columns happens automatically, with
+no hand-maintained exclusion list to keep in sync. This pattern (generate the
+per-table fingerprint SQL once from the live catalog, freeze it to a file,
+reuse the exact same file for the post-migration comparison) was verified
+against a local ephemeral Postgres fixture built from
+`01-baseline-remediation.sql`'s actual tables/columns: the frozen file,
+generated once before any schema change, produced byte-identical fingerprint
+output both immediately after generation and after simulating remediation
+plus several *unrelated* later migrations (new columns added to an original
+table, plus an entirely new table) — confirming the frozen queries genuinely
+ignore anything added after they were captured. The same fixture confirmed
+the fingerprint changes when an existing row's value is edited and when a row
+is deleted, so it does detect both failure modes Follow-up 3 named, not just
+row loss.
+
+**⚠️ `03-fingerprint-frozen.sql` must survive unmodified from this step to
+Step 8a.** Regenerating it post-migration instead of reusing this exact file
+would defeat the purpose — a freshly-generated version would include every
+column the 157 migrations added, hiding a real change to original data
+underneath them. It already lives outside the repo working tree
+(`$env:TEMP\romchat-cutover\`, per this document's no-scratch-files-in-the-
+commit policy), same as every other file this step writes.
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\03-fingerprint-frozen.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\pre-remediation-fingerprints.txt"
+if ($LASTEXITCODE -ne 0) { throw "Failed to capture pre-remediation fingerprints; stop." }
+```
+
+All of the above (row counts, view list, and fingerprints) land in
+`$env:TEMP\romchat-cutover\` — that directory is the actual baseline Step
+8a's required gate compares against.
 
 **Step 4 — Run `01-baseline-remediation.sql`.**
 
@@ -631,15 +760,34 @@ if ($LASTEXITCODE -ne 0) { throw "Remediation script failed or aborted (see §5 
 
 **Expected result:** the script's own `BEGIN`/`COMMIT`-wrapped output (see §2's
 "Case: dev (passing)" transcript) ending in `COMMIT` and exit code `0`.
-**Stop/recovery condition:** any nonzero exit means the transaction rolled
-back (§5, boundary 1) — the live schema is unchanged, so it is safe to
-diagnose and rerun once the cause is understood. Do **not** proceed to Step 5
-on a nonzero exit.
+
+**Stop/recovery condition — three distinct cases (Follow-up 4).** A nonzero
+client exit does **not** by itself prove the server rolled back: a network or
+connection failure can happen *after* the server committed but *before* the
+client received confirmation, leaving a genuinely unknown outcome, not a
+confirmed rollback. Treat "any nonzero exit = safe to rerun" as false —
+determine which of these three cases actually occurred before doing anything
+else:
+
+| Case | How to recognize it | Action |
+|---|---|---|
+| **1. Confirmed rollback** | psql reported the error directly (a `RAISE EXCEPTION` message from the script's own guards, a syntax error, a constraint violation) and the connection is still usable to verify state immediately after. | Safe to diagnose and rerun once the cause is understood — this is what §5 boundary 1 describes. Do **not** proceed to Step 5. |
+| **2. Confirmed commit** | The script's output actually printed `COMMIT` and `$LASTEXITCODE` is `0`. | This is the success path (named here for contrast, not a failure case) — proceed to Step 5. |
+| **3. Unknown outcome** | The connection dropped, timed out, or psql exited nonzero with a network/connection error rather than a clear SQL error and confirmable-still-connected state (e.g. no `COMMIT` printed, no explicit `RAISE EXCEPTION`, and/or the connection itself is now unusable). | **Do not assume rollback and do not rerun.** Keep writers stopped, capture whatever error output exists, reconnect read-only, and inspect the actual catalog state directly — e.g. `SELECT to_regclass('public."LiteLLM_CredentialsTable"');` (via the same `-f` file pattern as Step 3.5/8a, not `-c`, since it needs a double-quoted identifier) and `SELECT to_regclass('public._prisma_migrations');` — before deciding whether it's actually case 1 or 2 in disguise, whether to rerun, or whether to escalate to §4's recovery path (Path A). Cross-reference §5's boundary table: if the catalog shows the new table/columns already present, treat this as boundary 1 already crossed (post-commit), not as a safe-to-rerun pre-commit failure, even though the client never confirmed it. |
+
+Do **not** proceed to Step 5 on anything other than a confirmed case 2.
 
 **Step 5 — Compare the resulting schema against the expected baseline.**
 
 ```powershell
-psql -X -v ON_ERROR_STOP=1 -Atc "SELECT to_regclass('public.\"LiteLLM_CredentialsTable\"');"
+# The first query needs a double-quoted identifier, so it goes into a .sql file
+# and runs with -f (see Step 3.5's quoting note) instead of -c. The other two
+# use only single-quoted string literals against information_schema, so they
+# have no quoting bug and are left as -c.
+@'
+SELECT to_regclass('public."LiteLLM_CredentialsTable"');
+'@ | Set-Content -Path "$env:TEMP\romchat-cutover\04-step5-credentials-table-check.sql" -Encoding utf8
+psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\04-step5-credentials-table-check.sql"
 psql -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');"
 psql -X -v ON_ERROR_STOP=1 -Atc "SELECT column_name FROM information_schema.columns WHERE table_name='LiteLLM_UserTable' AND column_name='sso_user_id';"
 ```
@@ -744,46 +892,207 @@ partial failure is boundary-2 territory (§5) — stop immediately, capture the
 ledger and error, and do not attempt a forward fix without a separate,
 specifically-reviewed procedure.
 
-**Step 8 — Post-migration and application checks.**
+**Step 8 — Post-migration verification, target deployment, and resume.**
+
+This step has four required gates, run **in order**: **8a** database/schema
+verification, **8b** deploying the reviewed target revision, **8c** verifying
+that revision's effective state, and **8d** controlled application checks.
+Only after all four pass does §7's job-resume procedure run at the end. A
+mismatch anywhere in 8a stops the procedure outright (§5, Follow-up 3) — do
+not proceed to 8b on an unreconciled mismatch, and do not treat any of 8a's
+checks as optional supporting evidence; row counts remain a useful quick
+look, but the fingerprint, full migration ledger, and full view list are the
+actual gate.
+
+### 8a. Database/schema verification (required gate)
 
 ```powershell
-# All 157 ledger entries present, and their checksums match the source migration files
-# shipped in the pinned image (not recomputed from a different image/tag).
-psql -X -v ON_ERROR_STOP=1 -c "SELECT migration_name, checksum, finished_at IS NOT NULL AS applied FROM public._prisma_migrations ORDER BY started_at;"
+# All 157 ledger entries present and applied cleanly. No double-quoted
+# identifier here -- _prisma_migrations is lowercase and unquoted -- so this
+# command was never affected by the PowerShell quoting bug described in
+# Step 3.5.
+psql -X -v ON_ERROR_STOP=1 -c "SELECT count(*) AS total, count(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL) AS applied_clean FROM public._prisma_migrations;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-migration-count.txt"
+if ($LASTEXITCODE -ne 0) { throw "Failed to verify the migration ledger; stop." }
 ```
 
-Verify: 157 rows, all `applied = true`, and each `checksum` matches the
-corresponding `migration.sql` under
+**Required: both `total` and `applied_clean` must read `157`.** Anything else
+means an unresolved, still-running, or rolled-back migration exists — stop
+per §5's boundary-2 row; do not proceed. Sampling checksums, as an earlier
+version of this step did, is no longer sufficient — full-ledger verification
+of all 157 names/checksums is the gate (Follow-up 3):
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -c "SELECT migration_name, checksum, finished_at IS NOT NULL AS applied FROM public._prisma_migrations ORDER BY started_at;" | Set-Content -Path "$env:TEMP\romchat-cutover\post-migration-migration-ledger.txt"
+if ($LASTEXITCODE -ne 0) { throw "Failed to capture the full migration ledger; stop." }
+```
+
+Diff **every** `checksum` in that file against the corresponding
+`migration.sql` under
 `/app/litellm-proxy-extras/litellm_proxy_extras/migrations/<name>/` in the
-pinned digest (spot-check a sample, or diff programmatically if the operator
-has extracted the migration folder from the image).
+pinned digest (`docker cp` the migrations folder out of the image if not
+already extracted) — all 157 rows, not a sample.
 
-Then:
+- **Schema/index validity** — re-run Step 5's checks plus the health-check
+  index's validity, in one file (double-quoted identifiers, so `-f` not
+  `-c`, per Step 3.5's quoting note):
 
-- **Schema/index validity:** re-run the Step 5 queries plus a check that
-  `20260415120000_health_check_latest_per_model_index`'s index exists and is
-  valid (`SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE
-  indexrelid = 'public."LiteLLM_HealthCheckTable_model_id_model_name_checked_at_idx"'::regclass;`
-  — not `INVALID`, which would indicate a concurrently-built index that failed
-  partway).
-- **Preserved historical data and views:** row counts on `LiteLLM_SpendLogs`,
-  `LiteLLM_UserTable`, `LiteLLM_VerificationToken`, and `LiteLLM_OrganizationTable`
-  must match the pre-remediation baseline captured in Step 3.5
-  (`$env:TEMP\romchat-cutover\pre-remediation-row-counts.txt`) — remediation
-  and migration only add columns/tables, they must not have changed row
-  counts; the `attribution` schema's two rollup views must still resolve
-  (`SELECT count(*) FROM attribution.v_spend_by_dept_week;` and `SELECT
-  count(*) FROM attribution.v_spend_by_dept_month;`), and their counts should
-  match Step 3.5's baseline too (same file).
-- **Prompt-storage check:** restart `ca-litellm-dev` using the scale settings
-  captured in Step 3 (`$env:TEMP\romchat-cutover\ca-litellm-dev-original-scale.json`) rather than an
-  assumed value — e.g. `az containerapp update -n ca-litellm-dev -g
-  rg-dev-shared --min-replicas <value from originalScale.minReplicas>
-  --max-replicas <value from originalScale.maxReplicas>` (or, if Step 3 used
-  the revision-deactivation alternative, reactivate that revision instead).
-  Confirm it starts healthy (`/health/liveliness`,
-  `/health/readiness`, and actual `to_regclass` table checks per §3a's
-  caveat, not health-probe status alone), then run §1's pending dev query
+  ```powershell
+  @'
+  SELECT to_regclass('public."LiteLLM_CredentialsTable"');
+  SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');
+  SELECT column_name FROM information_schema.columns WHERE table_name='LiteLLM_UserTable' AND column_name='sso_user_id';
+  SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid = 'public."LiteLLM_HealthCheckTable_model_id_model_name_checked_at_idx"'::regclass;
+  '@ | Set-Content -Path "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" -Encoding utf8
+  psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\05-post-migration-schema-checks.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-schema-checks.txt"
+  if ($LASTEXITCODE -ne 0) { throw "Post-migration schema check failed to run; stop." }
+  ```
+
+  Expected: the table's regclass (not `NULL`), `2`, `sso_user_id`, and
+  `indisvalid = t` (not `f`, which would mean the `CREATE INDEX CONCURRENTLY`
+  from `20260415120000_health_check_latest_per_model_index` failed partway).
+
+- **Preserved historical data — required gate, not supporting evidence
+  (Follow-up 3).** Re-run the *exact* frozen fingerprint file generated in
+  Step 3.5 (do not regenerate it — see that step's warning) and diff:
+
+  ```powershell
+  psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\03-fingerprint-frozen.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-fingerprints.txt"
+  if ($LASTEXITCODE -ne 0) { throw "Failed to capture post-migration fingerprints; stop." }
+  Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-fingerprints.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-fingerprints.txt")
+  ```
+
+  **Required: `Compare-Object` must return nothing.** Any output means at
+  least one original table's data changed or was lost somewhere between the
+  Step 3.5 baseline and now — stop and investigate per §5; do not proceed to
+  8b.
+
+  Row counts remain useful as a quick first look but are not the gate:
+
+  ```powershell
+  @'
+  SELECT 'LiteLLM_SpendLogs' AS table_name, count(*) FROM public."LiteLLM_SpendLogs"
+  UNION ALL SELECT 'LiteLLM_UserTable', count(*) FROM public."LiteLLM_UserTable"
+  UNION ALL SELECT 'LiteLLM_VerificationToken', count(*) FROM public."LiteLLM_VerificationToken"
+  UNION ALL SELECT 'LiteLLM_OrganizationTable', count(*) FROM public."LiteLLM_OrganizationTable";
+  '@ | Set-Content -Path "$env:TEMP\romchat-cutover\06-post-row-counts.sql" -Encoding utf8
+  psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\06-post-row-counts.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt"
+  psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view_name, count(*) FROM attribution.v_spend_by_dept_week UNION ALL SELECT 'attribution.v_spend_by_dept_month', count(*) FROM attribution.v_spend_by_dept_month;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-row-counts.txt" -Append
+  ```
+
+  Compare both against Step 3.5's `pre-remediation-row-counts.txt`.
+
+- **All previously-documented views resolve, not just the two attribution
+  rollups (Follow-up 3):**
+
+  ```powershell
+  psql -X -v ON_ERROR_STOP=1 -Atc "SELECT table_schema, table_name FROM information_schema.views WHERE table_schema IN ('public','attribution') ORDER BY 1,2;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-views.txt"
+  Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-views.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-views.txt")
+  ```
+
+  **Required: identical view list (10, per Step 3.5's reconciled baseline)
+  before and after.** A missing or changed view is a stop condition, same as
+  a fingerprint mismatch.
+
+**Only once every check above passes** does this procedure move to 8b. This
+is the full baseline-equivalence gate Follow-up 3 requires; it is not
+satisfied by any subset of it, and it is required before `migrate resolve
+--applied` would ever run again on a future attempt, not just a nice-to-have
+report.
+
+### 8b. Deploy the target revision (Follow-up 1)
+
+Everything through 8a validated the *database*. Nothing so far has deployed
+the reviewed target image or its Bicep changes — `ca-litellm-dev` still runs
+whatever Step 1 recorded as "the currently deployed revision"
+(`ca-litellm-dev-pre-cutover-revision.json`), scaled to zero since Step 3.
+This step is what actually puts the pinned image — with
+`DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls `false` — in
+front of the now-migrated database.
+
+**This project's only deploy path is its CI/CD pipeline**
+(`ChatGptForEmployees.pipelines/dev.yml`, triggered on push to `dev`); there
+is no separate ad-hoc `az containerapp update --image` mechanism used
+anywhere else in this project, and improvising one here would deploy through
+a path nothing else in this project goes through and this review never
+validated. Concretely, that pipeline's `BicepCreate` stage applies
+`main.dev.bicepparam` (which must reference the pinned digest, not the
+`v1.99.0` tag — §3b) together with `liteLlm.bicep`'s
+`DISABLE_SCHEMA_UPDATE=true` and `STORE_PROMPTS_IN_SPEND_LOGS=false` to a new
+Container Apps revision; `UploadConfigs` uploads
+`litellm_routing_config.yaml` (which pins `store_prompts_in_spend_logs:
+false`); `DeployLiteLLM` restarts LiteLLM's latest revision so it actually
+picks up both. The same pipeline run also redeploys RAG API and LibreChat —
+expected, since 8d's application checks need LibreChat reachable anyway.
+
+**Owner-led, Azure CLI/ADO-dependent — unverified in this preparation
+environment, like every other Azure step in this document:**
+
+1. Confirm `main.dev.bicepparam`'s `liteLlmImage` is the pinned digest, not
+   the mutable tag (§3b), immediately before triggering anything — re-check
+   even if Step 1 already confirmed it, since time has passed.
+2. Trigger the pipeline against the reviewed commits on
+   `fix/litellm-cve-upgrade-v1.99.0-dev` — via this branch's normal
+   promotion to `dev` per the project's existing branch policy, or a manual
+   run of the `dev.yml` pipeline definition against this ref if the ADO
+   project supports that without merging first (confirm which applies before
+   the maintenance window; this preparation environment has no ADO access to
+   check).
+3. Watch the pipeline through `BicepCreate`, `UploadConfigs`, and
+   `DeployLiteLLM`. **Stop condition:** any of those three stages failing
+   means the target revision is not confirmed deployed — do not proceed to
+   8c, and do not assume a partially-completed run left the app in a known
+   state. Capture the pipeline logs and treat this as an incident requiring
+   investigation before any further action.
+4. `ca-litellm-dev`'s scale is expected to come back from Step 3's
+   `--min-replicas 0 --max-replicas 0` as a side effect of `BicepCreate`
+   re-applying `liteLlm.bicep`'s own declared `scale` block (`minReplicas`/
+   `maxReplicas`, defaulted `0`/`2` in the module and tunable per environment
+   from `main.bicep`) — this is the expected way scale comes back, rather
+   than a separate manual step. **Confirm this actually happened in 8c below
+   rather than assuming it**; if the deployed scale doesn't match Step 3's
+   captured `ca-litellm-dev-original-scale.json`, restore it explicitly with
+   `az containerapp update -n ca-litellm-dev -g rg-dev-shared --min-replicas
+   <original> --max-replicas <original>` using that captured file as the
+   source of truth, not a remembered value.
+5. **If Step 3 used the revision-deactivation alternative instead of
+   `--max-replicas 0`:** an earlier version of this step said to "reactivate
+   that revision" here — do **not** do that; the revision Step 3 deactivated
+   is the pre-upgrade one Step 1 recorded, and reactivating it is exactly the
+   action Follow-up 1 forbids (see the restart-guidance note at the end of
+   this step). Leave it deactivated. The new revision this pipeline run
+   creates in step 2 above is what should end up active; confirm that in 8c.
+
+### 8c. Verify effective running state (Follow-up 1)
+
+```powershell
+az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "{image:properties.template.containers[0].image, env:properties.template.containers[0].env, revision:properties.latestRevisionName, scale:properties.template.scale}" -o json | Tee-Object -Variable effectiveState
+if ($LASTEXITCODE -ne 0) { throw "Failed to read the post-deploy effective state; stop." }
+$effectiveState | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-post-deploy-state.json" -Encoding utf8
+```
+
+**Required, before 8d:**
+
+- `image` is the exact pinned digest from §3b/Step 1's target-artifact
+  record — not the tag, and not the "currently deployed revision" Step 1
+  recorded pre-cutover.
+- `env` contains `DISABLE_SCHEMA_UPDATE=true` and
+  `STORE_PROMPTS_IN_SPEND_LOGS=false`.
+- `revision` differs from the revision name Step 1 recorded in
+  `ca-litellm-dev-pre-cutover-revision.json` — confirming this is a newly
+  created revision from this deploy, not the pre-cutover one somehow still
+  live.
+
+**Stop condition:** any mismatch means traffic must not resume. Do not run
+8d's application checks or §7's job resume against an unverified revision —
+go back to 8b and diagnose before continuing.
+
+### 8d. Controlled application checks
+
+- **Prompt-storage check:** confirm `/health/liveliness` and
+  `/health/readiness` return healthy (not health-probe status alone — §3a's
+  caveat that a healthy probe can mask a broken schema still applies; also
+  spot-check a couple of the `to_regclass` checks from 8a again against the
+  now-running app's own connection), then run §1's pending dev query
   (`SELECT messages, response FROM public."LiteLLM_SpendLogs" ORDER BY
   "startTime" DESC LIMIT 5;`) against synthetic, non-sensitive traffic only,
   per §1's identification and no-paste-content rules.
@@ -791,9 +1100,22 @@ Then:
   existing conversations load, file upload — the same smoke-test list
   referenced elsewhere in this program's Bicep review notes.
 
-**Only after all of the above pass**, resume the paused jobs per §7's resume
-procedure (restoring `0 5 * * 2,5` and `0 2 * * *`, with a controlled
-catch-up if a scheduled run was missed during the window).
+**Only after 8a, 8b, 8c, and 8d have all passed**, resume the paused jobs per
+§7's resume procedure (restoring `0 5 * * 2,5` and `0 2 * * *`, with a
+controlled catch-up if a scheduled run was missed during the window).
+
+**Reactivating a previous (pre-upgrade) revision against the now-migrated
+database is not a normal restart action and must not be done as a routine
+step (Follow-up 1).** The pre-upgrade image has no `DISABLE_SCHEMA_UPDATE`
+guard and was never validated against a schema built by 157 migrations it
+doesn't know about — reactivating it here could attempt its own schema
+mutation against the upgraded database, or otherwise behave incorrectly
+against a schema state it was never designed for. Only the revision verified
+in 8c receives traffic. If that revision is ever unhealthy after this point,
+the correct response is the recovery path in §4 (Path A) or a forward-fix
+redeploy of a corrected target image through 8b again — never a manual
+reactivation of the revision Step 1 recorded as "currently deployed"
+pre-cutover.
 
 ## 3. Manual-migration mode (Bicep)
 
@@ -863,8 +1185,31 @@ docker network create disable-schema-test-net
 docker run --rm -d --name disable-schema-test-pg --network disable-schema-test-net -e POSTGRES_DB=disable_schema_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
 docker run --rm -d --name disable-schema-test-litellm --network disable-schema-test-net -e DATABASE_URL="postgresql://postgres:postgres@disable-schema-test-pg:5432/disable_schema_test" -e DISABLE_SCHEMA_UPDATE=true -e LITELLM_MASTER_KEY=sk-disable-schema-test ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5
 docker logs disable-schema-test-litellm --tail 100
-docker run --rm --network disable-schema-test-net -e PGPASSWORD=postgres postgres:16-alpine psql -h disable-schema-test-pg -U postgres -d disable_schema_test -Atc "SELECT to_regclass('public.\"LiteLLM_UserTable\"');"
+docker run --rm --network disable-schema-test-net -e PGPASSWORD=postgres postgres:16-alpine psql -h disable-schema-test-pg -U postgres -d disable_schema_test -Atc "SELECT to_regclass('public.LiteLLM_UserTable');"
 ```
+
+**Quoting note added in the Follow-up 2 correction round (not present when
+this test was originally run):** the `to_regclass` command above previously
+read `SELECT to_regclass('public.\"LiteLLM_UserTable\"');` — a
+backslash-escaped double quote inside a PowerShell double-quoted string,
+which does not work in PowerShell (see Step 3.5's quoting note) and would
+have split into two garbled arguments rather than reaching psql as one SQL
+string. `LiteLLM_UserTable` is mixed-case, so the technically-correct fixed
+form needs the identifier double-quoted to avoid Postgres folding it to
+lowercase; written safely that means a `.sql` file run with `-f` (as
+elsewhere in this document) rather than `-c`. The simpler literal shown above
+sidesteps the issue for this specific historical record by dropping the
+quoting entirely — `to_regclass` on the unquoted, lowercase-folded
+`public.litellm_usertable` also correctly returns nothing on a database with
+no such table (case-folded or not, the table doesn't exist either way), so it
+does not misrepresent what was actually being tested. **This specific
+sub-check's original literal command text had this quoting defect (now
+corrected here); the test was not rerun, but its overall conclusion is not
+invalidated** — the same test session independently corroborated "the
+database was left completely untouched" via two other checks that do not
+have this bug: a `pg_tables` row count for schema `public` (zero) and a check
+for the absence of `_prisma_migrations` (also absent), both described just
+below.
 
 **Observed:** the container started and stayed running — it did not
 crash-loop. On startup it detected the schema difference and *printed* the
