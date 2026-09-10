@@ -65,6 +65,15 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'LITELLM_MASTER_KEY', secretRef: 'litellm-master-key' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'AZURE_OPENAI_API_KEY', secretRef: 'azure-openai-api-key' }
+            // Manual-migration mode (LiteLLM v1.99.0 review note 3): startup no
+            // longer runs `prisma db push`/auto-repair against the database.
+            // Every future LiteLLM upgrade now requires an explicit, reviewed
+            // migration step (see ChatGptForEmployees.docs/local/REVIEW-AND-CUTOVER.md)
+            // BEFORE the new image is allowed to start against the database.
+            // A conflicting general_settings.disable_prisma_schema_update value
+            // in litellm_routing_config.yaml would take precedence over this --
+            // confirmed absent as of this change (Step 1 above).
+            { name: 'DISABLE_SCHEMA_UPDATE', value: 'true' }
           ]
           volumeMounts: [
             {
