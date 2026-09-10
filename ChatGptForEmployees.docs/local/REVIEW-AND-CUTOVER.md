@@ -967,20 +967,26 @@ sidesteps it entirely, the same way Step 3.5's `-f` files sidestep the `psql
    then mount that file into a throwaway container and run it directly,
    rather than passing it as a `-c` argument:
 
-   ```powershell
-   $expectedChecksumsScript = @'
-   find /app/litellm-proxy-extras/litellm_proxy_extras/migrations -mindepth 1 -maxdepth 1 -type d | while IFS= read -r d; do
-     n=$(basename "$d")
-     if [ -f "$d/migration.sql" ]; then
-       echo "$n|$(sha256sum "$d/migration.sql" | cut -d" " -f1)"
-     fi
-   done | sort
-   '@ -replace "`r`n", "`n"
-   [System.IO.File]::WriteAllText("$env:TEMP\romchat-cutover\07-compute-expected-checksums.sh", $expectedChecksumsScript, [System.Text.Encoding]::ASCII)
+```powershell
+$expectedChecksumsScript = @'
+find /app/litellm-proxy-extras/litellm_proxy_extras/migrations -mindepth 1 -maxdepth 1 -type d | while IFS= read -r d; do
+  n=$(basename "$d")
+  if [ -f "$d/migration.sql" ]; then
+    echo "$n|$(sha256sum "$d/migration.sql" | cut -d" " -f1)"
+  fi
+done | sort
+'@ -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText("$env:TEMP\romchat-cutover\07-compute-expected-checksums.sh", $expectedChecksumsScript, [System.Text.Encoding]::ASCII)
 
-   docker run --rm -v "${env:TEMP}\romchat-cutover:/scripts" --entrypoint sh ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 /scripts/07-compute-expected-checksums.sh | Set-Content -Path "$env:TEMP\romchat-cutover\expected-checksums.txt" -Encoding ascii
-   if ($LASTEXITCODE -ne 0) { throw "Failed to compute expected checksums from the pinned image; stop." }
-   ```
+docker run --rm -v "${env:TEMP}\romchat-cutover:/scripts" --entrypoint sh ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 /scripts/07-compute-expected-checksums.sh | Set-Content -Path "$env:TEMP\romchat-cutover\expected-checksums.txt" -Encoding ascii
+if ($LASTEXITCODE -ne 0) { throw "Failed to compute expected checksums from the pinned image; stop." }
+```
+
+> **Note:** the closing `'@` of a PowerShell here-string must start at column 0 with
+> no leading whitespace — this code block is intentionally left-aligned (not
+> indented to match this numbered list item) so it can be copied and run exactly
+> as shown, rather than reproducing the `WhitespaceBeforeHereStringFooter` parse
+> error that indenting it would cause.
 
 3. Compare, and stop on any difference — the same required-throw pattern as
    the fingerprint and view-list gates immediately below:
