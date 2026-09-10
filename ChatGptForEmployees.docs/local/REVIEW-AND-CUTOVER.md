@@ -557,9 +557,12 @@ human verification step — the script cannot prove server identity by itself
    `liteLlm.bicep`) — this is **not yet deployed** as of this step; it is
    what Step 8b deploys after migration is verified. Confirm
    `ChatGptForEmployees.bicep/main.dev.bicepparam`'s `liteLlmImage` currently
-   points at the mutable `v1.99.0` tag, not this digest (§3b) — re-resolve and
-   diff the tag against the digest now, and again immediately before Step 8b,
-   rather than assuming it still matches.
+   points at the mutable `v1.99.0` tag, not this digest — that is the true
+   state as of this step, and nothing before Step 8b changes it. **Step
+   8b(i) below is where this runbook actually switches that value to the
+   digest and commits the change** (§3b); do not treat that switch as
+   optional or already done, and do not assume the tag still resolves to the
+   exact image validated by this document in the meantime.
 
 Compare `currentRevisionState.image` above against the target digest. If they
 already match, this environment has already been upgraded — stop and
@@ -926,11 +929,73 @@ psql -X -v ON_ERROR_STOP=1 -c "SELECT migration_name, checksum, finished_at IS N
 if ($LASTEXITCODE -ne 0) { throw "Failed to capture the full migration ledger; stop." }
 ```
 
-Diff **every** `checksum` in that file against the corresponding
-`migration.sql` under
-`/app/litellm-proxy-extras/litellm_proxy_extras/migrations/<name>/` in the
-pinned digest (`docker cp` the migrations folder out of the image if not
-already extracted) — all 157 rows, not a sample.
+**Diff all 157 checksums against the pinned image's own migration files —
+an actual runnable procedure, not the unactionable prose an earlier version
+of this step left here (Follow-up 3).** This was verified end-to-end in this
+session, in PowerShell, against a local ephemeral database migrated with the
+pinned digest: the resulting 157 `_prisma_migrations.checksum` values were
+captured and diffed against independently-computed `sha256sum`s of the pinned
+image's own `migration.sql` files, and **all 157 rows matched byte-for-byte**
+— confirming Prisma's checksum here is exactly SHA-256 of the raw
+`migration.sql` file content (64 lowercase hex characters, matching the
+`checksum` column's actual observed format). One migration directory's name
+contains literal spaces (`20251122125322_Add organization_id to spend
+logs`), and the script below was hardened against that (an earlier draft of
+this same script silently dropped/garbled that row when its path variables
+weren't quoted). The naive approach of passing this script to `docker run
+... -c "..."` directly from PowerShell was tried first and rejected: nested
+double-quotes inside a native command's argument get mangled by PowerShell's
+own re-quoting for external processes (confirmed — it silently truncated
+`echo "hello world"` to `hello`), a different manifestation of the same class
+of bug Step 3.5 already documents for `psql -c`. The mount-and-run form below
+sidesteps it entirely, the same way Step 3.5's `-f` files sidestep the `psql
+-c` version.
+
+1. Capture the applied ledger in a diff-friendly, unaligned format
+   (`-Atc`, not the human-readable `-c` table above):
+
+   ```powershell
+   psql -X -v ON_ERROR_STOP=1 -Atc "SELECT migration_name || '|' || checksum FROM public._prisma_migrations ORDER BY migration_name;" | Set-Content -Path "$env:TEMP\romchat-cutover\applied-checksums.txt" -Encoding ascii
+   if ($LASTEXITCODE -ne 0) { throw "Failed to capture applied checksums; stop." }
+   ```
+
+2. Compute the expected checksums directly from the pinned image's own
+   migration files (no `prisma`/schema checkout exists anywhere in this repo
+   — see the note above Step 6). Write the extraction script to a local file
+   with forced LF line endings (Windows line endings break the script inside
+   the Linux container — confirmed: CRLF here produced `sort: not found`),
+   then mount that file into a throwaway container and run it directly,
+   rather than passing it as a `-c` argument:
+
+   ```powershell
+   $expectedChecksumsScript = @'
+   find /app/litellm-proxy-extras/litellm_proxy_extras/migrations -mindepth 1 -maxdepth 1 -type d | while IFS= read -r d; do
+     n=$(basename "$d")
+     if [ -f "$d/migration.sql" ]; then
+       echo "$n|$(sha256sum "$d/migration.sql" | cut -d" " -f1)"
+     fi
+   done | sort
+   '@ -replace "`r`n", "`n"
+   [System.IO.File]::WriteAllText("$env:TEMP\romchat-cutover\07-compute-expected-checksums.sh", $expectedChecksumsScript, [System.Text.Encoding]::ASCII)
+
+   docker run --rm -v "${env:TEMP}\romchat-cutover:/scripts" --entrypoint sh ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 /scripts/07-compute-expected-checksums.sh | Set-Content -Path "$env:TEMP\romchat-cutover\expected-checksums.txt" -Encoding ascii
+   if ($LASTEXITCODE -ne 0) { throw "Failed to compute expected checksums from the pinned image; stop." }
+   ```
+
+3. Compare, and stop on any difference — the same required-throw pattern as
+   the fingerprint and view-list gates immediately below:
+
+   ```powershell
+   $checksumDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\applied-checksums.txt") (Get-Content "$env:TEMP\romchat-cutover\expected-checksums.txt")
+   if ($checksumDiff) {
+     $checksumDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\checksum-mismatch.txt" -Encoding utf8
+     throw "Migration checksum mismatch between the applied ledger and the pinned image's own migration files; stop and follow §5's incident route."
+   }
+   ```
+
+**Expected result:** `$checksumDiff` is empty and nothing is thrown — both
+files hold the same 157 `name|checksum` lines. This diff, not the earlier
+prose, is the actual "all 157 rows, not a sample" gate.
 
 - **Schema/index validity** — re-run Step 5's checks plus the health-check
   index's validity, in one file (double-quoted identifiers, so `-f` not
@@ -958,13 +1023,18 @@ already extracted) — all 157 rows, not a sample.
   ```powershell
   psql -X -v ON_ERROR_STOP=1 -f "$env:TEMP\romchat-cutover\03-fingerprint-frozen.sql" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-fingerprints.txt"
   if ($LASTEXITCODE -ne 0) { throw "Failed to capture post-migration fingerprints; stop." }
-  Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-fingerprints.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-fingerprints.txt")
+  $fingerprintDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-fingerprints.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-fingerprints.txt")
+  if ($fingerprintDiff) {
+    $fingerprintDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\fingerprint-mismatch.txt" -Encoding utf8
+    throw "Historical-data fingerprint mismatch between the Step 3.5 baseline and the post-migration state; stop and follow §5's incident route."
+  }
   ```
 
-  **Required: `Compare-Object` must return nothing.** Any output means at
-  least one original table's data changed or was lost somewhere between the
-  Step 3.5 baseline and now — stop and investigate per §5; do not proceed to
-  8b.
+  **Required: `Compare-Object` must return nothing — the `throw` above
+  enforces this rather than leaving it to the operator to notice printed
+  output.** Any difference means at least one original table's data changed
+  or was lost somewhere between the Step 3.5 baseline and now — do not
+  proceed to 8b.
 
   Row counts remain useful as a quick first look but are not the gate:
 
@@ -986,12 +1056,18 @@ already extracted) — all 157 rows, not a sample.
 
   ```powershell
   psql -X -v ON_ERROR_STOP=1 -Atc "SELECT table_schema, table_name FROM information_schema.views WHERE table_schema IN ('public','attribution') ORDER BY 1,2;" | Tee-Object -FilePath "$env:TEMP\romchat-cutover\post-migration-views.txt"
-  Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-views.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-views.txt")
+  if ($LASTEXITCODE -ne 0) { throw "Failed to enumerate post-migration views; stop." }
+  $viewDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-views.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-views.txt")
+  if ($viewDiff) {
+    $viewDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\view-list-mismatch.txt" -Encoding utf8
+    throw "View list changed between the Step 3.5 baseline and the post-migration state; stop and follow §5's incident route."
+  }
   ```
 
   **Required: identical view list (10, per Step 3.5's reconciled baseline)
-  before and after.** A missing or changed view is a stop condition, same as
-  a fingerprint mismatch.
+  before and after — enforced by the `throw` above, not left as printed
+  output for the operator to catch.** A missing or changed view is a stop
+  condition, same as a fingerprint mismatch.
 
 **Only once every check above passes** does this procedure move to 8b. This
 is the full baseline-equivalence gate Follow-up 3 requires; it is not
@@ -1008,6 +1084,38 @@ whatever Step 1 recorded as "the currently deployed revision"
 This step is what actually puts the pinned image — with
 `DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls `false` — in
 front of the now-migrated database.
+
+**Step 8b(i) — Switch `main.dev.bicepparam` to the pinned digest and commit
+this repo (required, before triggering anything below).** As of Step 1 and
+§3b, `main.dev.bicepparam`'s `liteLlmImage` still points at the mutable
+`v1.99.0` tag — nothing earlier in this runbook changes that value; it is a
+plain in-repo edit and `git commit`, not an Azure/ADO action, so it does not
+depend on the "Owner-led, Azure CLI/ADO-dependent" access this section's
+remaining steps require, and it belongs here rather than being assumed as an
+already-satisfied precondition (the gap this fix closes — see the top of
+this document's status notes):
+
+Edit `ChatGptForEmployees.bicep/main.dev.bicepparam` so the `liteLlmImage`
+line reads:
+
+```
+param liteLlmImage = 'ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5'
+```
+
+Then commit it (from the repo root):
+
+```powershell
+git add ChatGptForEmployees.bicep/main.dev.bicepparam
+git commit -m "Pin liteLlmImage to the reviewed v1.99.0 digest for dev cutover"
+if ($LASTEXITCODE -ne 0) { throw "Failed to commit the digest pin; stop — do not trigger the pipeline against an uncommitted or still-tag-pinned bicepparam." }
+```
+
+**Stop condition:** do not proceed to trigger the pipeline (below) until this
+commit exists on the ref that will actually be deployed. The pipeline's
+`BicepCreate` stage applies whatever is committed on the triggered ref — an
+edit left uncommitted, or committed to the wrong branch, deploys the mutable
+tag exactly as before this fix, silently reproducing the gap this step
+exists to close.
 
 **This project's only deploy path is its CI/CD pipeline**
 (`ChatGptForEmployees.pipelines/dev.yml`, triggered on push to `dev`); there
@@ -1027,9 +1135,11 @@ expected, since 8d's application checks need LibreChat reachable anyway.
 **Owner-led, Azure CLI/ADO-dependent — unverified in this preparation
 environment, like every other Azure step in this document:**
 
-1. Confirm `main.dev.bicepparam`'s `liteLlmImage` is the pinned digest, not
-   the mutable tag (§3b), immediately before triggering anything — re-check
-   even if Step 1 already confirmed it, since time has passed.
+1. Re-confirm `main.dev.bicepparam`'s `liteLlmImage` is the pinned digest,
+   not the mutable tag (§3b) — i.e. that 8b(i)'s commit above is actually
+   present on the ref about to be triggered — immediately before triggering
+   anything, even though it was just switched and committed above, since
+   time has passed and this is the actual gate Finding 1 requires.
 2. Trigger the pipeline against the reviewed commits on
    `fix/litellm-cve-upgrade-v1.99.0-dev` — via this branch's normal
    promotion to `dev` per the project's existing branch policy, or a manual
@@ -1280,12 +1390,17 @@ implementation plan's own Global Constraints note that during this review the
 `v1.99.0` tag was observed to resolve to different content than this pinned
 digest.
 
-**Recommendation:** before the maintenance window, either switch
-`main.dev.bicepparam` to reference the digest directly, or re-resolve the
-`v1.99.0` tag and diff its digest against
-`sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
-immediately before cutover. Do not assume the tag still resolves to the exact
-image validated by this document.
+**Required action (not optional, not either/or):** this runbook switches
+`main.dev.bicepparam` to reference the digest directly and commits that
+change — Step 8b(i) in §2a is where that actually happens, immediately before
+the pipeline is triggered. An earlier version of this section framed this as
+a choice between switching to the digest *or* re-resolving and diffing the
+tag against the digest as an alternative; that framing is gone now that the
+digest switch itself is a required step this runbook takes — once the
+bicepparam pins the digest directly, there is no longer a tag to re-resolve
+against, so diffing it is neither necessary nor meaningful as an alternative
+path. Do not skip Step 8b(i) and do not assume the tag still resolves to the
+exact image validated by this document in its place.
 
 ## 4. Rollback scope and timing
 
