@@ -2,7 +2,68 @@
 
 ## Implementation review addendum — 2026-09-11
 
-Reviewed implementation through commit `cff94a7` against Behnam's notes and this guide. **Not ready for dev execution:** the five findings below remain open. This addendum records required corrections; it does not implement them. The original brief below remains the acceptance checklist, with these newer findings taking precedence where they clarify earlier assumptions.
+Reviewed implementation through commit `cff94a7` against Behnam's notes and this guide. This is the historical review; the follow-up below records the latest status through `93557da` and takes precedence over its open-status statements. The original brief remains the acceptance checklist.
+
+### Follow-up review through `93557da` — 2026-09-11
+
+**Not ready for dev execution.** The four findings below remain open. This update records required work only; it does not implement or authorize the cutover.
+
+Progress observed: prompt storage is explicitly disabled in both tracked YAML and Bicep; rollback Path B is marked unavailable pending implementation; job configuration/execution commands and the final migration name have been corrected. These documentation/configuration changes are not evidence of deployment. Azure job pause/resume verification and Bicep compilation remain pending. Synthetic proxy results were not rerun in this follow-up review.
+
+#### Follow-up 1 — P1: complete the deployment sequence before restarting writers
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 1 image check (reviewed lines 535–544) and Step 8 restart instructions (778–783).
+
+The preflight requires the target v1.99.0 image to be deployed before migration, but the procedure does not include an explicit deployment of the pinned image and updated configuration after migration. Restart instructions also allow reactivating the previous revision, which could run the previous image/settings against the upgraded database.
+
+**Correction:** record the current image/revision and settings for recovery; verify the intended pinned artifact separately. Keep writers stopped through remediation, migration, and database validation. Include an explicit deployment of the reviewed target image with the updated Bicep and routing configuration, verify the effective image/settings, then perform controlled application checks before restoring traffic and jobs. Do not reactivate an old revision against the upgraded schema as a normal restart step.
+
+- [ ] Preflight distinguishes the currently deployed revision from the intended upgrade artifact.
+- [ ] The sequence includes exact deployment commands, prerequisites, exit handling, and effective-state checks.
+- [ ] The new revision has `DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls set to false before it starts against the upgraded database.
+- [ ] Only the verified target revision receives traffic after database and application checks pass; job schedules remain paused until their release gate.
+
+#### Follow-up 2 — P1: repair PowerShell quoting in SQL commands
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 3.5 row-count capture and Step 5 baseline verification (reviewed lines 607 and 642).
+
+Backslash-double-quote sequences inside PowerShell double-quoted strings do not escape the quotes. An argument-capture check reproduced split SQL arguments without executing SQL. These commands cannot reliably collect the required baseline evidence.
+
+**Correction:** prefer reviewable SQL files invoked with `psql -f`, or use quoting verified for the documented PowerShell version and native argument handling. Review every executable SQL example for the same issue. Preserve quoted PostgreSQL identifiers exactly and stop if evidence collection fails.
+
+- [ ] A local argument-capture check confirms each SQL command reaches psql intact, or commands use verified SQL files.
+- [ ] Corrected queries execute successfully against an isolated fixture in the documented shell.
+- [ ] Evidence collection checks the native exit code and does not treat a created output file as proof of success.
+
+#### Follow-up 3 — P2: restore complete schema and historical-data verification
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Steps 3.5, 5, and 8 (reviewed lines 750–777 for final checks).
+
+Four table counts and a few schema-object checks do not establish full baseline equivalence or preservation of the original 19 tables. Matching counts cannot detect changed values. A sample of migration checksums also does not establish that all 157 match the pinned source.
+
+**Correction:** capture and compare deterministic fingerprints for the existing columns of all 19 original tables while writers are stopped, with counts as supporting evidence. Restore complete baseline comparison before resolving it, including types, nullability, defaults, indexes, and constraints. Compare the final schema against the pinned target, verify all migration names/checksums and successful state, and verify all 10 previously validated views. Exclude intentionally added columns from historical-row fingerprints so comparisons measure preservation of original data.
+
+- [ ] Pre/post evidence covers all 19 original tables and detects value changes as well as row loss.
+- [ ] Full baseline equivalence is a required gate before `migrate resolve --applied`.
+- [ ] All 157 expected migration names and checksums are compared, with successful completion and no unresolved failures; sampling is insufficient.
+- [ ] Final target-schema comparison, index validity, and all 10 view checks pass before writers resume.
+- [ ] Mismatches stop the procedure; execution evidence remains pending until actually collected.
+
+#### Follow-up 4 — P2: handle an uncertain commit outcome explicitly
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 4 stop/recovery condition (reviewed lines 634–636).
+
+A nonzero client exit does not prove the server rolled back. A connection can fail after the server committed but before the client received confirmation. The statement that any nonzero exit leaves the schema unchanged can therefore authorize an unsafe rerun.
+
+**Correction:** distinguish a confirmed transaction rollback from an unknown outcome. On connection loss or missing commit confirmation, keep writers stopped, capture the error, reconnect read-only, and inspect the actual catalog and migration-history state. Use the documented recovery boundaries to decide the next action; do not infer rollback from the process exit code alone.
+
+- [ ] The failure table covers confirmed rollback, confirmed commit, and unknown commit outcome separately.
+- [ ] An unknown outcome requires owner review of catalog/history evidence before any retry or recovery action.
+- [ ] No recovery instruction permits blind remediation reruns or bypassing migration-history guards.
+
+**Review scope:** repository inspection and a local PowerShell argument-capture check. No database commands, deployments, or implementation changes were performed during the review. This follow-up is a documentation update only.
+
+### Earlier findings at `cff94a7` (historical)
 
 ### Finding 1 — P1: prompt-storage controls do not guarantee metadata-only behavior
 
