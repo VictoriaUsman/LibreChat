@@ -74,6 +74,15 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
             // in litellm_routing_config.yaml would take precedence over this --
             // confirmed absent in litellm_routing_config.yaml as of this change.
             { name: 'DISABLE_SCHEMA_UPDATE', value: 'true' }
+            // Closes the prompt-storage OR-gate risk (LiteLLM v1.99.0 review
+            // addendum, Finding 1): _should_store_prompts_and_responses_in_spend_logs()
+            // returns True if EITHER general_settings.store_prompts_in_spend_logs OR
+            // this env var is true -- an explicit YAML `false` alone does NOT block a
+            // `true` env var from re-enabling storage (verified by running the pinned
+            // image with both set; see REVIEW-AND-CUTOVER.md §1). Both must be pinned
+            // false together so no shared-environment or ad-hoc override can flip
+            // storage on.
+            { name: 'STORE_PROMPTS_IN_SPEND_LOGS', value: 'false' }
           ]
           volumeMounts: [
             {

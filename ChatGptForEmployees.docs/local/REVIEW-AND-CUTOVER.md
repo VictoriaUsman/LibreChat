@@ -14,10 +14,10 @@ no scratch or dump files were committed.
 
 | Requested item | Status |
 |---|---|
-| 1. Verify exact prompt/response storage behavior | Complete for the pinned image's source, corroborated by an executed local synthetic runtime test against the pinned image (§1a); dev result against real traffic still pending owner-led migration |
+| 1. Verify exact prompt/response storage behavior | Complete for the pinned image's source, corroborated by executed local synthetic runtime tests against the pinned image (§1a default-off behavior; §1b the OR-gate risk). `store_prompts_in_spend_logs: false` and `STORE_PROMPTS_IN_SPEND_LOGS=false` are both now explicitly pinned (config files and `liteLlm.bicep`) because the general setting alone cannot block the env var; dev result against real traffic still pending owner-led migration |
 | 2. Replace the database-name-only environment guard | Complete; SQL and local pass/fail evidence below |
-| 3. Persist manual-migration mode in Bicep | Complete; `DISABLE_SCHEMA_UPDATE=true` added to `liteLlm.bicep` |
-| 4. Rollback scope and timing | Documented below; full recovery rehearsal (sequences, owners, ACLs) still owner-led |
+| 3. Persist manual-migration mode in Bicep | Complete; `DISABLE_SCHEMA_UPDATE=true` added to `liteLlm.bicep`; the executable cutover sequence using it is §2a |
+| 4. Rollback scope and timing | Documented below; Path A (recover onto the original server) is the only currently implementable path — Path B requires IaC work not yet done; full recovery rehearsal (sequences, owners, ACLs) still owner-led |
 | 5. Recovery boundaries and partial failure | Documented below |
 | 6. Artifacts in the repository | This file, the handoff, and the SQL are the tracked artifacts |
 | 7. Scheduling correction and job pause procedure | Documented below |
@@ -35,9 +35,32 @@ and `/app/.venv/lib/python3.13/site-packages/litellm/proxy/proxy_server.py`).
 or not a truthy value there, the function falls back to the environment
 variable `STORE_PROMPTS_IN_SPEND_LOGS` (via `get_secret_bool`).
 
-**Default when absent, null, or not explicitly true:** `False` — metadata-only.
-Both `True` and the case-insensitive string `"true"` are accepted as on;
-anything else (including `None`) is off.
+**This is an OR-gate, not an override.** `_should_store_prompts_and_responses_in_spend_logs()`
+returns `True` immediately if `general_settings.store_prompts_in_spend_logs`
+is true. **Otherwise — including when that setting is explicitly `False` — it
+falls through and returns whatever `STORE_PROMPTS_IN_SPEND_LOGS` evaluates to.**
+An earlier version of this document stated that an explicit YAML `false`
+blocks a `true` environment variable ("anything else, including `None`, is
+off"). **That was incorrect and has been corrected here.** A `false` general
+setting does not short-circuit the function to `False`; it only skips the
+first `True` branch and lets the environment variable decide the outcome
+unconditionally.
+
+**Decision table** (source-level, `general_settings.store_prompts_in_spend_logs`
+× `STORE_PROMPTS_IN_SPEND_LOGS`), matching the addendum's verified table and
+re-confirmed against actual runtime behavior in §1b below:
+
+| General setting | Environment boolean | Storage enabled |
+|---|---|---|
+| Absent | Absent | No |
+| False | Absent | No |
+| False | True | **Yes** |
+| Absent | True | **Yes** |
+| True | False | **Yes** |
+| False | False | No |
+
+Both `True` and the case-insensitive string `"true"` are accepted as on for
+either control.
 
 **What is actually written when off** (`_get_response_for_spend_logs_payload`,
 `_get_messages_for_spend_logs_payload`): an empty JSON object `{}` in
@@ -70,11 +93,27 @@ precedence order: (1) a per-request dynamic parameter, (2) request headers
 is on. **The two flags are not interchangeable** — do not treat one as proof
 of the other's effect.
 
-**Tracked configuration change:** none required. `store_prompts_in_spend_logs`
-is not set in `litellm_routing_config.yaml`, and its documented default is
-already the safe, metadata-only behavior. If this is ever set to `true` for a
-specific need, it must be set explicitly in the tracked YAML (never left to
-the DB-stored path) so the reload-safety guarantee above applies.
+**Tracked configuration change made (this correction):** because the general
+setting cannot block a `true` environment variable, leaving
+`store_prompts_in_spend_logs` unset in the tracked YAML (the prior "no change
+required" position) left storage exposed to any `STORE_PROMPTS_IN_SPEND_LOGS=true`
+introduced by a shared environment default, a manual container-app env
+override, or human error — with no YAML-level defense against it. Both
+controls are now pinned explicitly:
+
+- `general_settings.store_prompts_in_spend_logs: false` added to
+  `ChatGptForEmployees/config/litellm_routing_config.yaml` and
+  `ChatGptForEmployees/config/litellm_routing_config.local.yaml`.
+- `{ name: 'STORE_PROMPTS_IN_SPEND_LOGS', value: 'false' }` added to the
+  LiteLLM container's `env` array in `ChatGptForEmployees.bicep/liteLlm.bicep`
+  (alongside `DISABLE_SCHEMA_UPDATE`), so no conflicting env-var override —
+  present or future, shared-module or manual — can re-enable storage.
+
+With both pinned `false`, the decision table above only ever lands on the
+"No" rows for this deployment. Per the reload-precedence finding already
+verified below, the tracked YAML value wins over any DB-cached value on
+reload, so this pin is reload-safe. **This closes the OR-gate risk for the
+values we control; it does not change upstream's function itself.**
 
 **Post-migration verification (owner-led, pending):** after the dev migration
 and after sending synthetic, non-sensitive requests (never employee
@@ -132,9 +171,14 @@ the container would build its own schema from scratch against the fresh
 empty database — the opposite configuration from §3/§3a below, where that
 same env var is set specifically to prevent this automatic migration. The
 container ran its own startup Prisma migration against the
-empty fresh database (all migrations up through
-`20260819000000_add_spend_log_timestamps` applied cleanly) and reported
-`/health/liveliness` = `200` after about 30 seconds. Seeing the auto-migration
+empty fresh database (all migrations applied cleanly, ending at the pinned
+image's actual final migration, `20260819000000_shadow_eval_max_budget` —
+corrected here from an earlier transcription that misnamed this as
+`20260819000000_add_spend_log_timestamps`, conflating it with the adjacent,
+differently-dated `20260818000000_add_spend_log_timestamps`; verified by
+listing `/app/litellm-proxy-extras/litellm_proxy_extras/migrations/` in the
+pinned image directly — see the reproduction command in the addendum) and
+reported `/health/liveliness` = `200` after about 30 seconds. Seeing the auto-migration
 actually run here — and confirming in §3a that it does **not** run when
 `DISABLE_SCHEMA_UPDATE=true` — is direct evidence that the startup
 auto-migration path §3 closes is real, not theoretical.
@@ -191,6 +235,70 @@ stated above, because only that check confirms behavior against the real
 deployed `litellm_routing_config.yaml`, the real `STORE_PROMPTS_IN_SPEND_LOGS`
 environment configuration (if any), and real request volume/shapes from
 LibreChat itself, none of which this synthetic harness reproduces.
+
+### 1b. OR-gate test against the pinned image (executed, this session)
+
+The review addendum's decision table (§1) was independently re-verified by
+actually running the pinned image with the one combination that matters
+most: an explicit tracked-YAML `false` **and** a `true` environment variable,
+reusing the §1a harness pattern.
+
+**Setup:** a dedicated Docker bridge network (`orgate-test-net`) with a fresh
+`postgres:16-alpine` (`orgate-test-pg`, empty `orgate_test` database, no
+`DISABLE_SCHEMA_UPDATE` — same auto-migration rationale as §1a) and the pinned
+image `ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
+(`orgate-test-litellm`), started with:
+
+```yaml
+model_list:
+  - model_name: "orgate-test-model"
+    litellm_params:
+      model: gpt-3.5-turbo
+      mock_response: "MOCK-RESPONSE-ORGATE-TEST-2026"
+
+general_settings:
+  master_key: sk-orgate-test-key
+  database_url: os.environ/DATABASE_URL
+  store_prompts_in_spend_logs: false
+```
+
+...and the container's environment set to `STORE_PROMPTS_IN_SPEND_LOGS=true`.
+Again, `mock_response` means no real provider credentials and no real prompt
+content ever left the container. The proxy came up healthy after the same
+auto-migration path as §1a (ending at `20260819000000_shadow_eval_max_budget`).
+
+**One request sent** (non-streaming chat completion, `end_user=orgate-test-user`,
+message containing the fixed marker `ORGATE-TEST-MARKER`), then the resulting
+row was polled from `LiteLLM_SpendLogs`.
+
+**Database inspection — actual output, verbatim:**
+
+```
+     end_user     |     model     |  call_type  | messages |                                                                                                                                                                                                                                              response
+------------------+---------------+-------------+----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ orgate-test-user | gpt-3.5-turbo | acompletion | {}       | {"id": "chatcmpl-620f1aa1-c288-430e-af4f-754deb4c7c5b", "model": "orgate-test-model", "usage": {"total_tokens": 30, "prompt_tokens": 10, "completion_tokens": 20, "prompt_tokens_details": null, "completion_tokens_details": null}, "object": "chat.completion", "choices": [{"index": 0, "message": {"role": "assistant", "content": "MOCK-RESPONSE-ORGATE-TEST-2026", "tool_calls": null, "function_call": null}, "finish_reason": "stop"}], "created": 1789058623, "system_fingerprint": null}
+(1 row)
+```
+
+**Result: confirmed.** With `general_settings.store_prompts_in_spend_logs: false`
+explicitly set in the tracked YAML and `STORE_PROMPTS_IN_SPEND_LOGS=true` in
+the environment, the `response` column was populated with the full response
+payload — not `{}` — proving the explicit YAML `false` did **not** block the
+`true` environment variable. `messages` remained `{}`, consistent with the
+independently-documented, unrelated `_arealtime`-only behavior for that
+column. This directly corroborates the addendum's decision table and the
+"False / True → Yes" row above against actual runtime behavior, not just
+source tracing.
+
+Environment torn down immediately after (`docker rm -f
+orgate-test-litellm orgate-test-pg`; `docker network rm orgate-test-net`); no
+state persisted from this test.
+
+**This is why both controls are now pinned `false` together** (see the
+"Tracked configuration change made" note above) — pinning only the YAML side,
+as the pre-correction version of this document effectively did by leaving the
+key unset, would not have been sufficient even if the key had been set to
+`false`, because this test shows that alone does not block the env var.
 
 ## 2. Environment guard
 
@@ -310,6 +418,187 @@ database, and the connected role against `psql-db-cgfe-dev.postgres.database.azu
 before running this script. No cloud IP is hard-coded as identity anywhere in
 the script.
 
+## 2a. Full cutover sequence
+
+This is the single ordered, executable operator procedure for the dev
+migration. It exists because §2 (environment guard) and §4 (rollback scope)
+are necessary background but, individually, neither is a step-by-step
+sequence — this section is what an operator actually runs, in order, without
+reconstructing commands from scratch files or conversation history.
+
+**Every command below assumes a PowerShell session, working directory at the
+repo root** (the same directory this file's other invocations assume), with
+`PGHOST`, `PGPORT`, `PGDATABASE=litellm`, `PGUSER`, `PGPASSWORD`, and
+`PGSSLMODE=require` already exported securely in the operator's environment
+(never inline on any command line, never committed). All exit-code checks
+below use PowerShell's `$LASTEXITCODE` after each native command.
+
+**⚠️ Do not wrap steps 4 onward in one single transaction / one script run.**
+`20260415120000_health_check_latest_per_model_index` uses `CREATE INDEX
+CONCURRENTLY`, which PostgreSQL refuses to run inside a transaction block.
+`prisma migrate deploy` (step 6) already applies each migration in its own
+transaction — the danger this warning guards against is an operator wrapping
+the whole sequence (remediation + resolve + deploy) in a manual `BEGIN`/`COMMIT`
+of their own to make it feel "atomic." Don't. Each step below is already
+scoped to its own transaction where one is needed (the remediation script
+has its own internal `BEGIN`/`COMMIT`; migration resolution and `migrate
+deploy` are separate, independently-committing operations).
+
+**Step 1 — Environment and image verification.**
+
+```powershell
+# Confirm the psql connection target is the real dev host, not a rehearsal fixture.
+psql -X -v ON_ERROR_STOP=1 -Atc "SELECT current_database(), inet_server_addr(), current_user;"
+if ($LASTEXITCODE -ne 0) { throw "psql connectivity check failed; stop." }
+```
+
+Manually compare the printed host/IP against
+`psql-db-cgfe-dev.postgres.database.azure.com`'s resolved address. This is a
+human verification step — the script cannot prove server identity by itself
+(§2's stated limitation).
+
+```powershell
+# Confirm the deployed LiteLLM image digest matches the pinned, reviewed digest.
+az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "properties.template.containers[0].image" -o tsv
+```
+
+Compare the output against
+`ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
+— the exact digest every finding in this document was verified against (see
+§3b's tag-vs-digest risk). **Stop if it does not match**: re-resolve and diff
+per §3b before continuing.
+
+**Step 2 — Confirm complete recovery prerequisites are met.**
+
+Verify, and record confirmation of each, before proceeding:
+
+- A verified, restorable pre-change backup of the `litellm` database exists
+  (Azure PITR is continuously available per §4's recovery paths, but confirm
+  the specific point-in-time is recent and restorable — do not assume).
+- The owner (Behnam) has approved the maintenance window and is reachable for
+  the duration.
+- §7's job-pause procedure has been applied for both `job-cgfe-okta-sync-dev`
+  and `job-cgfe-cleanup-dev` (confirmed via `az containerapp job show`, not
+  merely applied and assumed).
+- No other writer (application traffic, ad-hoc scripts) can reach the `litellm`
+  database during the window.
+
+**Stop condition:** if any of the above is not true, do not proceed past this
+step.
+
+**Step 3 — Stop writers.**
+
+```powershell
+# Scale the LiteLLM container app to zero so it cannot open new connections
+# or run its own startup path against the database during remediation.
+az containerapp update -n ca-litellm-dev -g rg-dev-shared --min-replicas 0 --max-replicas 0
+if ($LASTEXITCODE -ne 0) { throw "Failed to scale down ca-litellm-dev; stop." }
+```
+
+Confirm zero running revisions/replicas via `az containerapp replica list`
+before continuing. Both scheduled jobs are already paused from Step 2.
+
+**Step 4 — Run `01-baseline-remediation.sql`.**
+
+Exact invocation from §2, run from the repo root:
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -v target_env=dev -f ChatGptForEmployees/scripts/01-baseline-remediation.sql
+if ($LASTEXITCODE -ne 0) { throw "Remediation script failed or aborted (see §5 boundary 1) — do not proceed to Step 5." }
+```
+
+**Expected result:** the script's own `BEGIN`/`COMMIT`-wrapped output (see §2's
+"Case: dev (passing)" transcript) ending in `COMMIT` and exit code `0`.
+**Stop/recovery condition:** any nonzero exit means the transaction rolled
+back (§5, boundary 1) — the live schema is unchanged, so it is safe to
+diagnose and rerun once the cause is understood. Do **not** proceed to Step 5
+on a nonzero exit.
+
+**Step 5 — Compare the resulting schema against the expected baseline.**
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -Atc "SELECT to_regclass('public.\"LiteLLM_CredentialsTable\"');"
+psql -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM information_schema.columns WHERE table_name='LiteLLM_SpendLogs' AND column_name IN ('messages','response');"
+psql -X -v ON_ERROR_STOP=1 -Atc "SELECT column_name FROM information_schema.columns WHERE table_name='LiteLLM_UserTable' AND column_name='sso_user_id';"
+```
+
+**Expected result:** the first query returns the table's regclass (not
+`NULL`/empty), the second returns `2`, the third returns `sso_user_id`. This
+mirrors the local pass-case verification already run in §2. **Stop condition:**
+any mismatch means the remediation did not apply as expected — stop and
+follow §5's incident route (capture state, do not rerun, do not delete
+history) rather than proceeding to Step 6.
+
+**Step 6 — Resolve `20250326162113_baseline`, and only that migration, as applied.**
+
+```powershell
+prisma migrate resolve --applied 20250326162113_baseline --schema <path-to-litellm-schema.prisma>
+if ($LASTEXITCODE -ne 0) { throw "Baseline resolution failed; stop and capture state per §5 boundary 2 — do not resolve any other migration to work around this." }
+```
+
+**Do not** resolve any migration other than `20250326162113_baseline` at this
+step. **Expected result:** `_prisma_migrations` now contains exactly one row,
+for `20250326162113_baseline`, marked applied. **Stop condition:** per §5,
+boundary 2 — once this succeeds, the remediation script's own history guard
+permanently refuses to rerun it; any failure here before that guard trips
+should be treated as pre-commit-equivalent (capture state, do not force).
+
+**Step 7 — Run `prisma migrate deploy` for the remaining migrations.**
+
+```powershell
+prisma migrate deploy --schema <path-to-litellm-schema.prisma>
+if ($LASTEXITCODE -ne 0) { throw "migrate deploy failed partway; STOP — follow §5's incident route (capture _prisma_migrations, the Postgres error, and catalog state; do not rerun, do not delete history, do not auto-resolve; follow the tested restore path in §4)." }
+```
+
+**Expected result:** all 156 remaining migrations (157 total including the
+resolved baseline) apply in order, ending at the pinned image's actual final
+migration, `20260819000000_shadow_eval_max_budget` (§1a/§5 corrected naming —
+see Finding 5). **Stop condition:** any partial failure is boundary-2
+territory (§5) — stop immediately, capture the ledger and error, and do not
+attempt a forward fix without a separate, specifically-reviewed procedure.
+
+**Step 8 — Post-migration and application checks.**
+
+```powershell
+# All 157 ledger entries present, and their checksums match the source migration files
+# shipped in the pinned image (not recomputed from a different image/tag).
+psql -X -v ON_ERROR_STOP=1 -c "SELECT migration_name, checksum, finished_at IS NOT NULL AS applied FROM public._prisma_migrations ORDER BY started_at;"
+```
+
+Verify: 157 rows, all `applied = true`, and each `checksum` matches the
+corresponding `migration.sql` under
+`/app/litellm-proxy-extras/litellm_proxy_extras/migrations/<name>/` in the
+pinned digest (spot-check a sample, or diff programmatically if the operator
+has extracted the migration folder from the image).
+
+Then:
+
+- **Schema/index validity:** re-run the Step 5 queries plus a check that
+  `20260415120000_health_check_latest_per_model_index`'s index exists and is
+  valid (`SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE
+  indexrelid = 'public."<index name>"'::regclass;` — not `INVALID`, which
+  would indicate a concurrently-built index that failed partway).
+- **Preserved historical data and views:** row counts on `LiteLLM_SpendLogs`,
+  `LiteLLM_UserTable`, etc. before vs. after remediation/migration must match
+  (remediation and migration only add columns/tables — they must not have
+  changed row counts); the `attribution` schema's rollup views must still
+  resolve (`SELECT * FROM attribution.<view> LIMIT 1;` for each).
+- **Prompt-storage check:** restart `ca-litellm-dev` (`az containerapp update
+  -n ca-litellm-dev -g rg-dev-shared --min-replicas <original> --max-replicas
+  <original>`), confirm it starts healthy (`/health/liveliness`,
+  `/health/readiness`, and actual `to_regclass` table checks per §3a's
+  caveat, not health-probe status alone), then run §1's pending dev query
+  (`SELECT messages, response FROM public."LiteLLM_SpendLogs" ORDER BY
+  "startTime" DESC LIMIT 5;`) against synthetic, non-sensitive traffic only,
+  per §1's identification and no-paste-content rules.
+- **Application smoke tests:** Okta login, send/stream a chat, model picker,
+  existing conversations load, file upload — the same smoke-test list
+  referenced elsewhere in this program's Bicep review notes.
+
+**Only after all of the above pass**, resume the paused jobs per §7's resume
+procedure (restoring `0 5 * * 2,5` and `0 2 * * *`, with a controlled
+catch-up if a scheduled run was missed during the window).
+
 ## 3. Manual-migration mode (Bicep)
 
 `{ name: 'DISABLE_SCHEMA_UPDATE', value: 'true' }` has been added to the
@@ -324,14 +613,18 @@ identical across Dev, Test, and Prod. This change therefore takes effect in
 `litellm_routing_config.yaml` (the single config file deployed to every
 environment) would take precedence over this environment variable. Confirmed
 absent as of this change — `general_settings` in both the committed and local
-config currently contains only `master_key`, `database_url`, and
-`allow_user_requests`.
+config currently contains `master_key`, `database_url`, `allow_user_requests`,
+and (as of Finding 1's correction, §1) `store_prompts_in_spend_logs: false`;
+no `disable_prisma_schema_update` key is present.
 
 **Standing requirement:** startup will no longer repair an outdated schema
 automatically. **Every future LiteLLM image upgrade, in every environment,
-requires an explicit reviewed migration step (this document's section 2/4
-procedure) executed before the new image is allowed to start against the
-database.** If an operator skips this and the new image starts anyway, check
+requires an explicit reviewed migration step (§2a, "Full cutover sequence")
+executed before the new image is allowed to start against the
+database.** Sections 2 and 4 alone are necessary background (the environment
+guard and the rollback/recovery boundaries, respectively) but neither one is,
+by itself, the ordered operator procedure — §2a is. If an operator skips this
+and the new image starts anyway, check
 for: the container crash-looping (a P3005-style error in `az containerapp
 logs show`), or — if the wrapper's own auto-recovery ran anyway — an
 unexpectedly-populated `_prisma_migrations` table that nobody reviewed. Either
@@ -455,36 +748,61 @@ image validated by this document.
 
 ## 4. Rollback scope and timing
 
-Two distinct recovery paths, not one:
+**Path A is currently the only implementable recovery path.** A second path
+("Path B", redirecting workloads to a PITR-restored server) was previously
+described as a ready procedure. It is not: see "Path B is not currently
+implementable" below for what would need to be built first.
 
 | Path | Scope and consequences |
 |---|---|
-| **A — Recover `litellm` onto the original server** | Restore the verified pre-change backup into a **new, empty** recovery database on the same server. Validate it there, then perform an owner-led connection/name transition. `librechat_rag` on that same server is untouched throughout. Owners, ACLs, sequence values, and views on the restored copy still need explicit verification before cutover. |
-| **B — Redirect workloads to a PITR-restored server** | The restored server has a new FQDN and its own copies of every database on that server, including a **historical** copy of `librechat_rag`. This is not a revision re-pin. Repointing RAG workloads to that restored copy would move them to historical embeddings — do not do this as part of a `litellm`-only recovery. |
+| **A — Recover `litellm` onto the original server (implementable today)** | Restore the verified pre-change backup into a **new, empty** recovery database on the same server. Validate it there, then perform an owner-led connection/name transition. `librechat_rag` on that same server is untouched throughout. Owners, ACLs, sequence values, and views on the restored copy still need explicit verification before cutover. |
+| **B — Redirect workloads to a PITR-restored server (not currently implementable — see below)** | The restored server has a new FQDN and its own copies of every database on that server, including a **historical** copy of `librechat_rag`. This is not a revision re-pin. Repointing RAG workloads to that restored copy would move them to historical embeddings — do not do this as part of a `litellm`-only recovery. |
 
 **Connection-string/IaC consumers of `postgresql.bicep`'s outputs** (traced
-directly in `main.bicep`):
+directly in `main.bicep` and verified against `jobs.bicep` itself — an
+earlier version of this table incorrectly stated that the cleanup job
+consumes `liteLlmConnectionString`; it does not):
 
 | Output | Consumers |
 |---|---|
-| `liteLlmConnectionString` | `liteLlm.bicep` (`databaseUrl` param); `jobs.bicep` (both the Okta sync and cleanup jobs, `databaseUrl` param) |
-| `hostname`, `adminUser`, `adminPassword` | `jobs.bicep` (cleanup job's separate `librechat_rag` connection: `postgresHost`/`postgresUser`/`postgresPassword` params); `ragApi.bicep` (same three, plus `ragApiConnectionString`) |
+| `liteLlmConnectionString` | `liteLlm.bicep` (`databaseUrl` param); `jobs.bicep`'s **Okta sync job only** (`databaseUrl` param → `DATABASE_URL` env). The cleanup job in the same file declares no `database-url` secret and no `DATABASE_URL` env var at all. |
+| `hostname`, `adminUser`, `adminPassword` | `jobs.bicep`'s **cleanup job** (separate `librechat_rag` connection: `postgresHost`/`postgresUser`/`postgresPassword` params → `RAG_DB_HOST`/`RAG_DB_USER`/`RAG_DB_PASSWORD` env, with `RAG_DB_NAME` hardcoded to `librechat_rag`); `ragApi.bicep` (same three params, plus `ragApiConnectionString`) |
 | `ragApiConnectionString` | `ragApi.bicep` only |
 
 No LibreChat container-app Bicep file consumes `postgresql.bicep` outputs
 directly (LibreChat itself talks to LiteLLM's HTTP endpoint and to Mongo, not
 to this Postgres server).
 
-Recovering via **Path A** requires no IaC changes (same server, same
-connection name after the owner-led transition). Recovering via **Path B**
-requires updating the `postgresAdminPassword`/host references that flow into
-`liteLlm.bicep`, `jobs.bicep`, and `ragApi.bicep` — concretely, whatever
-parameter file or Key Vault reference `main.bicep`'s `postgresql` module
-consumes for `adminPassword`/host would need to point at the new server's
-FQDN, followed by a redeploy of `liteLlm`, both jobs, and `ragApi`.
+**Path B is not currently implementable.** `postgresql.bicep` takes only
+`envName`, `location`, `adminUser`, and `adminPassword` as parameters; it has
+**no parameter for a restored server's hostname**. Its server name is a
+computed variable, `var serverName = 'psql-db-cgfe-${toLower(envName)}'` —
+derived from `envName`, not settable from outside the module. Updating
+`postgresAdminPassword` (or any Key Vault reference feeding it) changes only
+the *password* `main.bicep` passes to `postgresql.bicep`; it has no effect on
+which server that password is checked against, because the module always
+computes and deploys against `psql-db-cgfe-<env>`. There is currently no Bicep
+parameter or mechanism anywhere in this module chain (`postgresql.bicep`,
+`liteLlm.bicep`, `jobs.bicep`, `ragApi.bicep`) to redirect any consumer to a
+different server's FQDN. Describing "update the password reference" as a way
+to redirect to a restored server was therefore incorrect — there is no host
+to redirect to without additional IaC work.
 
-Writers (LiteLLM, both jobs) must stay stopped for the duration of either
-path. Preserve failure-state evidence (logs, catalog state) before starting
+**What would need to be added before Path B could be used:** a host-override
+parameter (e.g. `postgresHostOverride string = ''`) threaded through
+`postgresql.bicep` so its outputs (`hostname`, and the connection strings
+built from it) can point at an operator-supplied FQDN instead of the
+always-computed `psql-db-cgfe-<env>` name, plus a decision on how to keep
+`librechat_rag` pinned to the *live* server while `litellm` alone moves to the
+restored one (since today a single module instance serves both databases from
+one server/one set of outputs). That work has not been done and has not been
+rehearsed. **Until it exists, Path B is unavailable — not a slower fallback,
+not a documented-but-untested option. Path A (recover onto the original
+server) is the only implementable recovery path for a `litellm`-only
+incident.**
+
+Writers (LiteLLM, both jobs) must stay stopped for the duration of Path A.
+Preserve failure-state evidence (logs, catalog state) before starting
 recovery. `attribution`'s tables and both rollup views must be restored and
 verified alongside the `public` schema — they live in the same database, so a
 `litellm`-database-level restore includes them, but they need their own
@@ -492,15 +810,14 @@ row-count/view-resolution check afterward (do not assume `pg_restore --clean
 --if-exists` alone proves new objects absent from the old archive were
 removed — it does not).
 
-**Estimated recovery timeline — planning estimates only, not measured, not an
-agreed SLA:**
+**Estimated recovery timeline (Path A only) — planning estimates only, not
+measured, not an agreed SLA:**
 
 | Phase | Estimate |
 |---|---|
 | Fault assessment, stop/drain writers | 10–15 min |
-| Azure PITR restore completion + restored-server network config | 15–30 min (Azure-side, largely unmeasured) |
-| Database extraction/restore + validation (Path A) | 15–30 min |
-| IaC/secret changes + redeploy (Path B only) | 15–30 min additional |
+| Azure PITR restore completion into the same server | 15–30 min (Azure-side, largely unmeasured) |
+| Database extraction/restore + validation | 15–30 min |
 | Data/application/reporting/job checks before resuming traffic | 15–20 min |
 
 These numbers are unvalidated planning placeholders pending an actual owner-run
@@ -509,6 +826,9 @@ timings once that rehearsal happens. **Full backup/restore validation
 (sequence values, ownership, permissions, database-level settings) has not yet
 happened against a complete dump — the local Docker-only rehearsal covers
 schema and row-data mechanics, not Azure recovery or sequence/ACL recovery.**
+The Path-B-only "IaC/secret changes + redeploy" line from an earlier version
+of this table has been removed along with Path B itself, above — it estimated
+work for a mechanism that does not exist.
 
 ## 5. Recovery boundaries and partial failure
 
@@ -580,27 +900,60 @@ state afterward — this must be checked against the currently deployed CLI/API
 version before the actual maintenance window (see the [Azure Container Apps
 job command reference](https://learn.microsoft.com/en-us/cli/azure/containerapp/job?view=azure-cli-latest)),
 not assumed from this document. This step is **owner-led** (Azure CLI access
-is not available in this preparation environment).
+is not available in this preparation environment). "Apply the verified pause
+mechanism" below is labeled pending verification for that same reason — this
+document does not invent an untested specific command for it.
+
+**`job show` vs. `job execution list` — these check different things and
+must not be conflated:** `az containerapp job execution list` reports
+execution *history/state* (past and currently-running executions) — it does
+not report the job's *configured* trigger type or cron schedule. Confirming
+what will fire in the future — the actual pause target — requires `az
+containerapp job show` (see the [job command
+reference](https://learn.microsoft.com/en-us/cli/azure/containerapp/job?view=azure-cli-latest#az-containerapp-job-show)
+and the separate [execution command
+reference](https://learn.microsoft.com/en-us/cli/azure/containerapp/job/execution?view=azure-cli-latest)).
+An earlier version of this procedure used `execution list` alone for both
+purposes; that was incorrect and is corrected below.
 
 **Procedure (owner-executed):**
 
-1. `az containerapp job execution list` for both jobs — capture trigger type,
-   schedule, and any currently-running executions before changing anything.
-2. Apply the verified pause mechanism; re-run the same list command to
-   confirm no new scheduled execution can start.
+1. For both jobs, run **two separate checks, not one:**
+   - `az containerapp job show -n <job-name> -g <resource-group>` — capture
+     the configured `triggerType` and `scheduleTriggerConfig.cronExpression`
+     (the values this document expects: `0 5 * * 2,5` for
+     `job-cgfe-okta-sync-<env>`, `0 2 * * *` for `job-cgfe-cleanup-<env>`)
+     *before* changing anything. This is the record of what is configured to
+     fire, not what has fired.
+   - `az containerapp job execution list -n <job-name> -g <resource-group>` —
+     capture any currently-running or recently-completed executions
+     separately. This is state/history, not configuration.
+2. Apply the verified pause mechanism (**owner-led/pending verification** —
+   see above; do not substitute an untested specific command here). Re-run
+   **both** `job show` (to confirm the effective trigger configuration no
+   longer permits a run during the window) and `job execution list` (to
+   confirm no new scheduled execution has started) to verify the pause took
+   effect.
 3. If an execution is already running when the window starts, wait for it to
-   finish or stop it deliberately per Behnam's window plan — stopping one
-   execution does not, by itself, pause its schedule.
+   finish or stop it deliberately per Behnam's window plan (checked via `job
+   execution list`) — stopping one execution does not, by itself, pause its
+   schedule (that is a `job show`-level configuration change, not an
+   execution-level one).
 4. Confirm the deployment pipeline cannot silently redeploy and restore the
    original schedule mid-window (check whether a maintenance parameter is
    needed, or whether a post-deploy pause/check step suffices, given the
    pipeline's `bicepDetectFolder: ''` setting means every push re-runs
-   `BicepCreate` regardless of what changed).
+   `BicepCreate` regardless of what changed — Bicep reapplying the
+   originally-declared cron expressions on redeploy is the specific failure
+   mode this step guards against).
 5. After database verification, restore the exact original schedule
-   configuration, confirm it via the same list command, and run or schedule
-   one controlled catch-up sync if the Tuesday/Friday window was missed.
+   configuration, confirm it via `job show` (configuration) and `job
+   execution list` (that no unwanted run occurred in the interim), and run
+   or schedule one controlled catch-up sync if the Tuesday/Friday window was
+   missed.
 6. Record the result, including whether any run alerted or retried
-   unexpectedly.
+   unexpectedly, and which of the two commands (`show` vs. `execution list`)
+   supported each claim in the record.
 
 If Behnam explicitly decides to accept a missed/failed sync run instead of
 pausing, record that decision explicitly here, along with its alert/retry

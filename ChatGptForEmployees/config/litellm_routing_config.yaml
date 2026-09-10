@@ -112,3 +112,10 @@ general_settings:
   # joins on. LiteLLM logs end_user by DEFAULT; this opt-in is kept for parity —
   # confirm its exact effect against the pinned image (it may be a no-op).
   allow_user_requests: true
+  # Explicit metadata-only pin (LiteLLM v1.99.0 review addendum, Finding 1):
+  # _should_store_prompts_and_responses_in_spend_logs() returns True if EITHER this
+  # setting OR the STORE_PROMPTS_IN_SPEND_LOGS env var is true — an explicit `false`
+  # here does NOT by itself block a `true` env var (verified: see
+  # ChatGptForEmployees.docs/local/REVIEW-AND-CUTOVER.md §1). Both this key AND the
+  # env var (liteLlm.bicep) must be pinned false together.
+  store_prompts_in_spend_logs: false
