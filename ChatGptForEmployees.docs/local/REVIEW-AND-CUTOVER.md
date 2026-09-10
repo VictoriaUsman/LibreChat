@@ -93,6 +93,94 @@ any further action — turning storage off does not delete already-stored
 content, and any cleanup requires his decision. **This status is: pending dev
 execution.**
 
+### 1a. Synthetic runtime test against the pinned image (executed, this session)
+
+The static source tracing above was corroborated by actually running the
+pinned image and inspecting real database rows, in an isolated local Docker
+environment — not the dev database.
+
+**Setup:** a dedicated Docker bridge network (`litellm-synth-test-net`; not
+`--network host`, which is unreliable on Docker Desktop for Windows) with two
+throwaway containers: a fresh `postgres:16-alpine` (`synth-test-pg`, empty
+`synth_test` database) and the pinned image
+`ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`
+(`synth-test-litellm`), started with this minimal config (no
+`store_prompts_in_spend_logs` key set, i.e. relying on the documented
+default):
+
+```yaml
+model_list:
+  - model_name: "synthetic-test-model"
+    litellm_params:
+      model: gpt-3.5-turbo
+      mock_response: "MOCK-RESPONSE-ROMCHAT-SYNTHETIC-TEST-2026"
+
+general_settings:
+  master_key: sk-synthetic-test-key
+  database_url: os.environ/DATABASE_URL
+```
+
+The `mock_response` field is LiteLLM's own documented test feature: the proxy
+returns the canned string directly, without calling any real provider, so no
+Azure OpenAI credentials were needed and no real prompt content ever left the
+container. The container ran its own startup Prisma migration against the
+empty fresh database (all migrations up through
+`20260819000000_add_spend_log_timestamps` applied cleanly) and reported
+`/health/liveliness` = `200` after about 30 seconds.
+
+**Three synthetic requests were sent** (all content is one of the fixed
+markers given in this task's instructions, never real conversation content),
+using distinct `end_user` values so the resulting rows could be identified
+unambiguously:
+
+| Request | `end_user` | Result |
+|---|---|---|
+| Non-streaming chat completion | `synthetic-test-user-nonstream` | HTTP 200, `content: "MOCK-RESPONSE-ROMCHAT-SYNTHETIC-TEST-2026"` |
+| Streaming chat completion (`stream: true`) | `synthetic-test-user-stream` | HTTP 200, SSE chunks reassembling to the same mock string, terminated by `data: [DONE]` |
+| Undefined model (`does-not-exist-model`) | `synthetic-test-user-fail` | HTTP 400, `"Invalid model name passed in model=does-not-exist-model. Call /v1/models to view available models for your key."` |
+
+**Database inspection**, after polling until the async spend-log writer had
+flushed (all three rows appeared within the first 5-second poll interval):
+
+```
+           end_user            |        model         | messages | response |  call_type
+-------------------------------+----------------------+----------+----------+-------------
+ synthetic-test-user-fail      | does-not-exist-model | {}       | {}       |
+ synthetic-test-user-stream    | gpt-3.5-turbo        | {}       | {}       | acompletion
+ synthetic-test-user-nonstream | gpt-3.5-turbo        | {}       | {}       | acompletion
+(3 rows)
+```
+
+**Observations:**
+
+- Both the non-streaming and streaming successful requests wrote the literal
+  `{}` to `messages` and `response`, exactly matching the source-traced
+  default-off behavior above (call type is not `_arealtime`, so `messages`
+  is `{}` unconditionally, and storage is off by default so `response` is
+  also `{}`).
+- The undefined-model request **did produce a `LiteLLM_SpendLogs` row**
+  (contrary to an assumption that a routing failure produces no row at all).
+  Its `messages` and `response` fields are likewise `{}`, and its `call_type`
+  is empty rather than `acompletion` — consistent with the same
+  metadata-only, default-off behavior; the failed-routing path did not leak
+  the synthetic marker text (`"SYNTHETIC-MARKER-FAIL-ROMCHAT"`) into either
+  column.
+- No other inspected column exposed request or response content for any of
+  the three rows.
+
+**What this does and does not prove:** this validates the default-off
+prompt/response storage path against the pinned image's *actual runtime
+behavior* — not just its source code — for three concrete request shapes
+(successful non-streaming, successful streaming, and a failed/undefined-model
+path), in an isolated, disposable local environment built specifically for
+this test. It does **not** replace the still-pending real dev-database
+verification with real application traffic against the actual deployed
+config and database — that check remains **pending owner-led execution**, as
+stated above, because only that check confirms behavior against the real
+deployed `litellm_routing_config.yaml`, the real `STORE_PROMPTS_IN_SPEND_LOGS`
+environment configuration (if any), and real request volume/shapes from
+LibreChat itself, none of which this synthetic harness reproduces.
+
 ## 2. Environment guard
 
 The old guard checked only `current_database() IN ('litellm', 'dev_rehearsal')`.
