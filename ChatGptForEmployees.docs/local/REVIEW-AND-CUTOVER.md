@@ -554,15 +554,16 @@ human verification step — the script cannot prove server identity by itself
    `ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`,
    with the Bicep changes already made in this repo
    (`DISABLE_SCHEMA_UPDATE=true` and `STORE_PROMPTS_IN_SPEND_LOGS=false` in
-   `liteLlm.bicep`) — this is **not yet deployed** as of this step; it is
-   what Step 8b deploys after migration is verified. Confirm
+   `liteLlm.bicep`) — this is **not yet deployed** as of this step. Confirm
    `ChatGptForEmployees.bicep/main.dev.bicepparam`'s `liteLlmImage` currently
    points at the mutable `v1.99.0` tag, not this digest — that is the true
-   state as of this step, and nothing before Step 8b changes it. **Step
-   8b(i) below is where this runbook actually switches that value to the
-   digest and commits the change** (§3b); do not treat that switch as
-   optional or already done, and do not assume the tag still resolves to the
-   exact image validated by this document in the meantime.
+   state as of this step, and nothing before Step 2b changes it. **Step 2b,
+   below, is where this runbook switches that value to the digest, sets
+   `maintenanceState = 'paused'`, and commits both together** (§3b, §8.1) —
+   deploying the target artifact at zero replicas *before* the database
+   migration runs, not after. Do not treat that switch as optional or already
+   done, and do not assume the tag still resolves to the exact image
+   validated by this document in the meantime.
 
 Compare `currentRevisionState.image` above against the target digest. If they
 already match, this environment has already been upgraded — stop and
@@ -587,6 +588,32 @@ Verify, and record confirmation of each, before proceeding:
 **Stop condition:** if any of the above is not true, do not proceed past this
 step.
 
+**Step 2b — Enter maintenance state `'paused'` (Bicep-enforced primary
+mechanism, Follow-up 1 & its working-changes correction, §8.1).** Before the
+manual scale-down in Step 3 below, commit and push
+`ChatGptForEmployees.bicep/main.dev.bicepparam` with **both** `liteLlmImage`
+switched to the pinned digest (§3b — do this now, not at the old,
+no-longer-current 8b(i)) **and** `maintenanceState = 'paused'`, in the same
+commit. This is the primary mechanism, not Step 3's manual `az` command:
+because it is declared in Bicep, no subsequent redeploy during the window
+can silently undo it the way it could undo a manual
+`--min-replicas`/`--cron-expression` change (§8.1). Watch the pipeline
+through `BicepCreate`/`UploadConfigs`/`DeployLiteLLM`, then verify effective
+state before continuing:
+
+```powershell
+az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "{image:properties.template.containers[0].image, scale:properties.template.scale}" -o json
+az containerapp show -n ca-librechat-dev -g rg-dev-shared --query "properties.template.scale" -o json
+az containerapp job show -n job-cgfe-okta-sync-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
+az containerapp job show -n job-cgfe-cleanup-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
+```
+
+**Stop condition:** proceed only once LiteLLM's `image` is the pinned
+digest, LiteLLM's and LibreChat's `scale` are both `{min:0,max:0}`, and both
+job cron expressions read `0 0 31 2 *`. This is Azure-CLI-dependent and
+owner-led, like every other `az` step in this document — not executed in
+this preparation environment.
+
 **Step 3 — Stop writers.**
 
 ```powershell
@@ -602,15 +629,22 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to capture original scale settings; sto
 $originalScale | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-original-scale.json" -Encoding utf8
 ```
 
-**Note (unverified):** `--min-replicas 0 --max-replicas 0` below has not been
-verified against the real Azure CLI/API in this preparation environment (no
-`az` CLI access — see §3a(a)). It is the intuitive way to stop a container app
-from accepting connections, but it has not been confirmed that Container Apps
-accepts `--max-replicas 0` for this app's scale configuration. If it is
-rejected or behaves unexpectedly, a more conservative, separately-verifiable
-alternative is `--min-replicas 0 --max-replicas 1` combined with deliberately
-deactivating the current revision (`az containerapp revision deactivate`),
-which stops routed traffic without depending on a zero-max-replica scale
+**This is now defense-in-depth, not the primary mechanism (Follow-up 1,
+§8.1).** Step 2b's Bicep-declared `maintenanceState = 'paused'` deploy
+already forces `ca-litellm-dev` (and `ca-librechat-dev`) to 0/0 scale in a
+way a later redeploy cannot silently undo; this manual command covers the
+gap before that deploy completes, or if an operator needs to react
+immediately without waiting for a pipeline run. **Note (unverified):**
+`--min-replicas 0 --max-replicas 0`
+below has not been verified against the real Azure CLI/API in this
+preparation environment (no `az` CLI access — see §3a(a)). It is the
+intuitive way to stop a container app from accepting connections, but it has
+not been confirmed that Container Apps accepts `--max-replicas 0` for this
+app's scale configuration. If it is rejected or behaves unexpectedly, a more
+conservative, separately-verifiable alternative is `--min-replicas 0
+--max-replicas 1` combined with deliberately deactivating the current
+revision (`az containerapp revision deactivate`), which stops routed traffic
+without depending on a zero-max-replica scale
 setting.
 
 ```powershell
@@ -680,6 +714,23 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to enumerate views pre-remediation; sto
 documented count is stale or something on this host already differs from
 what was reviewed, and either way Step 8a's later view check cannot be
 trusted against an unreconciled baseline.
+
+**View definitions and execution — required gate, not name-list-only
+(Follow-up 3, §8.3).** A same-named view can silently change its query; the
+10-row list above only catches a missing or added view. Capture full
+definitions now, and confirm every view still actually executes before
+remediation runs:
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -v target_schemas=public,attribution -Atf ChatGptForEmployees/scripts/03-view-inventory.sql | Set-Content -Path "$env:TEMP\romchat-cutover\pre-remediation-view-definitions.txt" -Encoding utf8
+if ($LASTEXITCODE -ne 0) { throw "Failed to capture pre-remediation view definitions; stop." }
+psql -X -v ON_ERROR_STOP=1 -v target_schemas=public,attribution -f ChatGptForEmployees/scripts/04-view-execution-check.sql
+if ($LASTEXITCODE -ne 0) { throw "A view failed to execute before remediation even began; stop and investigate -- do not proceed on a baseline that is already broken." }
+```
+
+**⚠️ `pre-remediation-view-definitions.txt` must survive unmodified to Step
+8a**, exactly like `03-fingerprint-frozen.sql`'s output above — it is the
+frozen pre-migration reference the post-migration capture is diffed against.
 
 **Full historical-data fingerprint (Follow-up 3).** This is what actually
 detects a changed value in an existing row, not just a changed row count.
@@ -802,6 +853,57 @@ any mismatch means the remediation did not apply as expected — stop and
 follow §5's incident route (capture state, do not rerun, do not delete
 history) rather than proceeding to Step 6.
 
+**Required gate, not supporting evidence (Follow-up 2, §8.2): full baseline
+schema comparison.** The three spot checks above are a fast first look only;
+row/column presence cannot detect a wrong type, a wrong default, a missing
+index, or a missing/altered foreign key anywhere else in the schema. Compare
+the complete catalog manifest instead, before proceeding to Step 6:
+
+```powershell
+# Capture the ACTUAL side: the real dev database, immediately after Step 4's
+# remediation commit.
+psql -X -v ON_ERROR_STOP=1 -v target_schemas=public -Atf ChatGptForEmployees/scripts/02-schema-manifest.sql | Set-Content -Path "$env:TEMP\romchat-cutover\actual-baseline-manifest.txt" -Encoding utf8
+if ($LASTEXITCODE -ne 0) { throw "Failed to capture the actual post-remediation schema manifest; stop." }
+```
+
+The EXPECTED side is generated once from the pinned image's own
+`20250326162113_baseline/migration.sql` applied to a fresh, empty database —
+**not** by also running `01-baseline-remediation.sql` on top of it (that
+script's own history guard rejects a database that already has this state;
+see §8.2 for why these are two separate, converging paths, not one composed
+one). This was executed and its output recorded in §8.2 (270 manifest lines,
+17 tables) as of this document's current pinned digest; regenerate it if the
+digest ever changes:
+
+```powershell
+docker network create romchat-schema-ref-net 2>$null
+docker run --rm -d --name romchat-schema-ref-pg --network romchat-schema-ref-net -e POSTGRES_DB=dev_rehearsal -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+Start-Sleep -Seconds 5
+docker create --name romchat-schema-extract-tmp ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 | Out-Null
+docker cp romchat-schema-extract-tmp:/app/litellm-proxy-extras/litellm_proxy_extras/migrations/20250326162113_baseline/migration.sql "$env:TEMP\romchat-cutover\baseline-migration.sql"
+docker rm romchat-schema-extract-tmp | Out-Null
+docker cp "$env:TEMP\romchat-cutover\baseline-migration.sql" romchat-schema-ref-pg:/tmp/baseline-migration.sql
+docker cp ChatGptForEmployees/scripts/02-schema-manifest.sql romchat-schema-ref-pg:/tmp/02-schema-manifest.sql
+docker exec -u postgres romchat-schema-ref-pg psql -X -v ON_ERROR_STOP=1 -d dev_rehearsal -f /tmp/baseline-migration.sql
+if ($LASTEXITCODE -ne 0) { docker rm -f romchat-schema-ref-pg; docker network rm romchat-schema-ref-net; throw "Failed to apply the pinned image's baseline migration to the reference database; stop." }
+docker exec -u postgres romchat-schema-ref-pg psql -X -v ON_ERROR_STOP=1 -v target_schemas=public -d dev_rehearsal -Atf /tmp/02-schema-manifest.sql | Set-Content -Path "$env:TEMP\romchat-cutover\expected-baseline-manifest.txt" -Encoding utf8
+docker rm -f romchat-schema-ref-pg
+docker network rm romchat-schema-ref-net
+```
+
+```powershell
+$baselineSchemaDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\expected-baseline-manifest.txt") (Get-Content "$env:TEMP\romchat-cutover\actual-baseline-manifest.txt")
+if ($baselineSchemaDiff) {
+  $baselineSchemaDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\baseline-schema-mismatch.txt" -Encoding utf8
+  throw "Baseline schema does not match the pinned image's expected schema; stop -- do not proceed to Step 6."
+}
+```
+
+**Required: `$baselineSchemaDiff` must be empty.** Any difference here is a
+harder stop than the three spot checks above — it means the real database's
+post-remediation schema does not actually match what `20250326162113_baseline`
+expects, and marking that migration "applied" in Step 6 would be false.
+
 **Neither `prisma` nor the LiteLLM schema/migrations exist anywhere in this
 repository.** They exist only inside the pinned image itself, at
 `/app/litellm-proxy-extras/litellm_proxy_extras/schema.prisma` (with its
@@ -895,12 +997,23 @@ partial failure is boundary-2 territory (§5) — stop immediately, capture the
 ledger and error, and do not attempt a forward fix without a separate,
 specifically-reviewed procedure.
 
-**Step 8 — Post-migration verification, target deployment, and resume.**
+**Step 8 — Post-migration verification, staged application release, and
+resume.** (The target image was already deployed, at zero replicas, back in
+Step 2b — this step verifies the database, then brings the application up
+in stages, not all at once.)
 
-This step has four required gates, run **in order**: **8a** database/schema
-verification, **8b** deploying the reviewed target revision, **8c** verifying
-that revision's effective state, and **8d** controlled application checks.
-Only after all four pass does §7's job-resume procedure run at the end. A
+This step has six required gates, run **in order**: **8a** database/schema
+verification; **8b** bringing LiteLLM up (`maintenanceState = 'litellm-only'`)
+for direct, internal-only testing; **8c** verifying that state's effective
+configuration; **8d** controlled synthetic checks against LiteLLM directly
+(§8.5); **8e** bringing LibreChat up for an authorized tester only
+(`maintenanceState = 'validation'`) and running the LibreChat-dependent
+application smoke tests (§8.1, §8.5 — added correcting Finding 1 of the
+second working-changes follow-up review: an earlier version of this
+sequence went straight from 8b/8c/8d to a full release, which started
+ordinary traffic and both job schedules before any LibreChat-dependent check
+had run at all); and **8f** the full release (`maintenanceState = 'off'`).
+Only after all six pass does §7's job-resume procedure run at the end. A
 mismatch anywhere in 8a stops the procedure outright (§5, Follow-up 3) — do
 not proceed to 8b on an unreconciled mismatch, and do not treat any of 8a's
 checks as optional supporting evidence; row counts remain a useful quick
@@ -1025,6 +1138,78 @@ if ($LASTEXITCODE -ne 0) { throw "Post-migration schema check failed to run; sto
   `indisvalid = t` (not `f`, which would mean the `CREATE INDEX CONCURRENTLY`
   from `20260415120000_health_check_latest_per_model_index` failed partway).
 
+- **Required gate, not supporting evidence (Follow-up 2, §8.2): full
+  target-schema comparison.** The spot check above cannot detect a wrong
+  type, wrong default, missing index, or missing/altered foreign key
+  anywhere else in the schema. Compare the complete post-migration catalog
+  manifest against the pinned image's own fully-migrated reference:
+
+  ```powershell
+  psql -X -v ON_ERROR_STOP=1 -v target_schemas=public -Atf ChatGptForEmployees/scripts/02-schema-manifest.sql | Set-Content -Path "$env:TEMP\romchat-cutover\actual-final-manifest.txt" -Encoding utf8
+  if ($LASTEXITCODE -ne 0) { throw "Failed to capture the actual post-migration schema manifest; stop." }
+  ```
+
+  The expected reference is generated by applying the pinned image's complete
+  migration history to a fresh, empty database — exactly Steps 6–7 above,
+  reused for this purpose, run against a disposable local reference database
+  rather than the real dev host. **`prisma migrate resolve --applied` only
+  records a ledger row — it executes no SQL** (corrected per the `89c57d0`
+  working-changes follow-up, Finding 1: an earlier version of this block
+  jumped straight to `migrate resolve` + `migrate deploy` against a
+  completely empty database, which would mark the baseline "applied" without
+  ever creating its tables, then attempt to run the 156 later migrations —
+  most of them `ALTER TABLE` against tables that were never created — against
+  that empty schema. The baseline SQL itself must be executed first, exactly
+  as Step 6 already does for the real dev host and as the working reference
+  file this document uses for §8.2's baseline reference already does):
+
+  ```powershell
+  docker network create romchat-schema-final-net 2>$null
+  docker run --rm -d --name romchat-schema-final-pg --network romchat-schema-final-net -e POSTGRES_DB=dev_rehearsal -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+  Start-Sleep -Seconds 5
+  # Extract and apply the baseline migration's own SQL FIRST -- this is the step
+  # the earlier version of this block was missing. Without it, the two prisma
+  # commands below mark the baseline "applied" without ever creating its tables.
+  docker create --name romchat-schema-final-extract-tmp ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 | Out-Null
+  docker cp romchat-schema-final-extract-tmp:/app/litellm-proxy-extras/litellm_proxy_extras/migrations/20250326162113_baseline/migration.sql "$env:TEMP\romchat-cutover\baseline-migration.sql"
+  docker rm romchat-schema-final-extract-tmp | Out-Null
+  docker cp "$env:TEMP\romchat-cutover\baseline-migration.sql" romchat-schema-final-pg:/tmp/baseline-migration.sql
+  docker exec -u postgres romchat-schema-final-pg psql -X -v ON_ERROR_STOP=1 -d dev_rehearsal -f /tmp/baseline-migration.sql
+  if ($LASTEXITCODE -ne 0) { docker rm -f romchat-schema-final-pg; docker network rm romchat-schema-final-net; throw "Failed to apply the pinned image's baseline migration to the final-reference database; stop." }
+  $refDbUrl = "postgresql://postgres:postgres@romchat-schema-final-pg:5432/dev_rehearsal?sslmode=disable"
+  docker run --rm --network romchat-schema-final-net -e DATABASE_URL=$refDbUrl --entrypoint /app/.venv/bin/prisma ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 migrate resolve --applied 20250326162113_baseline --schema /app/litellm-proxy-extras/litellm_proxy_extras/schema.prisma
+  if ($LASTEXITCODE -ne 0) { docker rm -f romchat-schema-final-pg; docker network rm romchat-schema-final-net; throw "Failed to mark the baseline migration resolved on the final-reference database; stop." }
+  docker run --rm --network romchat-schema-final-net -e DATABASE_URL=$refDbUrl --entrypoint /app/.venv/bin/prisma ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5 migrate deploy --schema /app/litellm-proxy-extras/litellm_proxy_extras/schema.prisma
+  if ($LASTEXITCODE -ne 0) { docker rm -f romchat-schema-final-pg; docker network rm romchat-schema-final-net; throw "Failed to build the fully-migrated reference database; stop." }
+  docker cp ChatGptForEmployees/scripts/02-schema-manifest.sql romchat-schema-final-pg:/tmp/02-schema-manifest.sql
+  docker exec -u postgres romchat-schema-final-pg psql -X -v ON_ERROR_STOP=1 -v target_schemas=public -d dev_rehearsal -Atf /tmp/02-schema-manifest.sql | Set-Content -Path "$env:TEMP\romchat-cutover\expected-final-manifest.txt" -Encoding utf8
+  docker rm -f romchat-schema-final-pg
+  docker network rm romchat-schema-final-net
+  ```
+
+  This corrected sequence (baseline SQL applied, then resolved, then
+  deployed — not resolved-then-deployed alone) was executed in full in this
+  session, re-run specifically to verify this fix: 157/157 migrations
+  applied, `Database schema is up to date!`, 75 tables, 1384 manifest lines
+  (COLUMN records in the corrected format — see Finding 3 below). Reuse that
+  recorded output only as a sanity check on the shape of the result, not as a
+  substitute for rerunning it here — the reference must come from whatever
+  digest is actually pinned in `main.dev.bicepparam` at the time of the real
+  cutover.
+
+  ```powershell
+  $finalSchemaDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\expected-final-manifest.txt") (Get-Content "$env:TEMP\romchat-cutover\actual-final-manifest.txt")
+  if ($finalSchemaDiff) {
+    $finalSchemaDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\final-schema-mismatch.txt" -Encoding utf8
+    throw "Post-migration schema does not match the pinned image's fully-migrated expected schema; stop -- do not proceed to 8b."
+  }
+  ```
+
+  **Required: `$finalSchemaDiff` must be empty** before proceeding to 8b —
+  same enforced-throw pattern as the fingerprint and view-list gates
+  elsewhere in this step, not left as printed output for the operator to
+  notice.
+
 - **Preserved historical data — required gate, not supporting evidence
   (Follow-up 3).** Re-run the *exact* frozen fingerprint file generated in
   Step 3.5 (do not regenerate it — see that step's warning) and diff:
@@ -1080,77 +1265,87 @@ psql -X -v ON_ERROR_STOP=1 -c "SELECT 'attribution.v_spend_by_dept_week' AS view
   output for the operator to catch.** A missing or changed view is a stop
   condition, same as a fingerprint mismatch.
 
+- **View definitions and execution — required gate (Follow-up 3, §8.3).**
+  The name-list check above cannot detect a same-named view whose query
+  changed. Diff full definitions against Step 3.5's frozen capture, then
+  confirm every view still actually executes:
+
+  ```powershell
+  psql -X -v ON_ERROR_STOP=1 -v target_schemas=public,attribution -Atf ChatGptForEmployees/scripts/03-view-inventory.sql | Set-Content -Path "$env:TEMP\romchat-cutover\post-migration-view-definitions.txt" -Encoding utf8
+  if ($LASTEXITCODE -ne 0) { throw "Failed to capture post-migration view definitions; stop." }
+  $viewDefDiff = Compare-Object (Get-Content "$env:TEMP\romchat-cutover\pre-remediation-view-definitions.txt") (Get-Content "$env:TEMP\romchat-cutover\post-migration-view-definitions.txt")
+  if ($viewDefDiff) {
+    $viewDefDiff | Out-File -FilePath "$env:TEMP\romchat-cutover\view-definition-mismatch.txt" -Encoding utf8
+    throw "A view's definition changed between the Step 3.5 baseline and the post-migration state; stop and follow §5's incident route."
+  }
+  psql -X -v ON_ERROR_STOP=1 -v target_schemas=public,attribution -f ChatGptForEmployees/scripts/04-view-execution-check.sql
+  if ($LASTEXITCODE -ne 0) { throw "A view failed to execute (or timed out) after migration; stop -- do not proceed to 8b. Do not substitute a bare count(*) or catalog check here -- see §8.3 for why that silently passes a broken view." }
+  ```
+
+  **Required: `$viewDefDiff` empty, and the execution check exits 0** — both
+  enforced by their own `throw`, not left as printed output. Every view's
+  definition must be unchanged from Step 3.5's baseline, and every view must
+  actually execute (not merely appear in the catalog), before proceeding to
+  8b.
+
 **Only once every check above passes** does this procedure move to 8b. This
 is the full baseline-equivalence gate Follow-up 3 requires; it is not
 satisfied by any subset of it, and it is required before `migrate resolve
 --applied` would ever run again on a future attempt, not just a nice-to-have
 report.
 
-### 8b. Deploy the target revision (Follow-up 1)
+### 8b. Bring LiteLLM up for testing: `maintenanceState = 'litellm-only'` (Follow-up 1 & its working-changes correction, §8.1)
 
-Everything through 8a validated the *database*. Nothing so far has deployed
-the reviewed target image or its Bicep changes — `ca-litellm-dev` still runs
-whatever Step 1 recorded as "the currently deployed revision"
-(`ca-litellm-dev-pre-cutover-revision.json`), scaled to zero since Step 3.
-This step is what actually puts the pinned image — with
-`DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls `false` — in
-front of the now-migrated database.
+Everything through 8a validated the *database*. The target image and
+reviewed config are **already deployed** as of Step 2b, above —
+`ca-litellm-dev` has been running the pinned digest, with
+`DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls `false`,
+scaled to `{min:0,max:0}`, since before remediation even started; LibreChat
+and both jobs have likewise been held down/paused since Step 2b. This step
+does not deploy anything new; it brings **LiteLLM only** up to normal scale
+so Step 8d can run controlled synthetic checks directly against it — it
+deliberately does **not** release LibreChat or resume either job yet (that
+is 8e, strictly after 8d passes).
 
-**Step 8b(i) — Switch `main.dev.bicepparam` to the pinned digest and commit
-this repo (required, before triggering anything below).** As of Step 1 and
-§3b, `main.dev.bicepparam`'s `liteLlmImage` still points at the mutable
-`v1.99.0` tag — nothing earlier in this runbook changes that value; it is a
-plain in-repo edit and `git commit`, not an Azure/ADO action, so it does not
-depend on the "Owner-led, Azure CLI/ADO-dependent" access this section's
-remaining steps require, and it belongs here rather than being assumed as an
-already-satisfied precondition (the gap this fix closes — see the top of
-this document's status notes):
-
-Edit `ChatGptForEmployees.bicep/main.dev.bicepparam` so the `liteLlmImage`
-line reads:
+**Step 8b(i) — Flip `maintenanceState` to `'litellm-only'` and commit.** Edit
+`ChatGptForEmployees.bicep/main.dev.bicepparam` so the line reads:
 
 ```
-param liteLlmImage = 'ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5'
+param maintenanceState = 'litellm-only'
 ```
 
-Then commit it (from the repo root):
+The `liteLlmImage` line should already read the pinned digest from Step
+2b — do not change it here; this commit changes `maintenanceState` only, so
+the image/config LiteLLM comes up with is byte-identical to what was
+verified in Step 2b and re-verified all through 8a, with nothing new to
+review at this transition. Then commit it (from the repo root):
 
 ```powershell
 git add ChatGptForEmployees.bicep/main.dev.bicepparam
-git commit -m "Pin liteLlmImage to the reviewed v1.99.0 digest for dev cutover"
-if ($LASTEXITCODE -ne 0) { throw "Failed to commit the digest pin; stop — do not trigger the pipeline against an uncommitted or still-tag-pinned bicepparam." }
+git commit -m "Bring LiteLLM up for controlled testing (LibreChat/jobs remain paused)"
+if ($LASTEXITCODE -ne 0) { throw "Failed to commit the maintenanceState transition; stop — do not trigger the pipeline against an uncommitted change." }
 ```
 
 **Stop condition:** do not proceed to trigger the pipeline (below) until this
-commit exists on the ref that will actually be deployed. The pipeline's
-`BicepCreate` stage applies whatever is committed on the triggered ref — an
-edit left uncommitted, or committed to the wrong branch, deploys the mutable
-tag exactly as before this fix, silently reproducing the gap this step
-exists to close.
+commit exists on the ref that will actually be deployed, and until it changes
+`maintenanceState` only — if `liteLlmImage` or any env var also differs from
+what Step 2b/8a validated, treat this as a new, unreviewed change and restart
+validation from 8a rather than proceeding.
 
 **This project's only deploy path is its CI/CD pipeline**
 (`ChatGptForEmployees.pipelines/dev.yml`, triggered on push to `dev`); there
 is no separate ad-hoc `az containerapp update --image` mechanism used
 anywhere else in this project, and improvising one here would deploy through
 a path nothing else in this project goes through and this review never
-validated. Concretely, that pipeline's `BicepCreate` stage applies
-`main.dev.bicepparam` (which must reference the pinned digest, not the
-`v1.99.0` tag — §3b) together with `liteLlm.bicep`'s
-`DISABLE_SCHEMA_UPDATE=true` and `STORE_PROMPTS_IN_SPEND_LOGS=false` to a new
-Container Apps revision; `UploadConfigs` uploads
-`litellm_routing_config.yaml` (which pins `store_prompts_in_spend_logs:
-false`); `DeployLiteLLM` restarts LiteLLM's latest revision so it actually
-picks up both. The same pipeline run also redeploys RAG API and LibreChat —
-expected, since 8d's application checks need LibreChat reachable anyway.
+validated. The same pipeline run also redeploys RAG API — LibreChat's own
+deploy stage restarts it too, but it stays at 0/0 scale per `libreChat.bicep`
+in this state, so it does not yet serve anything.
 
 **Owner-led, Azure CLI/ADO-dependent — unverified in this preparation
 environment, like every other Azure step in this document:**
 
-1. Re-confirm `main.dev.bicepparam`'s `liteLlmImage` is the pinned digest,
-   not the mutable tag (§3b) — i.e. that 8b(i)'s commit above is actually
-   present on the ref about to be triggered — immediately before triggering
-   anything, even though it was just switched and committed above, since
-   time has passed and this is the actual gate Finding 1 requires.
+1. Re-confirm the commit above is actually present on the ref about to be
+   triggered, immediately before triggering anything.
 2. Trigger the pipeline against the reviewed commits on
    `fix/litellm-cve-upgrade-v1.99.0-dev` — via this branch's normal
    promotion to `dev` per the project's existing branch policy, or a manual
@@ -1160,70 +1355,336 @@ environment, like every other Azure step in this document:**
    check).
 3. Watch the pipeline through `BicepCreate`, `UploadConfigs`, and
    `DeployLiteLLM`. **Stop condition:** any of those three stages failing
-   means the target revision is not confirmed deployed — do not proceed to
-   8c, and do not assume a partially-completed run left the app in a known
-   state. Capture the pipeline logs and treat this as an incident requiring
-   investigation before any further action.
-4. `ca-litellm-dev`'s scale is expected to come back from Step 3's
-   `--min-replicas 0 --max-replicas 0` as a side effect of `BicepCreate`
-   re-applying `liteLlm.bicep`'s own declared `scale` block (`minReplicas`/
-   `maxReplicas`, defaulted `0`/`2` in the module and tunable per environment
-   from `main.bicep`) — this is the expected way scale comes back, rather
-   than a separate manual step. **Confirm this actually happened in 8c below
-   rather than assuming it**; if the deployed scale doesn't match Step 3's
-   captured `ca-litellm-dev-original-scale.json`, restore it explicitly with
-   `az containerapp update -n ca-litellm-dev -g rg-dev-shared --min-replicas
-   <original> --max-replicas <original>` using that captured file as the
-   source of truth, not a remembered value.
+   means this transition is not confirmed — do not proceed to 8c, and do not
+   assume a partially-completed run left the app in a known state (capture
+   the pipeline logs and re-run 8c's effective-state check before deciding
+   anything). Treat this as an incident requiring investigation before any
+   further action.
+4. `ca-litellm-dev`'s scale is expected to return to its normal declared
+   values as a direct effect of this deploy (§8.1's table). `ca-librechat-<env>`
+   and both jobs are expected to remain at 0/0 / the never-fire sentinel.
+   **Confirm all of this in 8c below rather than assuming it.**
 5. **If Step 3 used the revision-deactivation alternative instead of
    `--max-replicas 0`:** an earlier version of this step said to "reactivate
    that revision" here — do **not** do that; the revision Step 3 deactivated
    is the pre-upgrade one Step 1 recorded, and reactivating it is exactly the
    action Follow-up 1 forbids (see the restart-guidance note at the end of
-   this step). Leave it deactivated. The new revision this pipeline run
-   creates in step 2 above is what should end up active; confirm that in 8c.
+   8e). Leave it deactivated. The revision Step 2b's maintenance-entry deploy
+   created (running the pinned digest) is what should end up active; confirm
+   that in 8c.
 
 ### 8c. Verify effective running state (Follow-up 1)
 
 ```powershell
-az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "{image:properties.template.containers[0].image, env:properties.template.containers[0].env, revision:properties.latestRevisionName, scale:properties.template.scale}" -o json | Tee-Object -Variable effectiveState
-if ($LASTEXITCODE -ne 0) { throw "Failed to read the post-deploy effective state; stop." }
-$effectiveState | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-post-deploy-state.json" -Encoding utf8
+az containerapp show -n ca-litellm-dev -g rg-dev-shared --query "{image:properties.template.containers[0].image, env:properties.template.containers[0].env, revision:properties.latestRevisionName, scale:properties.template.scale}" -o json | Tee-Object -Variable liteLlmEffectiveState
+if ($LASTEXITCODE -ne 0) { throw "Failed to read LiteLLM's post-deploy effective state; stop." }
+$liteLlmEffectiveState | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-litellm-dev-litellm-only-state.json" -Encoding utf8
+az containerapp show -n ca-librechat-dev -g rg-dev-shared --query "properties.template.scale" -o json | Tee-Object -Variable libreChatScaleState
+if ($LASTEXITCODE -ne 0) { throw "Failed to read LibreChat's post-deploy scale; stop." }
+az containerapp job show -n job-cgfe-okta-sync-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
+az containerapp job show -n job-cgfe-cleanup-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
 ```
 
 **Required, before 8d:**
 
-- `image` is the exact pinned digest from §3b/Step 1's target-artifact
-  record — not the tag, and not the "currently deployed revision" Step 1
-  recorded pre-cutover.
-- `env` contains `DISABLE_SCHEMA_UPDATE=true` and
+- LiteLLM `image` is the exact pinned digest from §3b/Step 1's
+  target-artifact record — not the tag, and not the "currently deployed
+  revision" Step 1 recorded pre-cutover.
+- LiteLLM `env` contains `DISABLE_SCHEMA_UPDATE=true` and
   `STORE_PROMPTS_IN_SPEND_LOGS=false`.
-- `revision` differs from the revision name Step 1 recorded in
-  `ca-litellm-dev-pre-cutover-revision.json` — confirming this is a newly
-  created revision from this deploy, not the pre-cutover one somehow still
-  live.
+- LiteLLM `scale` is back to its normal declared values (not `{min:0,max:0}`)
+  — matching `ca-litellm-dev-original-scale.json` from Step 3, per §8.1.
+- **LibreChat's `scale` is still `{min:0,max:0}`** — this is the entire point
+  of the `'litellm-only'` state; if LibreChat is already at normal scale
+  here, ordinary employee traffic can already reach LiteLLM and this gate
+  has already failed silently. Stop and diagnose rather than proceeding to
+  8d.
+- Both jobs' cron expressions are still the `0 0 31 2 *` sentinel — not yet
+  `0 5 * * 2,5` / `0 2 * * *`.
+- LiteLLM `revision` differs from the revision name Step 1 recorded in
+  `ca-litellm-dev-pre-cutover-revision.json` — confirming this is the
+  revision Step 2b created, not the pre-cutover one somehow still live.
 
-**Stop condition:** any mismatch means traffic must not resume. Do not run
-8d's application checks or §7's job resume against an unverified revision —
-go back to 8b and diagnose before continuing.
+**Stop condition:** any mismatch means direct testing must not proceed. Do
+not run 8d's checks against an unverified state — go back to 8b and diagnose
+before continuing.
 
-### 8d. Controlled application checks
+### 8d. Controlled synthetic checks against LiteLLM directly (not through LibreChat)
 
-- **Prompt-storage check:** confirm `/health/liveliness` and
-  `/health/readiness` return healthy (not health-probe status alone — §3a's
-  caveat that a healthy probe can mask a broken schema still applies; also
-  spot-check a couple of the `to_regclass` checks from 8a again against the
-  now-running app's own connection), then run §1's pending dev query
-  (`SELECT messages, response FROM public."LiteLLM_SpendLogs" ORDER BY
-  "startTime" DESC LIMIT 5;`) against synthetic, non-sensitive traffic only,
-  per §1's identification and no-paste-content rules.
-- **Application smoke tests:** Okta login, send/stream a chat, model picker,
-  existing conversations load, file upload — the same smoke-test list
-  referenced elsewhere in this program's Bicep review notes.
+LibreChat is still at 0/0 (8c). This step now has a concrete, prepared
+execution location — `job-cgfe-synth-check-<env>` (`jobs.bicep`), a
+manually-triggered ACA Job running
+`ChatGptForEmployees/scripts/05-synthetic-litellm-check.py` — instead of the
+unresolved candidates an earlier version of this step listed (second
+working-changes follow-up, Finding 2: "make the internal synthetic test
+executable"). This job runs inside the same Container Apps environment as
+`ca-litellm-dev`, so it resolves LiteLLM's internal FQDN the same way any
+other app in the environment does, without exec-ing into any container.
 
-**Only after 8a, 8b, 8c, and 8d have all passed**, resume the paused jobs per
-§7's resume procedure (restoring `0 5 * * 2,5` and `0 2 * * *`, with a
-controlled catch-up if a scheduled run was missed during the window).
+#### 8d(i) — Verify the jobs image before starting anything (third working-changes follow-up, Finding 2)
+
+The job pulls a shared image (`jobs.bicep`'s `jobsImage`) built by the
+`BuildJobsImage` pipeline stage (`dev.yml`). Completion of `BicepCreate`,
+`UploadConfigs`, or `DeployLiteLLM` does **not** establish that this image is
+ready or current — `BuildJobsImage` only depends on `BicepCreate` and can
+fail, be skipped, or simply not have run yet for this commit even while
+those other stages succeed. Do not start the job until this is confirmed:
+
+1. In the pipeline run for this cutover's reviewed commit, confirm the
+   `BuildJobsImage` stage actually **Succeeded** for that exact commit —
+   check the stage result and the commit SHA in its own logs, not merely
+   that the overall pipeline is green.
+2. From that stage's logs, record the pushed digest it printed
+   (`librechat-cleanup:<commit-sha>` and its `sha256:...` digest) alongside
+   the commit SHA:
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "$env:TEMP\romchat-cutover" | Out-Null
+   @{
+     commit = '<commit SHA from the BuildJobsImage stage log>'
+     digest = '<sha256:... digest from the BuildJobsImage stage log>'
+   } | ConvertTo-Json | Set-Content -Path "$env:TEMP\romchat-cutover\jobs-image-build-record.json" -Encoding utf8
+   ```
+3. Pin the scheduled-jobs image to that exact digest rather than trusting the
+   mutable `:latest` tag: set `jobsImageDigest` to the recorded digest in
+   `main.dev.bicepparam`, commit, and redeploy (`BicepCreate`) so
+   `job-cgfe-synth-check-dev` (and the two scheduled jobs, which share the
+   same image) resolve to `librechat-cleanup@sha256:...` instead of
+   `:latest`. **The digest pin is mandatory for cutover.** A mutable tag can
+   move between a registry check and the execution's image pull, so a tag
+   lookup is not an acceptable substitute. Keep this pin unchanged through
+   synthetic testing, application validation, and release.
+4. Confirm the deployed job actually reflects that image before starting it:
+   ```powershell
+   $jobsBuildRecord = Get-Content -Encoding utf8 "$env:TEMP\romchat-cutover\jobs-image-build-record.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+   if ($jobsBuildRecord.digest -cnotmatch '^sha256:[0-9a-f]{64}$') {
+       throw "Build evidence has no valid SHA-256 image digest; stop."
+   }
+   $expectedSynthImage = "acrcgfedev.azurecr.io/librechat-cleanup@$($jobsBuildRecord.digest)"
+   $deployedSynthImage = az containerapp job show -n job-cgfe-synth-check-dev -g rg-dev-shared --query "properties.template.containers[0].image" -o tsv
+   if ($LASTEXITCODE -ne 0) { throw "Failed to read the synthetic job image; stop." }
+   if ($deployedSynthImage -cne $expectedSynthImage) {
+       throw "Synthetic job must use the exact recorded digest reference; tags and mismatched images are rejected. Stop before job start."
+   }
+   ```
+   **Required:** the deployed reference equals the recorded immutable image
+   reference. After starting the job in 8d(ii), also verify the captured
+   execution template uses this same reference; a concurrent job update
+   between the preflight and start must not produce acceptable evidence.
+
+**Stop condition:** a failed/skipped `BuildJobsImage` for this commit, a
+missing or mismatched digest, or a job image that doesn't match must block
+`job start` below. Fix the image/deploy first and re-verify rather than
+running the synthetic check against an unverified image.
+
+#### 8d(ii) — Start the job and verify the execution it actually started (third working-changes follow-up, Finding 1)
+
+An earlier version of this step started the job and then read `[0]` from
+execution history and `properties.template.containers[0].exitCode` to
+decide pass/fail. Neither is reliable: execution history `[0]` is not
+guaranteed to be the execution just started, and `exitCode` is not a
+documented field of the [Azure jobs execution
+schema](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/jobs-executions/list?view=rest-resource-manager-containerapps-2025-07-01)
+— a null there must never be read as success. The commands below instead
+capture the started execution's own identity and poll only that execution.
+
+**Verify the exact command/response shape in an Azure rehearsal before the
+maintenance window** — the shape below follows the documented list schema
+(`name`, `properties.status`), but has not been independently exercised
+against a live job execution in this review; treat any deviation there
+(field names, `--execution` support on `job logs show`, etc.) as blocking
+until resolved, not as something to work around silently.
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:TEMP\romchat-cutover" | Out-Null
+
+# 1. Start the job and capture the execution it actually created — never
+#    assume it will be history's first entry afterward.
+$jobStartResult = az containerapp job start -n job-cgfe-synth-check-dev -g rg-dev-shared -o json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $jobStartResult) { throw "job start did not return a usable execution identity; stop." }
+$synthExecName = $jobStartResult.name
+if ([string]::IsNullOrWhiteSpace($synthExecName)) { throw "job start response had no execution name; stop." }
+$jobStartResult | ConvertTo-Json -Depth 10 | Out-File -FilePath "$env:TEMP\romchat-cutover\synth-check-execution-start.json" -Encoding utf8
+if ($jobStartResult.properties.template.containers[0].image -cne $expectedSynthImage) {
+    throw "Started execution does not report the required digest-pinned image; do not accept this run or proceed to 8e. Keep maintenance in effect and investigate."
+}
+Write-Host "Started execution: $synthExecName"
+
+# 2. Poll ONLY that execution, bounded by a deadline, for an explicit
+#    terminal status. Filter by exact name and require exactly one match —
+#    never fall back to [0] if the filter is empty or ambiguous.
+$deadline = (Get-Date).AddMinutes(5)
+$synthExecStatus = $null
+do {
+    Start-Sleep -Seconds 10
+    $matches = az containerapp job execution list -n job-cgfe-synth-check-dev -g rg-dev-shared --query "[?name=='$synthExecName']" -o json | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw "Failed to poll execution '$synthExecName'; stop." }
+    if ($matches.Count -ne 1) { throw "Expected exactly one execution named '$synthExecName', found $($matches.Count); stop and investigate rather than guessing which one." }
+    $synthExecStatus = $matches[0].properties.status
+    Write-Host "Execution $synthExecName status: $synthExecStatus"
+} while ($synthExecStatus -notin @('Succeeded', 'Failed', 'Stopped') -and (Get-Date) -lt $deadline)
+
+if ($synthExecStatus -ne 'Succeeded') {
+    throw "Execution $synthExecName ended as '$synthExecStatus' (or is still nonterminal at the deadline) -- treat Failed, Stopped, timeout, and any unrecognized status as a stop condition. Do not proceed to 8e."
+}
+
+# 3. Only now retrieve logs, scoped to this same execution, and require the
+#    script's own PASS line for THIS run -- not an older run's output, not an
+#    unscoped tail, and not a still-running execution's partial output.
+$synthExecLogs = az containerapp job logs show -n job-cgfe-synth-check-dev -g rg-dev-shared --execution "$synthExecName" 2>&1
+$synthExecLogs | Out-File -FilePath "$env:TEMP\romchat-cutover\synth-check-execution-logs.txt" -Encoding utf8
+if (-not ($synthExecLogs -match 'PASS: all synthetic LiteLLM checks succeeded')) {
+    throw "Execution $synthExecName reported job-level status 'Succeeded' but its own PASS marker was not found in the retrieved logs -- job status alone is not sufficient. Stop and investigate before proceeding to 8e."
+}
+Write-Host "Confirmed script-level PASS for execution $synthExecName."
+```
+
+If `--execution` is not accepted by the installed CLI version, resolve the
+actually-supported way to scope `az containerapp job logs show` to one
+execution (or an equivalent Log Analytics query keyed to this execution's
+name/time-window) before the maintenance window — logs must be scoped to
+this specific execution, never the job's general/latest log stream.
+
+**What the script checks, in order (all bounded, see the script's own
+docstring for exact env vars/timeouts):** `/health/liveliness` and
+`/health/readiness` against LiteLLM's internal FQDN; one synthetic,
+non-sensitive chat completion (a fixed marker string, never employee
+content — the same pattern as §1a/§1b/§1c's local Docker harnesses, but
+against the real dev database this time) with a freshly-generated unique
+`end_user` marker; a bounded poll of `LiteLLM_SpendLogs` for that specific
+row (per §1's "identify the synthetic requests' own rows" requirement — not
+the latest-N-rows query alone); and a check that `messages`/`response` on
+that row match the documented empty representation. The script never prints
+row content, only match/mismatch status.
+
+**Validated locally**, against an isolated Docker LiteLLM (mock response,
+`store_prompts_in_spend_logs: false` + `STORE_PROMPTS_IN_SPEND_LOGS=false`,
+matching the actual shipped configuration) and Postgres, running the actual
+script file unmodified in each case:
+
+| Case | Expected exit | Observed |
+|---|---|---|
+| Healthy, storage off, matching row found | `0` (pass) | ✅ |
+| Wrong `LITELLM_MASTER_KEY` | `2` (completion request failed) | ✅ (HTTP 401) |
+| Nonexistent model name | `2` (completion request failed) | ✅ (HTTP 400) |
+| Completion succeeds but the polled database has no matching row within the bound | `3` (unresolved — not evidence storage is off) | ✅ |
+| Database unreachable | `5` (distinguished from case above — query never ran, not "ran and found nothing") | ✅ |
+| Storage actually enabled (content populated) | `4` (stop and escalate; no content printed) | ✅ — **and this positive case caught a real bug during validation**: the first draft compared the jsonb `messages`/`response` values against the Python string `"{}"`, but `psycopg2` auto-adapts a `jsonb` column to a native Python object (an empty `dict`, confirmed via `pg_typeof`), so that comparison was **always** `False` regardless of actual content — every run would have raised a false "content is populated" alarm. Fixed to compare against the Python `{}` value (with the string form kept as a defensive fallback); re-validated against both the true-empty and populated cases above after the fix. |
+
+**Stop condition:** anything other than the specific execution started in
+8d(ii) reaching `Succeeded` with its own scoped logs containing the PASS
+line means do not proceed to 8e — that includes a non-`Succeeded` terminal
+status, a timeout, and a `Succeeded` status whose logs don't show the PASS
+marker (8d(ii)'s script already `throw`s on each of these). Capture the
+job's logged output (never raw row content — the script itself never prints
+it) and follow the incident route (§5) rather than proceeding to a
+validation phase against a LiteLLM instance that hasn't actually passed this
+check.
+
+**Cleanup:** none required beyond the job's own normal completion —
+`job-cgfe-synth-check-<env>` is a standing, reusable Bicep-declared resource
+(not a throwaway container an operator creates and must remember to remove),
+so there is nothing to clean up per invocation.
+
+**Application smoke tests that need LibreChat (Okta login, send/stream a
+chat via the UI, model picker, existing conversations load, file upload)
+still cannot run in this state** — LibreChat remains at 0/0. That is 8e,
+next — not a bare release to `'off'` (see that step's own history: an
+earlier version of this runbook released full traffic and both job
+schedules together, before any LibreChat-dependent check had run at all;
+8e exists specifically to close that gap, per the second working-changes
+follow-up, Finding 1).
+
+### 8e. Bring LibreChat up for authorized-tester validation: `maintenanceState = 'validation'` (second working-changes follow-up, Finding 1)
+
+**Only after 8a–8d have all passed.** Direct LiteLLM success (8d) does not
+establish that the complete application works — Okta login, the LibreChat
+UI, streaming, model selection, conversation loading, and file upload all
+depend on LibreChat itself, which has been at 0/0 since Step 2b. This step
+brings LibreChat up **for an authorized tester only**, before any ordinary
+employee is let in.
+
+**Step 8e(i) — Set the tester allow-list and flip to `'validation'`.** Edit
+`ChatGptForEmployees.bicep/main.dev.bicepparam`:
+
+```
+param maintenanceTesterIpRanges = ['<tester's actual public IP>/32']
+param maintenanceState = 'validation'
+```
+
+Both values change together, in one commit — a `'validation'` state with no
+tester IP configured fails closed (blocks everyone, including the tester;
+see `libreChat.bicep`'s own param comment), so there is no meaningful
+partial state between these two lines. Commit and push:
+
+```powershell
+git add ChatGptForEmployees.bicep/main.dev.bicepparam
+git commit -m "Bring LibreChat up for authorized-tester validation (tester IP allow-listed)"
+if ($LASTEXITCODE -ne 0) { throw "Failed to commit the validation-phase transition; stop." }
+```
+
+Watch the same three pipeline stages, then verify effective state:
+
+```powershell
+az containerapp show -n ca-librechat-dev -g rg-dev-shared --query "{scale:properties.template.scale,ipRestrictions:properties.configuration.ingress.ipSecurityRestrictions}" -o json | Tee-Object -Variable libreChatValidationState
+if ($LASTEXITCODE -ne 0) { throw "Failed to read LibreChat's post-deploy effective state; stop." }
+$libreChatValidationState | Out-File -FilePath "$env:TEMP\romchat-cutover\ca-librechat-dev-validation-state.json" -Encoding utf8
+az containerapp job show -n job-cgfe-okta-sync-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
+az containerapp job show -n job-cgfe-cleanup-dev -g rg-dev-shared --query "properties.configuration.scheduleTriggerConfig.cronExpression" -o tsv
+```
+
+**Required, before running any application check:**
+
+- LibreChat `scale` is back to its normal declared values (not `{min:0,max:0}`).
+- LibreChat's `ipSecurityRestrictions` contains exactly one `Allow` entry, for
+  the tester's actual configured IP — **not** the `0.0.0.0/32` fail-closed
+  sentinel (which means `maintenanceTesterIpRanges` was left empty and this
+  deploy is blocking the tester too, not just ordinary employees).
+- Both jobs' cron expressions are still the `0 0 31 2 *` sentinel — not yet
+  restored.
+
+**Stop condition:** any mismatch means do not run application checks yet —
+in particular, if `ipSecurityRestrictions` is empty (no restriction at all)
+rather than the expected single-entry allow-list, ordinary employee traffic
+can already reach LibreChat and this gate has already failed silently; stop
+and diagnose rather than proceeding.
+
+**Step 8e(ii) — Application smoke tests, from the allow-listed tester IP
+only, using an authorized synthetic test account and non-sensitive test
+data:** Okta login, model selection (both `ROMTech AI Standard` and
+`ROMTech AI Fast`), send/stream a chat, existing-conversation loading, and
+file upload. Record pass/fail evidence only — never copy employee
+conversation content into tickets, logs, or chat, consistent with every
+other content-handling rule in this document.
+
+**Stop condition:** any failed check means do not proceed to 8f. Keep
+`maintenanceState = 'validation'` (LibreChat restricted, both jobs paused)
+in effect, capture diagnostics, and follow the incident route (§5) — do not
+switch to `'off'` merely to diagnose a failure, and do not reactivate the
+previous image against the upgraded database (see 8f's own note on this).
+
+### 8f. Release: `maintenanceState = 'off'` (Follow-up 1 & both working-changes corrections, §8.1)
+
+**Only after 8a, 8b, 8c, 8d, and 8e have all passed.** Edit
+`ChatGptForEmployees.bicep/main.dev.bicepparam` so the lines read:
+
+```
+param maintenanceTesterIpRanges = []
+param maintenanceState = 'off'
+```
+
+Same discipline as 8b(i)/8e(i): clear the tester allow-list back to empty in
+the same commit that flips to `'off'` — leaving a stale IP-restriction entry
+around after the window closes would be a leftover, unreviewed access rule
+on a production-facing app. Commit and push, then watch the same three
+pipeline stages. LibreChat's `ipSecurityRestrictions` clears (Azure's
+"no restriction" value, this app's normal unrestricted state) and both jobs
+resume their normal schedules (`0 5 * * 2,5` / `0 2 * * *`) as a direct
+effect of this deploy — confirm with `az containerapp show`/`job show`,
+expecting LibreChat's scale to match its own original values, its
+`ipSecurityRestrictions` to be empty again, and both job cron expressions to
+be back to normal. Then resume the paused jobs' operational side per §7
+(confirm no unwanted execution occurred during the window, and run a
+controlled catch-up if a scheduled run was missed).
 
 **Reactivating a previous (pre-upgrade) revision against the now-migrated
 database is not a normal restart action and must not be done as a routine
@@ -1403,14 +1864,20 @@ digest.
 
 **Required action (not optional, not either/or):** this runbook switches
 `main.dev.bicepparam` to reference the digest directly and commits that
-change — Step 8b(i) in §2a is where that actually happens, immediately before
-the pipeline is triggered. An earlier version of this section framed this as
-a choice between switching to the digest *or* re-resolving and diffing the
-tag against the digest as an alternative; that framing is gone now that the
+change — **Step 2b in §2a is where that actually happens now** (moved there,
+together with `maintenanceState = 'paused'`, as part of Follow-up 1's
+maintenance-state enforcement, §8.1 — it used to be Step 8b(i), deploying the
+target image for the first time only after migration; now the target image
+deploys before migration, at zero replicas, and Step 8b is a
+`maintenanceState` flip only, not a fresh digest switch), immediately before
+the pipeline is
+triggered. An earlier version of this section framed this as a choice
+between switching to the digest *or* re-resolving and diffing the tag
+against the digest as an alternative; that framing is gone now that the
 digest switch itself is a required step this runbook takes — once the
 bicepparam pins the digest directly, there is no longer a tag to re-resolve
 against, so diffing it is neither necessary nor meaningful as an alternative
-path. Do not skip Step 8b(i) and do not assume the tag still resolves to the
+path. Do not skip Step 2b and do not assume the tag still resolves to the
 exact image validated by this document in its place.
 
 ## 4. Rollback scope and timing
@@ -1650,3 +2117,540 @@ If Behnam explicitly decides to accept a missed/failed sync run instead of
 pausing, record that decision explicitly here, along with its alert/retry
 consequence and the catch-up plan — an expected failure is not the same thing
 as a pause and must not be described as one.
+
+## 8. Follow-up review implementation (through `89c57d0`)
+
+**Naming note:** this is top-level section "8", not to be confused with §2a's
+"Step 8" and its "8a"–"8f" sub-steps, which are a different, pre-existing
+numbering scheme nested inside section 2a (now 8a/8b/8c/8d/8e/8f — two extra
+sub-steps were added across two rounds of corrections; see §8.1). Cross-
+references below spell out "§2a Step 8b" etc. in full for exactly this
+reason.
+
+This section implements the three findings from the implementation guide's
+`89c57d0` follow-up review (Findings 1–3), **and has itself since been
+corrected twice**, in response to two further follow-up reviews of these
+working changes:
+
+- The first (referred to throughout as the "`89c57d0` working-changes
+  follow-up") found three defects: the maintenance mechanism in §8.1
+  released traffic and job schedules together, before any application check
+  ran; the Step 8a final-reference generation procedure in §8.2 skipped
+  executing the baseline SQL; and the schema manifest in §8.2 compared
+  physical column position, rejecting a valid remediation pattern.
+- The second (referred to throughout as the "second working-changes
+  follow-up") found two more: even after the first correction, switching
+  straight from `'litellm-only'` to `'off'` still started LibreChat and
+  resumed both job schedules *before* any LibreChat-dependent check (login,
+  streaming, conversations, upload) had run at all — direct LiteLLM success
+  doesn't prove the complete application works; and Step 8d's synthetic
+  check had no concrete, runnable execution mechanism — just a list of
+  unresolved candidates.
+
+All five are fixed and re-validated below, in place, rather than in a
+separate section — see §8.1's, §8.2's, and §8.5's own "corrected"/
+"follow-up" callouts for exactly what changed and how each fix was
+re-verified. §8.6's summary table names which round fixed which defect.
+
+Neither this section nor its corrections authorize database changes or
+deployment — the same status as the rest of this document: **no remote DDL,
+migration resolution, migration deployment, Azure mutation, or application
+request has been performed against dev, Azure, or any other real environment
+as part of this section, including its corrections.** All validation below
+ran against ephemeral local Docker containers only, using the same pinned
+digest
+(`ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5`,
+already present in the local Docker image cache from earlier sessions'
+work) already validated elsewhere in this document.
+
+### 8.1. Maintenance-state enforcement (Bicep) — Finding 1, corrected
+
+**Problem restated:** `UploadConfigs` depends on `BicepCreate`, so infrastructure
+deployment can start the target revision before the reviewed
+`litellm_routing_config.yaml` is actually uploaded; `deployJobs=true` means a
+redeploy reapplies `jobs.bicep`'s declared cron schedules from scratch,
+silently undoing a manual `az containerapp job update --cron-expression`
+pause. Neither gap is closed by anything in the runbook's Step 8 sequence as
+previously written — that sequence only checks state *after* deployment, it
+does not prevent either race from happening *during* deployment.
+
+**This subsection was itself corrected once already**, in response to the
+`89c57d0` *working-changes* follow-up review, Finding 2: "separate controlled
+startup from traffic and job release." The first implementation used a
+single `maintenanceMode bool` gating LiteLLM's scale and both jobs' cron
+together — release was one flip that brought LiteLLM to normal scale
+**and** resumed both job schedules **at the same time**, before Step 8d's
+controlled synthetic checks had run at all. That is exactly backwards: it
+released real traffic and resumed jobs *before* the checks meant to
+authorize that release. The design below replaces that boolean with a
+three-value `maintenanceState`, described in full further down.
+
+**Implementation — a Bicep-level `maintenanceState` parameter, not a
+pipeline-ordering fix.** This repository's deploy pipeline
+(`ChatGptForEmployees.pipelines/dev.yml`) is templated from an external repo
+(`ROMTech/PipelineTemplates`) not present in this working tree — its actual
+stage/condition internals could not be inspected as part of this
+implementation, so reordering *its* stages is recorded here as an outstanding
+gate (see "What is still not verified" below), not something this change
+claims to have done. Instead, the fix is made structurally, in the Bicep
+modules this repository does own, so that no ordering of the pipeline's own
+stages — inspected or not — can matter.
+
+**Why one boolean was not enough:** LiteLLM's own ingress is already
+`external: false` (internal-only) — the only realistic path an ordinary
+employee has to it is through LibreChat. Step 8d's controlled synthetic
+checks need LiteLLM itself running (a stopped container can't serve even a
+synthetic request), but must NOT expose it to ordinary employee traffic
+before those checks pass, and must NOT resume either job's schedule before
+they pass either. A single true/false can express "everything stopped" or
+"everything normal," but not "LiteLLM up for direct testing, LibreChat and
+both jobs still held back."
+
+**`@allowed(['off', 'paused', 'litellm-only', 'validation']) param
+maintenanceState string = 'off'`**, added to `liteLlm.bicep`, `jobs.bicep`,
+`libreChat.bicep`, and threaded through `main.bicep` so all three modules
+read the same value. **The fourth state, `'validation'`, was added in a
+second correction round**, described after the table and the three-state
+sequence below, in response to the *second* working-changes follow-up,
+Finding 1: "validate LibreChat before releasing users and jobs" — direct
+LiteLLM success (`'litellm-only'`) doesn't prove the complete application
+works, and the original design still switched straight to `'off'` (full
+release) as the only way to bring LibreChat up at all, which resumed both
+job schedules and opened ordinary access at the same moment as the very
+first LibreChat-dependent check.
+
+| State | `liteLlm.bicep` scale | `libreChat.bicep` scale | `libreChat.bicep` ingress | `jobs.bicep` cron |
+|---|---|---|---|---|
+| `off` (default) | normal | normal | unrestricted | normal (`0 5 * * 2,5` / `0 2 * * *`) |
+| `paused` | 0/0 | 0/0 | n/a (0 replicas) | never-fire sentinel (`0 0 31 2 *`) |
+| `litellm-only` | normal | **0/0** | n/a (0 replicas) | never-fire sentinel |
+| `validation` | normal | **normal** | **tester IP allow-list only** | never-fire sentinel |
+
+The key asymmetries: in `litellm-only`, LiteLLM is up but LibreChat — the
+only thing an ordinary employee actually calls — is still at 0/0. In
+`validation`, LibreChat is ALSO up (so an authorized tester can exercise the
+real UI), but its ingress is restricted to `maintenanceTesterIpRanges` only,
+via Azure Container Apps' `ipSecurityRestrictions` — a real ingress-level
+access control, not a replica-count proxy for one. Both jobs stay paused in
+every state except `off`.
+
+**The four-deploy sequence (was three, was two):**
+
+1. **Enter maintenance = `'paused'` (§2a Step 2b).** Commit
+   `main.dev.bicepparam` with `liteLlmImage` switched to the pinned digest
+   (§3b) **and** `maintenanceState = 'paused'` in the same commit, then push.
+   Whatever order `BicepCreate` / `UploadConfigs` / `DeployLiteLLM` actually
+   run in, LiteLLM and LibreChat are both forced to 0 replicas by the Bicep
+   template itself, and both job schedules are forced to the never-fire
+   sentinel — it is structurally impossible for any target image to serve a
+   single request, or for either job to fire, during this deploy, whether or
+   not the reviewed config has already landed on the Azure File Share by the
+   time the revision is created. Once this deploy completes,
+   `litellm_routing_config.yaml` **is** correctly on the File Share (uploaded
+   during this same run), and the target image/env are the reviewed ones —
+   but nothing is serving yet. Verify via `az containerapp show`/`job show`
+   (both apps at 0/0, both jobs at the sentinel) before proceeding to the
+   database migration steps.
+2. Run the migration sequence (§2a Steps 3–7) against the now-paused,
+   already-correctly-configured environment.
+3. **Bring LiteLLM up for direct testing = `'litellm-only'` (§2a Step 8b).**
+   Once Step 8a's schema/view verification gate passes (§8.2/§8.3, plus the
+   existing fingerprint/ledger/checksum checks), commit `main.dev.bicepparam`
+   with `maintenanceState = 'litellm-only'` **alone** — image/config
+   unchanged since step 1 — and push. LiteLLM returns to normal scale;
+   LibreChat and both jobs remain paused. Verify effective state (8c), then
+   run Step 8d's controlled synthetic checks — including §1's pending
+   prompt-storage query — directly against LiteLLM's internal endpoint via
+   `job-cgfe-synth-check-<env>` (§8.5; never through LibreChat, which is
+   still down).
+4. **Bring LibreChat up for authorized-tester validation = `'validation'`
+   (§2a Step 8e, new in the second correction).** Once 8d's checks pass,
+   commit `main.dev.bicepparam` with `maintenanceTesterIpRanges` set to the
+   tester's actual public IP **and** `maintenanceState = 'validation'`
+   together, and push. LibreChat comes up, restricted to that IP; both jobs
+   remain paused. Run the LibreChat-dependent application smoke tests (Okta
+   login, streaming, model picker, conversations, upload) from that IP only.
+5. **Release = `'off'` (§2a Step 8f).** Only once 8e's checks pass, commit
+   `main.dev.bicepparam` with `maintenanceTesterIpRanges = []` **and**
+   `maintenanceState = 'off'` together, and push. LibreChat opens to
+   everyone and both jobs resume their normal schedules, with a controlled
+   catch-up per §7 if a scheduled run was missed. Nothing about the
+   image/config changes in this step either.
+
+This replaces Step 3's manual `az containerapp update --min-replicas 0
+--max-replicas 0` as the *primary* mechanism for keeping both apps at zero
+replicas through the window (that manual command, and its
+revision-deactivation alternative, remain a valid immediate, out-of-band
+fallback — e.g. if an operator needs to react before any Bicep deploy can run
+— but a subsequent Bicep deploy with `maintenanceState` left at its default
+`'off'` would silently undo either one; only committing a non-`'off'` value
+survives a redeploy). The same reasoning applies to §7's `--cron-expression`
+candidate pause command for the two scheduled jobs.
+
+**`maintenanceTesterIpRanges` fails closed, not open.** If `maintenanceState
+= 'validation'` is deployed with this array left empty, `libreChat.bicep`
+substitutes the reserved, unroutable `0.0.0.0/32` rather than applying no
+restriction at all (an empty `ipSecurityRestrictions` array is Azure's
+"no restriction" value, which would silently readmit ordinary traffic
+instead of blocking it). A misconfigured `'validation'` deploy therefore
+blocks the tester too, rather than accidentally exposing the app —
+noticeable and fixable, rather than silently unsafe.
+
+**Validated:** `bicep build`/`bicep what-if` could not be run in this
+preparation environment (neither `bicep` nor `az` is installed — same
+limitation already recorded in §3a(a) for the original `DISABLE_SCHEMA_UPDATE`
+change; this document treats the pipeline's own
+`insert-stage-bicep-whatif.yml@templates` stage as the actual syntax gate, not
+this preparation environment). The conditional logic itself was manually
+traced against all three modules' full resource blocks line-by-line to
+confirm `maintenanceState` (and `maintenanceTesterIpRanges`) is read in
+exactly the places intended (`liteLlm.bicep`'s and `libreChat.bicep`'s
+`scale` blocks; `libreChat.bicep`'s `ipSecurityRestrictions`; `jobs.bicep`'s
+two `cronExpression` values) and nowhere else silently short-circuits it —
+in particular, that `liteLlm.bicep` compares only against `'paused'` while
+`libreChat.bicep`'s scale compares against `('off' or 'validation')` and its
+`ipSecurityRestrictions` compares only against `'validation'` — three
+different comparisons, deliberately, which is what actually produces the
+asymmetric `litellm-only`/`validation` rows in the table above.
+
+**What is still not verified (owner-led / outside this repo):**
+
+- The external `ROMTech/PipelineTemplates` stage definitions themselves were
+  not inspected — this implementation deliberately does not depend on their
+  internals (see above), but an operator should still confirm no stage in
+  that template repo does something this Bicep-level mechanism can't
+  override (e.g. a stage that calls `az containerapp update --min-replicas`
+  directly, bypassing the Bicep-declared scale, would not be caught by
+  `maintenanceState` and needs separate reconciliation if it exists).
+- The actual `az containerapp show`/`job show` effective-state checks after a
+  real non-`'off'` deploy — this is Azure-CLI-dependent and requires the
+  owner-led pipeline run; not performed here.
+- Whether Azure Container Apps accepts a `scale` update from `{min:2,max:2}`
+  (or whatever the environment's normal values are) down to `{min:0,max:0}`
+  and back via a Bicep-driven revision update, as opposed to the
+  `az containerapp update` CLI form already noted as unverified in Step 3 —
+  same underlying Container Apps API, but not independently confirmed here.
+- Whether Azure Container Apps' `ipSecurityRestrictions` actually behaves as
+  documented against a real deployed app (allow-listed IP admitted, all
+  others rejected) — this is a real, current Azure Container Apps ingress
+  feature, but was not exercised against a live Container App in this
+  preparation environment (no `az`/Azure access); confirm with a real request
+  from both an allow-listed and a non-allow-listed source before relying on
+  it for the actual maintenance window.
+- Whether `az containerapp job start` and `az containerapp job execution
+  list`/`job logs show` behave exactly as §2a Step 8d now documents against a
+  real Manual-trigger job — the job's own script logic was validated locally
+  (§8.5), but the ACA job-invocation mechanism itself was not (no `az`
+  access).
+
+### 8.2. Complete baseline and target-schema comparison — Finding 2
+
+**New artifact:** `ChatGptForEmployees/scripts/02-schema-manifest.sql` — a
+read-only, parameterized (`-v target_schemas=<comma-separated schema list>`)
+catalog query producing one deterministic manifest line per table, column
+(with canonical type+modifiers, nullability, and default expression),
+constraint (`pg_get_constraintdef` — includes foreign-key `ON DELETE`/`ON
+UPDATE` actions verbatim), and index (`pg_get_indexdef` plus `indisvalid`).
+Deliberately scoped to ordinary tables (`relkind='r'`) only — views are
+handled separately (§8.3) — and to whichever schema(s) are passed in, so it
+never conflates LiteLLM's vendor-managed `public` tables with the custom
+`attribution` schema unless both are explicitly requested together.
+
+**Replaces** the old Step 5 / Step 8a spot checks (four table/column
+presence queries plus one index-validity check) as the actual required gate;
+those spot checks remain in place afterward as a fast first look, not the
+gate itself (same pattern this document already uses for row counts vs. the
+historical-data fingerprint).
+
+**How the two comparisons work:**
+
+- **Baseline gate (before `migrate resolve --applied`, Step 5):** the
+  *expected* reference is generated once from the pinned image's own
+  `20250326162113_baseline/migration.sql` (the same file Step 6 already
+  treats as "the canonical, complete definition of the baseline-resolved
+  state") applied to a fresh, empty database — **not** by also running
+  `01-baseline-remediation.sql` on top of it (that script's own history guard
+  correctly rejects being applied twice to a database that already has this
+  state; the two paths — an old hand-maintained schema plus remediation, vs.
+  a fresh database plus the vendor's own baseline migration — are meant to
+  converge on the identical target schema, not be composed). The *actual*
+  side is the real dev database immediately after Step 4's remediation
+  script commits. Diff the two manifests; any difference blocks Step 6.
+- **Final gate (before releasing traffic, Step 8a):** the *expected*
+  reference is generated by applying the pinned image's complete migration
+  history (`prisma migrate resolve --applied 20250326162113_baseline` +
+  `prisma migrate deploy`, i.e. exactly Steps 6–7 already documented and
+  tested) to a fresh, empty database. The *actual* side is the real dev
+  database after Step 7 completes. Diff the two manifests; any difference
+  blocks 8b/release.
+
+**Executed this session, against the actual pinned digest** (not a
+synthetic stand-in — the real reference this gate needs):
+
+1. Extracted `20250326162113_baseline/migration.sql` from the pinned image
+   and applied it alone to a fresh `postgres:16-alpine` container
+   (`dev_rehearsal` database) — 17 tables created, matching the 17-table
+   `LiteLLM_*` baseline. Ran `02-schema-manifest.sql -v target_schemas=public`
+   against it: **270 manifest lines**, captured as the baseline reference.
+2. From that same database, ran `prisma migrate resolve --applied
+   20250326162113_baseline` (exit 0, `Migration 20250326162113_baseline
+   marked as applied.`) then `prisma migrate deploy` (exit 0, ending
+   `All migrations have been successfully applied.`) then `prisma migrate
+   status` (`157 migrations found`, `Database schema is up to date!`) — the
+   same sequence and same result already recorded in Step 6/7's own
+   validation, reproduced again here as the source for the *final* manifest.
+   Ran `02-schema-manifest.sql` again: **75 tables, 1384 manifest lines**,
+   captured as the final reference. `diff` against the baseline reference
+   showed 1,198 added/changed lines (new tables/columns/constraints/indexes
+   from the 156 migrations) and zero unexpected removals or alterations of
+   anything present at baseline — consistent with additive-only migrations.
+3. Confirmed the pinned image's own vendor schema declares **zero views**
+   (`03-view-inventory.sql -v target_schemas=public` against the fully-
+   migrated reference returned no rows) — direct confirmation that the 8
+   `public` + 2 `attribution` views this project already tracks are entirely
+   custom additions, never something to diff against this pinned-image
+   reference (see §8.3).
+4. **Detection validated against isolated fixtures**, independent of the
+   real-image run above: a small synthetic two-table schema (`Org`/`User`,
+   with a default, a unique index, and a foreign key with `ON DELETE
+   SET NULL ON UPDATE CASCADE`) produced a clean, empty diff against itself,
+   then each of the following deliberately-introduced defects was
+   independently confirmed to produce a non-empty, correctly-localized diff:
+   a dropped column (with its default), a changed default value, a dropped
+   unique index, and a dropped foreign-key constraint. No false negatives
+   and no false positives were observed across the four cases.
+
+**Two corrections made after a follow-up review of these working changes
+(`89c57d0` working-changes follow-up):**
+
+- **Finding 1 — the Step 8a *final*-reference generation block skipped
+  executing the baseline SQL.** The standalone PowerShell block originally
+  written into §2a Step 8a (as opposed to the interactive sequence actually
+  run for item 2 above, which reused the same database item 1 had already
+  applied `baseline-migration.sql` to) went straight to `prisma migrate
+  resolve --applied` + `prisma migrate deploy` against a **freshly created,
+  still-empty** container. `migrate resolve --applied` only records a ledger
+  row — it executes no SQL — so that block would have marked the baseline
+  "applied" without ever creating its tables, then handed `migrate deploy`
+  156 later migrations (mostly `ALTER TABLE` against tables that were never
+  created) to run against an empty schema. Fixed by adding the same
+  extract-and-apply-`baseline-migration.sql` step used everywhere else in
+  this document (Step 5, and item 1 above) before the resolve/deploy calls.
+  **Re-executed in full after the fix**, specifically to verify it: baseline
+  SQL applied (exit 0), `migrate resolve --applied` (exit 0, `Migration
+  20250326162113_baseline marked as applied.`), `migrate deploy` (exit 0,
+  `All migrations have been successfully applied.`), and
+  `02-schema-manifest.sql` against the result: **75 tables, 1384 manifest
+  lines** — matching item 2's figures, confirming the corrected standalone
+  block now produces the same result the interactive session already had.
+- **Finding 3 — the manifest's COLUMN record included physical ordinal
+  position (`pg_attribute.attnum`), rejecting a valid remediation pattern.**
+  The vendor baseline declares a column like `sso_user_id` inline in its
+  `CREATE TABLE`, at whatever position `schema.prisma` puts it; the real
+  remediation script (`01-baseline-remediation.sql`) instead catches an old,
+  pre-Prisma database up to that same schema using `ALTER TABLE ... ADD
+  COLUMN`, which always appends the column physically last. Both produce a
+  logically identical column (same name, type, nullability, default, and
+  every constraint/index referencing it) at a different physical position —
+  comparing `attnum` as part of equivalence rejected that valid, intentional
+  pattern. Fixed by dropping `attnum` from the COLUMN record entirely
+  (columns are still identified and ordered by name, keeping output
+  deterministic); composite index/constraint column order is unaffected,
+  since `pg_get_indexdef`/`pg_get_constraintdef` already encode that order by
+  column name, not raw `attnum`. **Validated with a new positive fixture**
+  built specifically for this: the same logical table (`user_id` PK, `email`,
+  `sso_user_id` with a unique index) constructed two ways — inline in one
+  `CREATE TABLE` (`sso_user_id` declared second), and as a base table without
+  it followed by `ALTER TABLE ... ADD COLUMN "sso_user_id"` (appended last)
+  — produced **byte-identical manifests, confirmed via `diff` returning
+  nothing**, after the fix; both manifests were captured and are recorded as
+  identical. **Regression-checked**: all four of item 4's original negative
+  fixtures (missing column, wrong default, missing unique index, missing
+  foreign key) were re-run against the fixed script and still produce the
+  same correctly-localized diffs as before — the fix did not weaken
+  detection of any of them.
+
+Both reference manifests (the 270-line baseline and 1384-line final) are
+reproducible from the exact commands above and are **not** committed to this
+repository as static files — like the fingerprint/checksum working files
+elsewhere in this document, they are regenerable derived artifacts, not
+source, and a committed copy would only risk silently going stale against a
+future re-pin of the digest.
+
+**Wired in:** §2a's Step 5 and Step 8a now each include this exact gate as
+literal commands, in addition to (not replacing) the original four-query/
+one-index spot checks, which remain as a fast first look.
+
+### 8.3. View definition and execution verification — Finding 3
+
+**New artifacts:**
+
+- `ChatGptForEmployees/scripts/03-view-inventory.sql` — read-only, captures
+  `pg_get_viewdef(oid, true)` for every view in the requested schema(s), with
+  embedded newlines translated to the literal two-character sequence `\n` so
+  each view's full multi-line definition stays exactly one manifest line
+  (unambiguous for line-based diffing — the old check only compared
+  schema/name pairs, so a same-named view with a changed query was invisible
+  to it).
+- `ChatGptForEmployees/scripts/04-view-execution-check.sql` — read-only,
+  inside an explicit `READ ONLY` transaction with a 10s statement timeout,
+  actually executes every view via safely-quoted dynamic SQL (`format('%I.%I',
+  ...)` + `\gexec`) and aggregates a row-count plus an md5 hash of every row's
+  full content (`string_agg(v::text, '')`) — never the row content itself.
+
+**A real defect was found and fixed while validating this, not merely
+assumed safe:** the first draft used a bare `SELECT count(*) FROM <view>`.
+Tested against a fixture view whose `SELECT` list contained
+`CAST(email AS integer)` (guaranteed to fail against real email strings),
+`count(*)` returned a row count successfully with **no error** — `EXPLAIN
+VERBOSE` confirmed why: because `count(*)` never references any of the
+view's projected columns, Postgres's planner proves the cast is unused and
+prunes it from the plan entirely, so a genuinely broken view passes a
+count(*)-only check. This is the same class of mistake Follow-up 3 already
+named for catalog enumeration/`LIMIT 0` substituting for execution — it just
+takes a sharper form here, since `count(*) FROM view` looks like it "runs the
+view" but structurally cannot force evaluation of anything the view
+projects. The fix (hashing every row's full text via `string_agg`) was
+re-tested against the same broken-cast fixture and correctly failed with a
+nonzero exit and no rows ever printed; a control run against an unmodified
+view (both zero rows and with an inserted row) correctly succeeded with a
+stable hash.
+
+**Validated fixture matrix, this session, against isolated Docker Postgres:**
+
+| Case | Expected | Observed |
+|---|---|---|
+| Unmodified view, 0 rows | Inventory diff empty; execution succeeds | ✅ both |
+| Unmodified view, 1 row | Execution succeeds, stable hash | ✅ |
+| Same name, changed join (`JOIN` → `LEFT JOIN`) | Inventory diff non-empty | ✅ (single differing line, correctly localized) |
+| Same name, query fails at runtime (bad numeric cast on free-text data) | Execution check fails, nonzero exit, no row content printed | ✅ (after the count(*)→string_agg fix above; confirmed failing on the original count(*) draft first, then confirmed fixed) |
+| Pinned image's own final schema | Zero views (vendor schema declares none) | ✅ — confirms the 8 public + 2 attribution views are entirely custom, per §8.2 |
+
+**Replaces** the schema/name-only view list in Step 3.5 (pre-remediation
+capture) and Step 8a (post-migration comparison) as the required gate for
+view *definitions*, and adds an execution check that did not exist at all
+before this change. The existing row-count checks for the two attribution
+rollup views, and the view-name-list `Compare-Object` check, remain in place
+as supporting evidence.
+
+**Wired in:** §2a's Step 3.5 now captures definitions via
+`03-view-inventory.sql` alongside the existing name-list capture, frozen the
+same way as `03-fingerprint-frozen.sql`; Step 8a now diffs that frozen
+capture against a post-migration re-capture and runs
+`04-view-execution-check.sql`, both as required, enforced-`throw` gates.
+
+### 8.5. Application-release validation phase and executable synthetic check — second working-changes follow-up
+
+**Finding 1 — "validate LibreChat before releasing users and jobs"** is
+implemented as the fourth `maintenanceState` value, `'validation'`, and its
+own runbook step (§2a Step 8e), described in full in §8.1 (see that
+subsection's "second correction round" table and four-deploy sequence) —
+not repeated here. In short: LibreChat now comes up, restricted to an
+authorized tester's IP via `ipSecurityRestrictions`, in a distinct state
+between "LiteLLM verified directly" (`'litellm-only'`) and "everyone let in"
+(`'off'`), so the LibreChat-dependent smoke tests (Okta login, streaming,
+model picker, conversations, upload) run and pass *before* ordinary
+employees or either scheduled job are released — closing the exact ordering
+defect the review found.
+
+**Finding 2 — "make the internal synthetic test executable"** is implemented
+as:
+
+- `ChatGptForEmployees/scripts/05-synthetic-litellm-check.py` — a new,
+  fully-specified script (see its own docstring for the complete exit-code
+  table, environment variables, and content-handling rules) that checks
+  LiteLLM's health endpoints, sends one synthetic chat completion with a
+  unique, identifiable marker, polls `LiteLLM_SpendLogs` for that specific
+  row within a bounded wait, and verifies `messages`/`response` match the
+  documented empty representation — printing only match/mismatch status,
+  never row content.
+- A new manually-triggered (`triggerType: 'Manual'`) ACA Job,
+  `job-cgfe-synth-check-<env>`, added to `jobs.bicep`, reusing the existing
+  `librechat-cleanup` image (this script is now also `COPY`'d into
+  `Dockerfile.cleanup`) and admin-credential ACR-pull pattern already
+  established for the two scheduled jobs — this is the "one prepared
+  execution location" the review required: it runs inside the same
+  Container Apps environment as `ca-litellm-<env>`, so it resolves
+  LiteLLM's internal FQDN without exec-ing into any container, and the
+  operator starts it with a single documented command
+  (`az containerapp job start -n job-cgfe-synth-check-<env> -g
+  <resource-group>`, §2a Step 8d).
+
+**Validated against an isolated Docker LiteLLM (mock response, matching the
+actual shipped `store_prompts_in_spend_logs: false` /
+`STORE_PROMPTS_IN_SPEND_LOGS=false` configuration) and Postgres, running the
+real script file unmodified in every case** (full table also in §2a Step 8d):
+healthy/matching-row/pass (exit `0`); wrong master key (exit `2`, HTTP 401);
+nonexistent model name (exit `2`, HTTP 400); completion succeeds but the
+polled database has no matching row within the bound (exit `3`, distinct
+from "couldn't check"); database unreachable (exit `5`, distinct from "ran
+and found nothing"); and content actually populated (exit `4`, no content
+printed).
+
+**A real defect was found and fixed during this validation, not merely
+assumed correct:** the first draft compared the `messages`/`response`
+values read back from Postgres against the Python string `"{}"`. Running it
+against a live row (`pg_typeof` confirmed the column is `jsonb`) showed
+`psycopg2` auto-adapts a `jsonb` column to a native Python object — an empty
+`dict`, not the string `"{}"` — so that comparison was **always** `False`
+regardless of the row's actual content. Every run of the original draft
+would have raised a false "content is populated" alarm on a database where
+storage was genuinely off, exactly the kind of false-positive-into-a-real-
+incident-escalation this script exists to prevent. Fixed to compare against
+the Python `{}` value directly (keeping the string form as a defensive
+fallback), then re-validated against both the true-empty and the
+deliberately-populated cases above to confirm the fix behaves correctly in
+both directions, not just the direction that was broken.
+
+**Cleanup:** none required per invocation — `job-cgfe-synth-check-<env>` is
+a standing Bicep-declared resource the operator starts on demand, not a
+throwaway container created and torn down each time.
+
+**What is still not verified (owner-led / outside this repo):** the ACA
+job-invocation mechanism itself (`az containerapp job start` /
+`job execution list` / `job logs show`) against a real deployed job, and
+`ipSecurityRestrictions`' actual enforcement against a real deployed app —
+both listed in §8.1's own "what is still not verified," not repeated twice.
+
+### 8.6. Summary and outstanding gates
+
+| Round | Finding | Status |
+|---|---|---|
+| `89c57d0` follow-up | 1 — maintenance isolation | Bicep mechanism implemented (`liteLlm.bicep`, `jobs.bicep`, `libreChat.bicep`, `main.bicep`, `main.dev.bicepparam`) and wired into §2a as Steps 2b/8b–8f. **Corrected twice** (see the next two rows) |
+| `89c57d0` follow-up | 2 — baseline/target schema comparison | `02-schema-manifest.sql` implemented, validated against the real pinned image (full 17→75 table run, re-verified after the working-changes corrections) and against synthetic fixtures (4/4 defect classes detected, regression-checked after the Finding-3 fix below), wired into §2a Step 5 and Step 8a as required, enforced-`throw` gates |
+| `89c57d0` follow-up | 3 — view definition/execution verification | `03-view-inventory.sql`/`04-view-execution-check.sql` implemented; a real detection gap (`count(*)` pruning) was found and fixed during the original validation pass; 5/5 fixture cases behave as expected; wired into §2a Step 3.5 and Step 8a as required, enforced-`throw` gates; no defects raised against this finding by either later follow-up |
+| working-changes follow-up | 1 (Finding 2 above, defect) — Step 8a final-reference generation skipped baseline SQL | Fixed: the standalone block now applies `baseline-migration.sql` before `migrate resolve`/`migrate deploy`, matching the pattern already used elsewhere; re-executed in full after the fix (75 tables, 1384 lines, matching) (§8.2) |
+| working-changes follow-up | 2 (Finding 1 above, defect) — `maintenanceMode bool` released traffic + jobs together | Fixed: redesigned to a three-value `maintenanceState` (`'off'`/`'paused'`/`'litellm-only'`) (§8.1) — **itself found insufficient by the second working-changes follow-up; see below** |
+| working-changes follow-up | 3 (Finding 2 above, defect) — manifest compared physical column position | Fixed: `attnum` dropped from the COLUMN record; validated with a new inline-vs-appended-column fixture (byte-identical manifests) and a full regression check of the original 4 negative fixtures (§8.2) |
+| second working-changes follow-up | 1 — validate LibreChat before releasing users and jobs | Fixed: `maintenanceState` extended to a fourth value, `'validation'` (LibreChat up, restricted to an authorized tester's IP via `ipSecurityRestrictions`; both jobs still paused), with a new §2a Step 8e between the old `'litellm-only'` and release steps (§8.1, §8.5) |
+| second working-changes follow-up | 2 — make the internal synthetic test executable | Fixed: `05-synthetic-litellm-check.py` (new script, fully bounded/exit-coded) plus a new manually-triggered `job-cgfe-synth-check-<env>` ACA Job as its prepared execution location; validated end-to-end against a local Docker LiteLLM+Postgres harness across 6 cases (pass, bad auth, bad model, no-row-found, db-unreachable, content-populated); **a real bug (psycopg2 jsonb-vs-string comparison, always false) was found and fixed during that validation** (§8.5) |
+
+**Three full follow-up review passes have now found real, confirmed defects
+in this section's own implementation** across two rounds of "working
+changes" corrections: a bool that couldn't express the required states (then
+found still insufficient once extended, requiring a second extension to four
+states); a reference-generation procedure that skipped a required step; a
+comparison field that produced false positives; a release sequence that
+skipped application validation entirely; and an unspecified test-execution
+mechanism. Each was fixed and re-validated against the same isolated
+fixtures/real-image runs used originally (with new fixtures added where the
+original ones didn't cover the defect), not merely asserted fixed. This
+history is recorded plainly — including the fact that the Finding-1 fix
+itself needed a second, later correction — because it is directly relevant
+to how much confidence to place in this section without a further
+independent review pass, not to minimize it. Given that pattern, an
+additional independent review of this section specifically (not just of the
+original three findings) would be reasonable before relying on it for a real
+maintenance window.
+
+**What would still make each finding fully closed, beyond this pass:** an
+actual owner-led dev run exercising Step 2b through 8f against the real
+Azure environment and the real dev database — the same "execution remains
+owner-led / pending" boundary that applies to every other change in this
+document (§1's dev query, §2a generally, §3a(a)'s Bicep build), plus the
+specific unverified items each subsection lists (external pipeline-template
+internals, `ipSecurityRestrictions` enforcement, `az containerapp job start`
+behavior). This section implements and locally validates all findings raised
+against it so far; it does not, and cannot from this preparation
+environment, supply real-environment execution evidence, and it cannot rule
+out a further, not-yet-found defect the way real execution eventually would.

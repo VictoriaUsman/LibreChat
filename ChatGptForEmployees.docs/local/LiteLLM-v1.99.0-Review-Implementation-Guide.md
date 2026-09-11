@@ -439,3 +439,308 @@ Provide a short response indexed to review notes 1–7, with:
 - A clear statement that no dev migration has been executed as part of preparation.
 
 Dev execution remains owner-led. Its completion requires the full recovery prerequisites, approved maintenance coordination, actual prompt/response field verification, and the runbook's application/data checks. Behnam decides any reporting-grant changes before promotion to test or production.
+
+## Follow-up review through `89c57d0` — 2026-09-11
+
+**Status: not ready for dev execution.** This appended review takes precedence over earlier open-status summaries where the findings overlap. It records implementation instructions only; it does not authorize database changes or deployment.
+
+Progress verified in this review: the uncertain-commit instructions are corrected; frozen historical-data fingerprints and complete migration checksum comparisons are included. All 30 PowerShell blocks parse when read as UTF-8, and `git diff --check` passes. Parsing does not prove that commands execute correctly. No runtime database or Azure checks were performed in this review.
+
+### Finding 1 — P1: preserve maintenance isolation throughout deployment
+
+**Locations:** [dev.yml](../../ChatGptForEmployees.pipelines/dev.yml), [liteLlm.bicep](../../ChatGptForEmployees.bicep/liteLlm.bicep), [jobs.bicep](../../ChatGptForEmployees.bicep/jobs.bicep), [main.dev.bicepparam](../../ChatGptForEmployees.bicep/main.dev.bicepparam), and [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Steps 8b–8d and section 7.
+
+`UploadConfigs` depends on `BicepCreate`. Consequently, infrastructure deployment can start the target revision before the new YAML is uploaded. The dev parameters also set `deployJobs=true`, so deployment reapplies normal schedules from `jobs.bicep`, undoing a manual schedule pause. The runbook's later release checks do not themselves prevent either event.
+
+#### Code instructions and implementation guidelines
+
+1. Trace the complete deployment order, including the shared pipeline templates, app revision activation, configuration upload, ingress, and both scheduled jobs. Record any shared template that cannot yet be inspected as an outstanding gate.
+2. Implement a reviewed maintenance control that persists across the infrastructure deployment. It must keep ordinary application writers and scheduled executions stopped while allowing explicitly controlled synthetic checks. Do not rely on a manual pause that Bicep immediately overwrites.
+3. Ensure the reviewed routing configuration is available before the target revision starts against the migrated database. Use a verified staged deployment or configuration prerequisite; merely restarting after uploading YAML does not eliminate the earlier startup interval.
+4. If adding a Bicep maintenance parameter, wire it through the actual entry point, modules, and pipeline invocation. Verify the rendered resources enforce maintenance for existing jobs and apps. Setting `deployJobs=false` alone is not proof that existing deployed jobs stop.
+5. Keep `DISABLE_SCHEMA_UPDATE=true` and both prompt-storage controls false during startup. Verify the active revision and effective configuration before releasing normal traffic. Release jobs only after database and application checks pass.
+6. Document exact enter/verify/release commands, failure handling, and restoration of captured settings. Keep the target image/configuration commit reviewable before the maintenance window. Behnam retains ownership of remote execution and the window.
+
+#### Acceptance criteria
+
+- [ ] Pipeline ordering guarantees the reviewed YAML exists before target startup.
+- [ ] A deployment during maintenance cannot restore normal traffic or either job schedule prematurely.
+- [ ] Effective app/job state is checked after infrastructure deployment and before synthetic checks.
+- [ ] A deployment/configuration failure leaves maintenance in effect and follows the incident procedure.
+- [ ] Bicep validation/rendering and pipeline review pass; the maintenance enter/deploy/release sequence is rehearsed in an appropriate isolated environment.
+- [ ] Any Azure-dependent verification remains explicitly pending until performed; prose assertions do not count as evidence.
+
+### Finding 2 — P1: implement complete baseline and target-schema comparison
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 5 before baseline resolution and Step 8a after migration.
+
+Step 5 still checks only selected table/column presence. Step 8a repeats those checks plus one index. These checks cannot establish that the baseline is accurate or that the final database matches the pinned target. Migration ledger checksums establish source history, not actual catalog equivalence.
+
+#### Code instructions and implementation guidelines
+
+1. Add reviewable comparison scripts under `ChatGptForEmployees/scripts/`, with SQL executed through `psql -f` and explicit native exit-code handling. Use read-only catalog queries against the database being checked.
+2. Derive the expected baseline from the exact baseline SQL in the pinned image, using an isolated reference database or a reviewed catalog manifest generated from it. Derive the final reference from the same pinned image's complete migration history and target schema. Record the digest and generation procedure.
+3. Compare all expected tables and columns, including PostgreSQL types/type modifiers, nullability, defaults, primary keys, unique constraints/indexes, foreign keys and their actions, and relevant index definitions and validity. Normalize equivalent catalog representations explicitly rather than ignoring differences broadly.
+4. Scope LiteLLM equivalence to vendor-managed objects. Inventory and verify intentional custom objects, including attribution tables and reporting views, separately so they are preserved rather than automatically treated as unwanted objects. Stop on unexplained differences.
+5. Run the full baseline comparison after remediation and **before** resolving `20250326162113_baseline`. A nonempty unexplained diff or failed query blocks resolution. Do not move this gate after migration.
+6. Run the full final comparison after deployment of all migrations but before app startup/release, alongside the existing fingerprint, ledger, checksum, and index-validity checks. Save sanitized difference reports without employee row content or credentials.
+7. Validate the comparison on isolated fixtures: an equivalent schema must pass; a missing column, wrong default/type, missing unique index, and missing or altered foreign key must each fail. Do not repair differences automatically as part of verification.
+
+#### Acceptance criteria
+
+- [ ] A complete, reproducible baseline comparison blocks `migrate resolve --applied` on any unexplained mismatch.
+- [ ] A complete pinned-target comparison blocks application release on any unexplained mismatch.
+- [ ] Reference artifacts are tied to the reviewed image digest and can be reproduced without scratch-directory dependencies.
+- [ ] Intended custom objects remain preserved and separately accounted for.
+- [ ] Positive and deliberately mismatched fixture results demonstrate that the comparison detects meaningful schema drift.
+- [ ] Runbook commands capture evidence, check failures, and mark actual dev results pending until owner execution.
+
+### Finding 3 — P2: verify view definitions and query execution
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 3.5 view capture and Step 8a view verification.
+
+The current comparison checks only schema/name pairs. A view can retain its name while its definition changes or its query fails. Listing 10 views is not evidence that all 10 still resolve correctly.
+
+#### Code instructions and implementation guidelines
+
+1. Capture the complete pre-change view inventory and deterministic definitions from the catalog, for example using `pg_get_viewdef` with a consistent session/search path. Save schema, name, and definition in a format that preserves multiline text unambiguously.
+2. Compare the same inventory and definitions after migration. Stop on a missing view or an unexplained definition change. Record any expected normalization explicitly.
+3. Generate one read-only execution check per view using PostgreSQL identifier quoting (`format('%I.%I', schema_name, view_name)`). A pattern such as `SELECT count(*) FROM <quoted_view>` executes the query while returning no employee content. Do not substitute catalog enumeration or `LIMIT 0` for execution validation.
+4. Run checks with `ON_ERROR_STOP=1`, a read-only transaction/session, and an appropriate statement timeout. Treat a timeout or query failure as an unresolved gate. Save view names, counts/status, and sanitized errors; do not export view rows.
+5. Compare result counts while ordinary writers remain stopped, where unchanged counts are expected. Counts supplement definition and execution checks; they do not replace the existing historical-data fingerprints.
+6. Validate locally that a same-name definition change is detected and that a view query failure stops the check. Update the runbook to invoke these scripts at the actual pre/post gates.
+
+#### Acceptance criteria
+
+- [ ] All 10 expected views are reconciled before execution, with their definitions captured.
+- [ ] Post-migration definitions match the captured baseline or have an explicitly reviewed explanation.
+- [ ] Every view query executes successfully; failures/timeouts prevent release.
+- [ ] Evidence contains no employee conversation content or credentials.
+- [ ] An isolated definition-change test and query-failure test demonstrate the checks work.
+
+### Completion rule for this follow-up
+
+Close these findings only with implementation and supporting validation evidence. Keep remote checks and owner decisions visibly pending. Updating this guide or adding commands to the runbook alone does not establish cutover readiness.
+
+## Follow-up review of working changes after `89c57d0` — 2026-09-11
+
+**Status: three blockers remain; not ready for dev execution.** This review covers the uncommitted implementation changes inspected after `89c57d0`, not a new implementation commit. Its findings supersede overlapping earlier status statements. The instructions below authorize no remote execution and do not themselves implement the corrections.
+
+Validation observed: view definition/execution scripts are now implemented; all 39 PowerShell code blocks parse when read as UTF-8; `git diff --check` passes. SQL runtime tests, Bicep compilation, and Azure maintenance verification were not performed in this review. Previously reported fixture results were not independently rerun.
+
+### Finding 1 — P1: create the baseline in the final reference database
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 8a final-reference setup (reviewed lines 1143–1148).
+
+The procedure creates an empty reference database, marks `20250326162113_baseline` applied, and then deploys later migrations. Resolving a migration does not execute its SQL. This skips creation of the baseline tables and prevents the remaining migrations from building the intended reference.
+
+#### Code instructions and guidelines
+
+1. For a verified empty, disposable reference database, run the pinned image's `prisma migrate deploy` directly. Let it execute all 157 migrations, including the baseline. Do not copy the existing-dev baseline-resolution procedure into the empty-reference workflow.
+2. If retaining a two-step reference setup, execute the pinned baseline SQL successfully first, verify its catalog, and only then resolve that baseline and deploy the remaining migrations. Prefer the direct full-history approach for the empty reference.
+3. Keep the dev and reference connection variables clearly separate. Verify the local container/database identity before any reference mutation; never reuse the dev connection URL in reference-generation commands.
+4. Check each native command's exit code immediately, including container creation, readiness, migration execution, SQL-script copying, and manifest extraction. Replace the fixed startup sleep with a bounded readiness check. Preserve the failing exit status before cleanup commands can overwrite it.
+5. Require successful reference generation and a nonempty, validated manifest before comparing it with dev. Capture the image digest and successful migration ledger alongside the reference. Clean up only the specifically created disposable resources.
+6. Correct the statement that the currently documented sequence was executed successfully. Attach results for the corrected sequence or mark its runtime validation pending; do not carry forward unsupported evidence claims.
+
+#### Acceptance criteria
+
+- [ ] A fresh isolated reference builds successfully using all 157 migrations, with the baseline actually executed.
+- [ ] Baseline tables exist and the final ledger has the expected successful migration names/checksums with no unresolved failures.
+- [ ] Manifest extraction succeeds and produces the expected catalog coverage before any comparison is accepted.
+- [ ] A failed startup, migration, copy, or extraction stops the procedure and cannot be masked by cleanup.
+- [ ] The runbook separates empty-reference creation from existing-dev baseline resolution and records validation for the corrected commands.
+
+### Finding 2 — P1: separate controlled startup from traffic and job release
+
+**Locations:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Steps 8b–8d (reviewed lines 1325–1337); [main.bicep](../../ChatGptForEmployees.bicep/main.bicep), [liteLlm.bicep](../../ChatGptForEmployees.bicep/liteLlm.bicep), and [jobs.bicep](../../ChatGptForEmployees.bicep/jobs.bicep).
+
+The single `maintenanceMode=false` transition restores app scale and both normal job schedules before effective-state and application checks. The mechanism preserves the pause during migration but still releases workloads before the checks intended to authorize that release.
+
+#### Code instructions and guidelines
+
+1. Implement independently controlled states for app startup, ordinary user access, and scheduled jobs. Separate parameters are one option; choose names and defaults consistent with this repository and wire them through the actual pipeline and module entry points.
+2. Preserve this order: database validation; target startup with normal traffic blocked and jobs paused; effective image/configuration verification; controlled synthetic application and prompt-storage checks; explicit normal-traffic release; job release and catch-up verification.
+3. Define a supported, verified access restriction that allows authorized synthetic checks while blocking ordinary writers. Replica count alone cannot distinguish synthetic requests from employee traffic once the app starts. Account for LibreChat and other callers, not only direct external access to LiteLLM.
+4. Keep both job schedules paused through the controlled-startup deployment. A deployment to start the app must not implicitly restore either job schedule. Verify the effective trigger state after each deployment and drain or stop existing executions separately.
+5. Keep the pinned image, schema-update flag, and both prompt-storage controls unchanged between startup and release. Identify exact pipeline invocations and parameter changes for each transition; do not rely on a post-deployment manual re-pause to close an earlier release interval.
+6. On failed health, effective-state, or synthetic checks, maintain access restrictions and paused jobs. Capture evidence and follow the incident route; do not reactivate the old revision against the migrated schema.
+7. Update module comments, dev parameters, runbook steps, and handoff together so none still instruct operators to release jobs before checks. Keep unsupported scale/cron behavior explicitly unverified until tested.
+
+#### Acceptance criteria
+
+- [ ] The target can start and receive controlled synthetic requests while normal users and both scheduled jobs remain blocked.
+- [ ] A startup deployment does not restore job schedules or ordinary access.
+- [ ] Effective configuration and application checks pass before normal traffic is released.
+- [ ] Job release occurs only after application checks pass, with captured schedules restored and catch-up handled.
+- [ ] Failure-path validation demonstrates that a failed check leaves restrictions in place.
+- [ ] Bicep validation/rendering and an appropriate maintenance rehearsal support the documented transitions; Azure-dependent results remain pending until performed.
+
+### Finding 3 — P1: exclude physical column positions from schema equivalence
+
+**Location:** [02-schema-manifest.sql](../../ChatGptForEmployees/scripts/02-schema-manifest.sql), COLUMN record generation (reviewed lines 69–70).
+
+The manifest includes `pg_attribute.attnum` in each column record. The vendor baseline declares `sso_user_id` as the fourth column of `LiteLLM_UserTable`; remediation adds it to an existing table using `ADD COLUMN`, which appends it. The intended remediation therefore produces a different physical column order even when all required named columns and their properties match. The current comparison rejects that valid result.
+
+#### Code instructions and guidelines
+
+1. Remove physical ordinal position from the column equivalence record. Identify columns by schema, table, and column name, and order manifest output deterministically using those names.
+2. Retain `attnum` internally where it is required for catalog joins, dropped-column filtering, or reading index/constraint definitions. Only remove it as a standalone equivalence requirement; do not remove valid catalog join keys.
+3. Continue comparing types and modifiers, nullability, defaults, and all existing constraint/index checks. Preserve meaningful column order inside composite indexes and keys; that order is part of their definition and must not be normalized away.
+4. Do not rebuild or reorder live tables to satisfy the manifest. Document physical table-column order as an intentional normalization, without using it to excuse other differences.
+5. Add an isolated regression fixture with two paths: a fresh baseline containing `sso_user_id` in its declared position, and a pre-baseline table remediated by appending the column. Their normalized manifests must match when their logical definitions match.
+6. Retain negative fixtures proving that wrong types/defaults/nullability and missing or changed indexes/foreign keys still fail. Include a composite-index column-order change to ensure meaningful ordering remains checked.
+7. Regenerate the expected manifests using the revised script, update any recorded line counts or examples affected by the format, and rerun both baseline and final comparison workflows. Keep the script version tied to the captured evidence.
+
+#### Acceptance criteria
+
+- [ ] A logically equivalent table with different physical column positions passes comparison.
+- [ ] The actual append-column remediation pattern is represented in an isolated positive fixture.
+- [ ] Wrong types, defaults, nullability, constraints, and indexes still fail comparison.
+- [ ] Changed composite-key/index ordering remains detectable.
+- [ ] No live table rewrite or broad difference suppression is introduced to make the comparison pass.
+- [ ] Runbook references and validation evidence use the corrected manifest format consistently.
+
+### Completion and scope
+
+Close these blockers only after the corrected implementation and relevant isolated checks pass. Keep owner-led dev execution, Azure verification, and maintenance decisions explicitly pending. This appended section is a documentation update only.
+
+## Latest follow-up: application release and synthetic checks — 2026-09-11
+
+**Status: two execution gaps remain; not ready for dev execution.** Reviewed the latest working changes after `89c57d0`. This section supersedes overlapping earlier status statements without changing the original acceptance requirements.
+
+Two earlier blockers are corrected in the inspected code/instructions: final-reference setup now executes baseline SQL before resolving it, and the schema manifest excludes physical column position while retaining its catalog join keys. All 39 PowerShell blocks parse when read as UTF-8, and diff checks pass. Bicep compilation, Azure maintenance behavior, and SQL runtime results were not independently verified in this review. No files or databases were changed during the review; this subsequent update adds documentation only.
+
+### Finding 1 — P1: validate LibreChat before releasing users and jobs
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 8e release instructions (reviewed lines 1453–1464); maintenance state handling in [main.bicep](../../ChatGptForEmployees.bicep/main.bicep), [libreChat.bicep](../../ChatGptForEmployees.bicep/libreChat.bicep), and [jobs.bicep](../../ChatGptForEmployees.bicep/jobs.bicep).
+
+The `litellm-only` state now allows direct LiteLLM checks while LibreChat and jobs remain paused. However, switching to `off` starts LibreChat and restores both job schedules before login, streaming, existing conversations, model selection, and upload checks. Direct LiteLLM success does not establish that the complete application works.
+
+#### Code instructions and guidelines
+
+1. Add a restricted application-validation phase between `litellm-only` and normal release. It must run LibreChat and LiteLLM for authorized testers while ordinary user access stays blocked and both scheduled jobs remain paused.
+2. Select and implement a supported access restriction appropriate to the deployed architecture. Verify its effect on browser requests, authentication callbacks, streaming, and alternate access paths. Do not treat an internal LiteLLM endpoint or a running replica count as a LibreChat access restriction.
+3. Extend the maintenance state or use independent controls for application startup, ordinary access, and jobs. Wire the chosen controls through the dev parameters, entry-point Bicep, modules, and actual pipeline invocation. Document a state table showing app availability, permitted callers, and job schedules at every stage.
+4. Keep the reviewed image, YAML, and schema-update/prompt-storage settings unchanged during these transitions. Validate the effective restriction and job state after deployment before testers begin.
+5. Run Okta login, model selection, send/stream chat, existing-conversation loading, and file-upload checks using an authorized synthetic test account and non-sensitive test data. Record pass/fail evidence without copying employee conversation content.
+6. Release normal access only after the application checks pass. Restore job schedules afterward, verify no unexpected execution occurred during maintenance, and handle any required catch-up. Update Step 8e so it no longer schedules application validation after full release.
+7. On failed checks, retain restricted access and paused jobs. Capture diagnostics and follow the documented incident procedure. Do not switch to `off` merely to diagnose a failure or reactivate the previous image against the upgraded database.
+8. Update module comments, runbook transitions, and handoff together. Keep the exact restriction mechanism and any Azure verification explicitly pending until implemented and tested; naming another maintenance state alone is insufficient.
+
+#### Acceptance criteria
+
+- [ ] LibreChat and LiteLLM can run for authorized validation without admitting ordinary users or resuming jobs.
+- [ ] The pipeline preserves the restriction and both paused schedules throughout the validation deployment.
+- [ ] Login, model selection, streaming, conversation loading, and upload checks pass before normal release.
+- [ ] Failed checks leave restricted access and paused schedules in effect.
+- [ ] Normal access and job release are explicit, ordered actions with effective-state verification.
+- [ ] Bicep validation/rendering and a suitable rehearsal support the chosen mechanism; pending Azure evidence is clearly identified.
+
+### Finding 2 — P2: make the internal synthetic test executable
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 8d controlled checks (reviewed lines 1409–1430).
+
+The runbook explicitly leaves the mechanism for reaching LiteLLM's internal endpoint unspecified. A list of candidate execution locations cannot be followed as an operator procedure. The location, authentication, exact request, and evidence checks must be resolved before the maintenance window.
+
+#### Code instructions and guidelines
+
+1. Choose a verified execution location inside the network that can resolve and reach LiteLLM's internal FQDN, such as an approved running container or a prepared temporary validation workload. Confirm its existence, tools, network access, and required operator permissions in advance. Do not depend on executing into a stopped container.
+2. Add a reviewable validation script under `ChatGptForEmployees/scripts/` and document the exact owner-run invocation, working directory, prerequisites, and arguments. Use parameterized target values and verify the dev target explicitly. Avoid commands that require operators to reconstruct missing details during the outage.
+3. Obtain the required LiteLLM credential through the approved secret mechanism. Do not embed keys in the script, commit them, print them, or include them in captured diagnostics. Specify the minimum permissions needed for the synthetic request and any read-only database verification.
+4. Implement bounded health checks and a synthetic chat request against the internal endpoint using an available configured model. Define request/connect timeouts and explicit failure handling. Make the request identifiable with a unique non-sensitive marker or supported request identifier, and record the identifier without dumping response content.
+5. Verify that the test produced the expected request and a corresponding spend-log record. Allow bounded time for asynchronous logging. A missing row is an unresolved test result, not evidence that prompt storage is disabled.
+6. Query the matching synthetic record specifically and verify `messages` and `response` against the documented empty representations. Return only a content-free result such as matched-row count and empty/nonempty status. The latest-five-rows query alone is insufficient to identify this test.
+7. Stop on an unreachable endpoint, authentication failure, failed completion, absent/ambiguous log record, timeout, or unexpectedly populated content fields. Keep maintenance restrictions in effect and follow the incident route; do not release workloads after an inconclusive result.
+8. Document cleanup for any temporary validation workload and synthetic artifacts, including who performs it and when. Keep cleanup scoped to resources created for this test and preserve the required audit evidence.
+9. Validate the script in an isolated environment for success, unreachable endpoint, rejected authentication, missing log row, and unexpected content-storage results. Mark the actual dev test pending until owner execution; local success is not proof of Azure reachability.
+
+#### Acceptance criteria
+
+- [ ] The runbook names one prepared execution location and exact runnable commands, with required permissions and secret handling.
+- [ ] Internal DNS/connectivity and necessary tools are verified before the maintenance window.
+- [ ] Health and synthetic completion checks have bounded waits and explicit failure exits.
+- [ ] The synthetic spend-log row is identified unambiguously and its content fields are verified without exporting their contents.
+- [ ] Missing evidence or any failed check blocks release and leaves maintenance controls in effect.
+- [ ] Success and relevant failure cases are validated locally; actual dev results remain pending until performed.
+- [ ] Temporary resource cleanup and sanitized evidence locations are documented.
+
+### Handoff and completion
+
+Provide the revised code and runbook together, with validation results and remaining owner prerequisites. Close these findings only after their implementation and relevant checks pass. Behnam retains ownership of remote execution and the maintenance window; this documentation update does not execute or approve a cutover.
+
+## Latest follow-up: synthetic execution identity and image readiness — 2026-09-11
+
+**Status: two execution-instruction gaps remain.** The restricted `validation` state and synthetic-check job are implemented in the inspected working changes after `89c57d0`. This section supersedes overlapping earlier status statements; it does not establish readiness for remote execution.
+
+Review validation: all 43 PowerShell blocks parse, the new Python script passes syntax parsing, and diff checks pass. Runtime tests and Azure restrictions were not independently verified in this review. No files or databases were changed during that review; this subsequent update is documentation only.
+
+### Finding 1 — P1: follow the exact synthetic job execution to verified success
+
+**Location:** [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 8d job start/result commands (reviewed lines 1425–1433).
+
+The procedure starts a job and then selects `[0]` from execution history. That does not establish that the inspected execution is the one just started. It also reads `properties.template.containers[0].exitCode`, which is not a documented execution-result field in the [Azure jobs execution schema](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/jobs-executions/list?view=rest-resource-manager-containerapps-2025-07-01). A null result must not be interpreted as success.
+
+#### Code instructions and implementation guidelines
+
+1. Capture structured output from `az containerapp job start` and check its native exit code immediately. Extract and validate the returned execution name or resource ID using the installed CLI's verified response shape. Stop if the identity is missing or ambiguous; do not fall back to the first history entry.
+2. Store that execution identity in the sanitized evidence for this test. Poll only that execution using a supported exact-execution lookup, or filter history by its exact identity and require exactly one match. Verify the relevant CLI/API contract before documenting the final command.
+3. Implement a bounded polling loop with a deadline and interval. Require an explicit terminal success status. Treat failed, stopped, unknown, missing, ambiguous, and timed-out results as blocking outcomes; a successful CLI lookup is not a successful job execution.
+4. Retrieve logs for that same execution and its intended container/replica. Require the script's final PASS result and synthetic marker from that execution. Do not accept a PASS line from an earlier run, unscoped logs, or a still-running execution.
+5. If numeric process exit evidence is needed, obtain it through a verified replica/runtime diagnostic interface rather than the container template. Never coerce a missing exit-code property to zero. Terminal job success and the matching script result remain required gates.
+6. Keep automatic retries disabled as currently configured. A manual rerun must receive a new execution identity and its own evidence; it must not overwrite or conceal a failed result requiring investigation.
+7. Update the runbook and the Python script's invocation/docstring together so neither still recommends `[0]` or the unsupported template exit-code query. Keep maintenance restrictions and paused jobs in effect on every inconclusive or failed result.
+8. Validate the polling logic with representative mocked responses: successful current execution, failed current execution with an older successful run present, missing identity, nonterminal timeout, CLI failure, and absent/mismatched PASS logs. Confirm the actual response/log retrieval shape in an appropriate Azure rehearsal before the window.
+
+#### Acceptance criteria
+
+- [ ] The execution returned by `job start` is captured and used for all subsequent status/log checks.
+- [ ] An older successful execution cannot satisfy the current run's gate.
+- [ ] Polling has a deadline and requires explicit terminal success plus the matching script PASS evidence.
+- [ ] Null/missing fields, failed commands, ambiguity, timeout, or missing logs block progression to application validation.
+- [ ] Runbook and script instructions use supported execution/result fields consistently.
+- [ ] Local failure-case checks pass; actual Azure command/response verification remains pending until performed.
+
+### Finding 2 — P2: verify the updated jobs image before starting the synthetic check
+
+**Locations:** [dev.yml](../../ChatGptForEmployees.pipelines/dev.yml), `BuildJobsImage`; [Dockerfile.cleanup](../../ChatGptForEmployees/scripts/Dockerfile.cleanup); [jobs.bicep](../../ChatGptForEmployees.bicep/jobs.bicep); and [REVIEW-AND-CUTOVER.md](REVIEW-AND-CUTOVER.md), Step 8d prerequisites.
+
+The new validation script is copied into the jobs image by `Dockerfile.cleanup`. The cutover instructions do not require `BuildJobsImage` to complete successfully before starting the job. An older image can therefore be used even if the app/configuration deployment stages have completed, leaving the synthetic job without the reviewed script.
+
+#### Code instructions and implementation guidelines
+
+1. Add successful completion of `BuildJobsImage` for the exact reviewed source commit to the synthetic-test prerequisites. Check the actual stage result and artifact identity; completion of `BicepCreate`, `UploadConfigs`, or `DeployLiteLLM` does not establish jobs-image readiness.
+2. Record the produced registry image digest and source commit. Prefer deploying the synthetic job with that immutable image digest. If the shared mutable tag is retained, define and verify how the execution's actual image digest is matched to the reviewed build; tag equality alone is insufficient evidence.
+3. Account for pipeline ordering: the job resource may be deployed before its image is built. Ensure the job's effective image reference is updated or verified after the build and before manual execution. Keep both scheduled jobs paused during this work.
+4. Verify the built image contains `05-synthetic-litellm-check.py` and its required dependencies at the configured working path. Compare a script hash or equivalent build provenance with the reviewed source. Do not use a live synthetic request merely to discover whether the image contains the file.
+5. If adding pipeline validation or digest outputs, use the existing build/deployment conventions and pass artifact identity explicitly. Do not introduce an unrelated deployment route or release scheduled jobs as a side effect of preparing the validation image.
+6. Document exact readiness checks and evidence locations in Step 8d. A failed/skipped build, unavailable image, mismatched digest/source, or missing script must stop the procedure before `job start`.
+7. Validate a positive built-image case and a negative stale/missing-script image case. Keep registry/deployed-execution verification explicitly pending until performed with the appropriate access.
+
+#### Acceptance criteria
+
+- [ ] `BuildJobsImage` succeeds for the reviewed commit before the synthetic job starts.
+- [ ] The image used by the synthetic execution is tied to that build by digest or equivalent verified provenance.
+- [ ] The image contains the reviewed script and required dependencies at the configured path.
+- [ ] Failed/skipped builds, stale images, or missing scripts block job execution.
+- [ ] Image preparation and verification preserve maintenance restrictions and paused schedules.
+- [ ] The runbook records the build/run identity, image digest, and readiness evidence alongside the exact synthetic execution identity.
+
+### Completion and handoff
+
+Close these findings with the corrected implementation/instructions and supporting checks, not documentation assertions alone. Keep Azure rehearsal, effective access restrictions, and owner-led dev results visibly pending until verified. Behnam retains ownership of remote execution and the maintenance window.
+
+## Final image-verification correction — 2026-09-11
+
+The remaining mutable-tag fallback is removed from `REVIEW-AND-CUTOVER.md` Step 8d and the pipeline's related guidance. Cutover now requires `jobsImageDigest` to match the recorded build digest; checking what `:latest` resolves to before execution is no longer accepted.
+
+The executable preflight validates the recorded SHA-256 digest and requires the deployed synthetic job's full image reference to match it exactly. The captured job-start execution template must also report that reference before its result can be accepted. This catches a different job image introduced between preflight and start. Keep the pin unchanged through validation and release. Missing or mismatched execution-image evidence blocks progression and requires investigation with maintenance still in effect.
+
+Validation performed: all 44 PowerShell blocks parse; local comparison checks accept the exact digest and reject a mutable tag, wrong digest, and missing image; diff checks pass. These are local syntax/comparison checks, not Azure integration tests. The actual job-start response shape, Bicep compilation, execution/log retrieval, and maintenance behavior remain pending Azure verification before cutover.
+
+- [x] Remove the mutable-tag exception from cutover instructions and pipeline guidance.
+- [x] Require the recorded digest on the deployed job and captured execution template.
+- [x] Check matching, wrong, mutable, and missing image-reference cases locally.
+- [ ] Verify the job-start response includes the expected execution image and confirm the complete procedure in Azure before the maintenance window.
+
+No image digest was invented or deployed, and no database changes were made. Ordinary deployment defaults remain unchanged; this correction makes the existing digest-pin option mandatory for the cutover procedure.

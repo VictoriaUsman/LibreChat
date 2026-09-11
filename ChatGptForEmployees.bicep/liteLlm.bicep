@@ -4,6 +4,37 @@ param environmentId string
 param liteLlmImage string
 param minReplicas int = 0
 param maxReplicas int = 2
+// Maintenance-state enforcement (LiteLLM v1.99.0 review, Follow-up 1 P1: "preserve
+// maintenance isolation throughout deployment"; corrected per the `89c57d0`
+// working-changes follow-up, Finding 2, and extended again per the second
+// working-changes follow-up, Finding 1: "validate LibreChat before releasing
+// users and jobs"). Four states, shared with libreChat.bicep and jobs.bicep so
+// all three modules read the same value from main.bicep:
+//   'paused'       -- this app forced to 0/0 replicas (same as the old
+//                     maintenanceMode=true). Used while the database migration
+//                     itself runs.
+//   'litellm-only' -- this app runs at its normal minReplicas/maxReplicas so an
+//                     operator can send direct, internal-only synthetic requests
+//                     to it (see REVIEW-AND-CUTOVER.md §2a Step 8d) -- but
+//                     libreChat.bicep stays at 0/0 in this same state (see that
+//                     module), so no ordinary employee request can reach this
+//                     app end-to-end yet.
+//   'validation'   -- this app stays at normal scale (identical to
+//                     'litellm-only' from this module's point of view);
+//                     libreChat.bicep now ALSO runs, but restricted to
+//                     authorized testers via its own ipSecurityRestrictions
+//                     (see that module) -- this app has no ingress restriction
+//                     of its own beyond `external: false` (already
+//                     internal-only), so in both 'litellm-only' and
+//                     'validation' this app relies on LibreChat being the only
+//                     realistic path an ordinary employee has to it.
+//   'off'          -- normal operation; this app runs at its normal scale, same
+//                     as libreChat.bicep and jobs.bicep's normal schedules.
+// See REVIEW-AND-CUTOVER.md, "Maintenance-mode enforcement" (§8.1, as
+// corrected), for the full enter/verify/release sequence across all four
+// states.
+@allowed(['off', 'paused', 'litellm-only', 'validation'])
+param maintenanceState string = 'off'
 // In-flight requests per replica that trigger a scale-out (ACA's default is 10 when no rule
 // is declared). Set from main.bicep, which tunes it per service.
 param concurrentRequests int = 10
@@ -140,8 +171,12 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
       // rate limit, enforcement IS in the request path and the per-replica caveat above
       // applies for real. Verify the key's settings in LiteLLM before scaling prod out.
       scale: {
-        minReplicas: minReplicas
-        maxReplicas: maxReplicas
+        // Only 'paused' forces 0/0 here -- 'litellm-only' and 'off' both run at
+        // normal scale (this app is up in both; see the param comment above for
+        // why 'litellm-only' still blocks ordinary traffic via libreChat.bicep,
+        // not via this app's own scale).
+        minReplicas: maintenanceState == 'paused' ? 0 : minReplicas
+        maxReplicas: maintenanceState == 'paused' ? 0 : maxReplicas
         rules: [
           {
             name: 'http-concurrency'
