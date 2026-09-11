@@ -11,7 +11,16 @@ param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
 // version from 1.57.4 through 1.83.6. Patched upstream in v1.83.7-stable; v1.99.0 is the
 // latest published release. Note the tag format itself changed (main-vX.Y.Z -> vX.Y.Z)
 // somewhere after 1.57.4 — verified v1.99.0 exists in ghcr.io/berriai/litellm before pinning it.
-param liteLlmImage = 'ghcr.io/berriai/litellm:v1.99.0'
+//
+// Pinned by IMMUTABLE DIGEST, not the `v1.99.0` tag — same rule as libreChatImage below.
+// The entire review rests on one specific image: the 157-migration inventory, the
+// 16-to-74-table baseline gap in 01-baseline-remediation.sql, and the prompt-storage
+// OR-gate verification (store_prompts_in_spend_logs / STORE_PROMPTS_IN_SPEND_LOGS) were
+// all validated against sha256:570a872d… and nothing else. A tag is a movable label, so
+// deploying `:v1.99.0` would deploy whatever that label points at on the day, which is not
+// necessarily the artifact any of that evidence describes. REVIEW-AND-CUTOVER.md already
+// specifies the digest ("avoiding unpinned tags"); this is the file that has to agree with it.
+param liteLlmImage = 'ghcr.io/berriai/litellm@sha256:570a872d2fde8f1bc4a147634810941103c14697270f0f2918c5aa7d8201cac5'
 // LibreChat runs OUR fork build (repo: ChatGptForEmployeesLibreChatFork), pulled from our
 // ACR and pinned by IMMUTABLE DIGEST — never a mutable tag. To promote a new fork build:
 // run the fork's build pipeline, copy the digest it prints, and paste it here.
