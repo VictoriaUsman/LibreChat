@@ -69,15 +69,51 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                # Build scripts/Dockerfile.cleanup server-side in ACR and push
-                # librechat-cleanup:latest. The ACA Job (jobs.bicep) pulls this via
-                # its managed identity. Runs even while the Job is gated off
-                # (deployJobs=false), so the image is ready when the Job is enabled.
+                # Build scripts/Dockerfile.cleanup server-side in ACR and push both
+                # librechat-cleanup:latest (mutable, what jobs.bicep pulls by default)
+                # and librechat-cleanup:$(Build.SourceVersion) (immutable, tied to the
+                # exact reviewed commit). The ACA Jobs (jobs.bicep) pull the image via
+                # admin credentials. Runs even while the Jobs are gated off
+                # (deployJobs=false), so the image is ready when they're enabled.
+                #
+                # `set -e` (bash default here is NOT -e) so a failed build/digest
+                # lookup fails this stage instead of silently leaving no recorded
+                # digest for a commit that appears to have "built" (LiteLLM v1.99.0
+                # review, third working-changes follow-up, Finding 2).
+                set -euo pipefail
+
                 az acr build \
                   --registry acrcgfedev \
-                  --image librechat-cleanup:latest \
+                  --image "librechat-cleanup:latest" \
+                  --image "librechat-cleanup:$(Build.SourceVersion)" \
                   --file "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts/Dockerfile.cleanup" \
                   "$(Build.SourcesDirectory)/ChatGptForEmployees/scripts"
+
+                # Record the manifest digest for the immutable, commit-pinned tag --
+                # NOT the :latest tag, which a later push (e.g. from `dev` moving
+                # again) can silently repoint out from under an in-flight cutover.
+                # This is the digest REVIEW-AND-CUTOVER.md Step 8d requires an
+                # operator to record and match against before starting the synthetic
+                # check job. Cutover requires jobsImageDigest (jobs.bicep) and
+                # an exact digest reference on the job and captured execution;
+                # checking the mutable tag before starting is not sufficient.
+                JOBS_IMAGE_DIGEST=$(az acr repository show \
+                  --name acrcgfedev \
+                  --image "librechat-cleanup:$(Build.SourceVersion)" \
+                  --query "digest" \
+                  --output tsv)
+
+                if [ -z "$JOBS_IMAGE_DIGEST" ]; then
+                  echo "##vso[task.logissue type=error]Could not resolve a manifest digest for librechat-cleanup:$(Build.SourceVersion) after build; treat this as a build failure."
+                  exit 1
+                fi
+
+                echo "##vso[task.setvariable variable=jobsImageDigest;isOutput=true]$JOBS_IMAGE_DIGEST"
+                echo "Built and pushed librechat-cleanup for commit $(Build.SourceVersion)"
+                echo "  tags:   latest, $(Build.SourceVersion)"
+                echo "  digest: $JOBS_IMAGE_DIGEST"
+                echo "During a cutover: record this commit + digest pair, set jobsImageDigest to the digest in the env bicepparam, redeploy, and confirm the deployed job reports this exact digest BEFORE starting the synthetic check job. Reset jobsImageDigest to '' after the window. See REVIEW-AND-CUTOVER.md Step 8d."
+            name: BuildPushStep
 
   - stage: UploadConfigs
     displayName: 'Upload Config Files to Azure Files'

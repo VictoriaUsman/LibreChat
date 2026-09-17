@@ -7,5 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY cleanup_orphaned_files.py .
 COPY sync_okta_attribution.py .
+COPY 05-synthetic-litellm-check.py .
 
 CMD ["python", "cleanup_orphaned_files.py"]

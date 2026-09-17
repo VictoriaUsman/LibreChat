@@ -26,7 +26,44 @@ param envName string = 'Dev'
 param location string = 'eastus'
 param environmentId string
 param acrName string
+// Optional pin to an exact manifest digest (LiteLLM v1.99.0 review, third
+// working-changes follow-up, Finding 2). Empty (default) keeps the existing
+// mutable `:latest` tag; set to a `sha256:...` digest recorded by dev.yml's
+// BuildJobsImage stage to pin all three jobs below to that exact verified
+// build -- see main.bicep's jobsImageDigest comment and REVIEW-AND-CUTOVER.md
+// Step 8d for when/how this must be set.
+//
+// CLEAR IT AGAIN once the maintenance window closes. While it is set, all three
+// jobs below are frozen on that one build and will silently ignore every later
+// BuildJobsImage run -- the pipeline keeps pushing new images that nothing
+// deploys. Set it only for the duration of a cutover, then reset to '' in a
+// follow-up commit (deliberately NOT in the same commit that ends the window:
+// that deploy already resumes the cron schedules, and un-pinning at the same
+// moment would send the first resumed run to whatever `:latest` points at
+// rather than the build that was just validated).
+param jobsImageDigest string = ''
 param oktaOrgUrl string
+// Maintenance-state enforcement (LiteLLM v1.99.0 review, Follow-up 1 P1;
+// corrected per the `89c57d0` working-changes follow-up, Finding 2, and
+// extended again per the second working-changes follow-up, Finding 1). Both
+// jobs' cron expressions are forced to a never-fire sentinel in EVERY
+// non-'off' state ('paused', 'litellm-only', or 'validation') -- jobs stay
+// paused through the entire controlled-startup window, including while
+// 'litellm-only' brings LiteLLM up and while 'validation' brings LibreChat up
+// for authorized-tester application checks, and only resume in 'off', strictly
+// after those checks pass (REVIEW-AND-CUTOVER.md §2a Steps 8d/8e, then §7's
+// resume). This is deliberately independent of deployJobs: leaving
+// deployJobs=true and using maintenanceState to neuter the trigger keeps the
+// jobs' image/role-assignment/secret configuration current through the
+// window, rather than removing the jobs outright (deployJobs=false alone does
+// not stop an already-deployed job's existing schedule). Az CLI-level pause
+// (`az containerapp job update --cron-expression`, §7) remains the immediate,
+// out-of-band fallback when no Bicep deploy is in flight; this parameter is
+// what keeps a concurrent or subsequent Bicep deploy from clobbering that
+// pause. Shared with liteLlm.bicep and libreChat.bicep so all three modules
+// read the same value from main.bicep.
+@allowed(['off', 'paused', 'litellm-only', 'validation'])
+param maintenanceState string = 'off'
 
 @secure()
 param oktaApiToken string
@@ -44,15 +81,45 @@ param postgresUser string
 @secure()
 param postgresPassword string
 
+// --- Synthetic LiteLLM check job inputs (05-synthetic-litellm-check.py) ---
+// Manually-triggered (not scheduled) job that gives the runbook's Step 8d
+// ("make the internal synthetic test executable", second working-changes
+// follow-up, Finding 2) a concrete, prepared execution location that can
+// resolve LiteLLM's internal FQDN -- this job runs inside the same Container
+// Apps environment as ca-litellm-<env>, so `http://<liteLlmInternalUrl>` is
+// reachable the same way any other app in this environment reaches it,
+// without depending on exec-ing into a stopped/paused container.
+param liteLlmInternalUrl string
+@secure()
+param liteLlmMasterKey string
+// Must match a model_name actually declared in litellm_routing_config.yaml.
+// "ROMTech AI Fast" is the lighter/cheaper of the two user-facing models.
+param synthTestModelName string = 'ROMTech AI Fast'
+
 var jobName = 'job-cgfe-okta-sync-${toLower(envName)}'
 var cleanupJobName = 'job-cgfe-cleanup-${toLower(envName)}'
+var synthCheckJobName = 'job-cgfe-synth-check-${toLower(envName)}'
+
+// "00:00 on February 31st" -- no standard 5-field cron scheduler ever matches a
+// day that doesn't exist, so this stops a job firing without deleting or
+// disabling its trigger configuration outright. Same sentinel documented as the
+// az-CLI-level pause command in REVIEW-AND-CUTOVER.md §7; declaring it here too
+// means a non-'off' Bicep deploy can't reintroduce the real schedule mid-window
+// even if it runs after (or instead of) that manual CLI pause.
+var maintenanceNeverFireCron = '0 0 31 2 *'
+var oktaSyncCron = maintenanceState == 'off' ? '0 5 * * 2,5' : maintenanceNeverFireCron
+var cleanupCron = maintenanceState == 'off' ? '0 2 * * *' : maintenanceNeverFireCron
 
 // Image is built + pushed to this env's ACR by the deploy pipeline (az acr build);
 // we read the registry's admin credentials here (deploy-time) to pull it.
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: acrName
 }
-var jobsImage = '${acr.properties.loginServer}/librechat-cleanup:latest'
+// Digest-pinned ref (`@sha256:...`) when jobsImageDigest is set, else the
+// mutable `:latest` tag -- see the jobsImageDigest param comment above.
+var jobsImage = empty(jobsImageDigest)
+  ? '${acr.properties.loginServer}/librechat-cleanup:latest'
+  : '${acr.properties.loginServer}/librechat-cleanup@${jobsImageDigest}'
 
 resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
   name: jobName
@@ -62,7 +129,7 @@ resource oktaSyncJob 'Microsoft.App/jobs@2024-03-01' = {
     configuration: {
       triggerType: 'Schedule'
       scheduleTriggerConfig: {
-        cronExpression: '0 5 * * 2,5' // 05:00 UTC Tue & Fri = midnight ET winter / 1am ET summer
+        cronExpression: oktaSyncCron // 05:00 UTC Tue & Fri = midnight ET winter / 1am ET summer, unless maintenanceMode forces the never-fire sentinel
         parallelism: 1
         replicaCompletionCount: 1
       }
@@ -132,7 +199,7 @@ resource cleanupJob 'Microsoft.App/jobs@2024-03-01' = {
     configuration: {
       triggerType: 'Schedule'
       scheduleTriggerConfig: {
-        cronExpression: '0 2 * * *' // 02:00 UTC nightly (matches config/cleanup-job.yaml)
+        cronExpression: cleanupCron // 02:00 UTC nightly (matches config/cleanup-job.yaml), unless maintenanceMode forces the never-fire sentinel
         parallelism: 1
         replicaCompletionCount: 1
       }
@@ -184,5 +251,83 @@ resource cleanupJob 'Microsoft.App/jobs@2024-03-01' = {
   }
 }
 
+// Manually-triggered synthetic LiteLLM check (05-synthetic-litellm-check.py --
+// second working-changes follow-up, Finding 2). `triggerType: 'Manual'`, not
+// 'Schedule': this job never fires on its own; the operator starts it
+// on-demand during Step 8d with `az containerapp job start -n
+// job-cgfe-synth-check-<env> -g <resource-group>`. Same image + admin-creds
+// ACR pull pattern as the two scheduled jobs above.
+resource synthCheckJob 'Microsoft.App/jobs@2024-03-01' = {
+  name: synthCheckJobName
+  location: location
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Manual'
+      manualTriggerConfig: {
+        replicaCompletionCount: 1
+        parallelism: 1
+      }
+      // Bounded, but sized against the script's ACTUAL worst case, not just its
+      // poll (2026-09-17 independent review, finding F5 -- the previous value of
+      // 120s was derived from SYNTH_CHECK_MAX_WAIT_SECONDS alone and was below
+      // what 05-synthetic-litellm-check.py can legitimately take):
+      //   /health/liveliness   10s connect + 30s read = 40s
+      //   /health/readiness    40s
+      //   chat completion      40s
+      //   spend-log poll       30s + ~10s psycopg2 connect
+      //   -------------------------------------------------
+      //   worst case           ~160s  (read timeouts alone already total 120s)
+      // This job runs immediately after 'litellm-only' scales LiteLLM up from
+      // zero, so a cold /health/readiness -- which opens the DB connection and
+      // enumerates deployments -- is exactly where the first 30s goes. At 120s
+      // with replicaRetryLimit 0, ACA would kill a HEALTHY run, report Failed,
+      // and REVIEW-AND-CUTOVER.md Step 8d would read that as "LiteLLM is broken
+      // against the migrated schema" -- a false stop at the worst moment.
+      replicaTimeout: 300
+      // The script owns its own bounded waits/timeouts and always exits
+      // explicitly; an ACA-level retry on a genuine failure (e.g. unexpectedly
+      // populated content) would silently re-run a check whose result the
+      // operator needs to see and act on, not retry away.
+      replicaRetryLimit: 0
+      secrets: [
+        { name: 'database-url', value: databaseUrl }
+        { name: 'litellm-master-key', value: liteLlmMasterKey }
+        // ACR admin password, read from the registry at deploy time (no Key Vault,
+        // no Ops — the deploy SP is allowed to read a registry's own credentials).
+        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
+      ]
+      registries: [
+        {
+          server: acr.properties.loginServer
+          username: acr.listCredentials().username
+          passwordSecretRef: 'acr-password'
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'cgfe-synth-check'
+          image: jobsImage
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+          command: ['python']
+          args: ['05-synthetic-litellm-check.py']
+          env: [
+            { name: 'DATABASE_URL', secretRef: 'database-url' }
+            { name: 'LITELLM_MASTER_KEY', secretRef: 'litellm-master-key' }
+            { name: 'LITELLM_INTERNAL_URL', value: 'http://${liteLlmInternalUrl}' }
+            { name: 'SYNTHETIC_TEST_MODEL', value: synthTestModelName }
+          ]
+        }
+      ]
+    }
+  }
+}
+
 output jobName string = oktaSyncJob.name
 output cleanupJobName string = cleanupJob.name
+output synthCheckJobName string = synthCheckJob.name

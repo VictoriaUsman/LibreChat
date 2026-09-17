@@ -10,6 +10,35 @@ param maxReplicas int = 2
 // In-flight requests per replica that trigger a scale-out (ACA's default is 10 when no rule
 // is declared). Set from main.bicep, which tunes it per service.
 param concurrentRequests int = 10
+// Maintenance-state enforcement (LiteLLM v1.99.0 review, `89c57d0` working-changes
+// follow-up, Finding 2: "separate controlled startup from traffic and job
+// release"; extended to a fourth state, 'validation', per the second
+// working-changes follow-up, Finding 1: "validate LibreChat before releasing
+// users and jobs" -- direct LiteLLM checks alone don't prove the complete
+// application works, so a distinct phase is needed where LibreChat itself runs,
+// for authorized testers only, before ordinary employees are let in). LibreChat
+// is the ONLY realistic path an ordinary employee has to LiteLLM (LiteLLM's own
+// ingress is already `external: false`, internal-only) -- so THIS app's ingress,
+// not LiteLLM's replica count, is what actually has to restrict ordinary access.
+// This app is forced to 0/0 replicas in 'paused' and 'litellm-only' (unlike
+// liteLlm.bicep, which is up in 'litellm-only'); in 'validation' it runs at
+// normal scale but with `ipSecurityRestrictions` limiting ingress to
+// `maintenanceTesterIpRanges` only (see below); it runs unrestricted only in
+// 'off'. See REVIEW-AND-CUTOVER.md, "Maintenance-mode enforcement" (§8.1), for
+// the full enter/verify/release sequence across all four states. Shared with
+// liteLlm.bicep and jobs.bicep so all three modules read the same
+// maintenanceState value from main.bicep.
+@allowed(['off', 'paused', 'litellm-only', 'validation'])
+param maintenanceState string = 'off'
+// CIDR ranges (e.g. '203.0.113.4/32') allowed to reach this app's ingress while
+// maintenanceState == 'validation' -- the authorized tester's/operator's own
+// public IP for that specific maintenance window, supplied by the env
+// bicepparam immediately before the window and removed immediately after (like
+// maintenanceState itself, this is a deliberate, reviewable, per-window commit,
+// not a standing configuration). Ignored in every other state. Left empty by
+// default; see the FAILS CLOSED note on ipSecurityRestrictions below for what
+// happens if 'validation' is set with this still empty.
+param maintenanceTesterIpRanges array = []
 // cpu is a string so it can be passed through json() below (the ARM property is numeric).
 // cpu:memory must hold ACA's 1:2 vCPU:GiB ratio — main.bicep pairs them in one object.
 param containerCpu string = '0.5'
@@ -54,6 +83,22 @@ var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
 var libreChatUrl = 'https://${appName}.${defaultDomain}'
 
+// FAILS CLOSED, not open: if maintenanceState == 'validation' but no tester IP
+// was actually supplied, restrict to the reserved, unroutable 0.0.0.0/32 rather
+// than applying no restriction at all -- an empty ipSecurityRestrictions array
+// on Azure Container Apps ingress means "no restriction" (fully open), which
+// would silently readmit ordinary traffic instead of blocking it. Deploying
+// 'validation' with no configured tester therefore blocks EVERYONE, including
+// the tester, rather than accidentally blocking no one -- the operator must
+// notice and fix maintenanceTesterIpRanges, not get a silently-open app.
+var maintenanceIpRanges = empty(maintenanceTesterIpRanges) ? ['0.0.0.0/32'] : maintenanceTesterIpRanges
+var maintenanceIpRestrictions = [for (ip, i) in maintenanceIpRanges: {
+  name: 'maintenance-tester-${i}'
+  ipAddressRange: ip
+  action: 'Allow'
+  description: 'LiteLLM v1.99.0 cutover validation-phase tester allow-list (REVIEW-AND-CUTOVER.md, Maintenance-mode enforcement) -- remove after the maintenance window closes'
+}]
+
 // The LibreChat image lives in our per-env ACR (acrcgfe<env>); reference it to read the
 // registry's admin credentials at deploy time for the image pull below (mirrors jobs.bicep).
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
@@ -76,6 +121,14 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         stickySessions: {
           affinity: 'sticky'
         }
+        // Ingress-level access restriction (Azure Container Apps'
+        // ipSecurityRestrictions) -- the actual supported mechanism for
+        // restricting THIS app to authorized testers while it runs at normal
+        // scale during maintenanceState == 'validation'. Empty ([]) in every
+        // other state, which is Azure's "no restriction" value (unchanged,
+        // normal behavior in 'off'; irrelevant in 'paused'/'litellm-only',
+        // where this app has 0 replicas anyway).
+        ipSecurityRestrictions: maintenanceState == 'validation' ? maintenanceIpRestrictions : []
       }
       secrets: [
         { name: 'mongo-uri', value: mongoConnectionString }
@@ -208,8 +261,13 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
       // newly-added replica only picks up NEW sessions, so a scale-out relieves arriving
       // users rather than redistributing the ones already connected.
       scale: {
-        minReplicas: minReplicas
-        maxReplicas: maxReplicas
+        // Forced to 0/0 in 'paused' AND 'litellm-only'. Runs at normal scale in
+        // BOTH 'validation' (restricted to testers via ipSecurityRestrictions
+        // above) and 'off' (unrestricted) -- this app must actually be running
+        // for Step 8e's tester-only smoke tests to be possible at all. See the
+        // param comment above.
+        minReplicas: (maintenanceState == 'off' || maintenanceState == 'validation') ? minReplicas : 0
+        maxReplicas: (maintenanceState == 'off' || maintenanceState == 'validation') ? maxReplicas : 0
         rules: [
           {
             name: 'http-concurrency'

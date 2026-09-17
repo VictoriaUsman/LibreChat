@@ -44,9 +44,22 @@ param libreChatImage string = 'ghcr.io/danny-avila/librechat:v0.8.6'
 param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 
 // The scheduled-jobs image lives in a per-env ACR (acr.bicep -> `acrcgfe<env>`);
-// the deploy pipeline builds + pushes it, and jobs.bicep derives the image ref
-// from the registry and pulls it via the Job's managed identity. No jobsImage
-// param is needed.
+// the deploy pipeline builds + pushes it, and jobs.bicep derives the mutable
+// `:latest` tag ref from the registry and pulls it via the Job's admin
+// credentials by default -- no jobsImage param is needed for normal deploys.
+//
+// jobsImageDigest (LiteLLM v1.99.0 review, third working-changes follow-up,
+// Finding 2): optional pin to an exact `sha256:...` manifest digest, recorded
+// by dev.yml's BuildJobsImage stage for the reviewed commit. Leave empty for
+// ordinary deploys (jobs.bicep falls back to `:latest`). Set it in the env
+// bicepparam ONLY when redeploying jobs.bicep to pin the scheduled-jobs image
+// to a specific verified build before REVIEW-AND-CUTOVER.md Step 8d's
+// synthetic check -- see that step for the required verification before use.
+// Reset it to '' in a follow-up commit once the window closes: left set, the
+// scheduled jobs stay frozen on that build and ignore every later image push
+// (see jobs.bicep's param comment for why this is a separate commit).
+param jobsImageDigest string = ''
+
 param oktaOrgUrl string = 'https://romtech.okta.com'
 
 // Gate for the Okta department-sync ACA Job. Kept FALSE until Ops has (a) built
@@ -131,6 +144,44 @@ param openIdSessionSecret string
 // Defaulted empty so the deployment doesn't require it when deployJobs=false
 // (the env bicepparam supplies the real Key Vault value only when enabling the job).
 param oktaApiToken string = ''
+
+// Maintenance-state enforcement (LiteLLM v1.99.0 review, Follow-up 1 P1: "preserve
+// maintenance isolation throughout deployment"; corrected per the `89c57d0`
+// working-changes follow-up, Finding 2, to independently-meaningful states
+// instead of one true/false; extended again per the second working-changes
+// follow-up, Finding 1: "validate LibreChat before releasing users and jobs").
+// Threaded through to liteLlm.bicep, libreChat.bicep, and jobs.bicep,
+// overriding whatever scale/cron/ingress values this file would otherwise
+// compute/declare below:
+//   'off'          -- normal operation (default).
+//   'paused'       -- LiteLLM, LibreChat, and both jobs all forced down/paused.
+//                     Used while the database migration itself runs.
+//   'litellm-only' -- LiteLLM brought back to normal scale for controlled,
+//                     internal-only synthetic checks (via the manually-
+//                     triggered job-cgfe-synth-check-<env>); LibreChat and
+//                     both jobs stay paused, so no ordinary employee traffic
+//                     can reach LiteLLM yet (LibreChat is the only realistic
+//                     path to it).
+//   'validation'   -- LibreChat ALSO brought to normal scale, but restricted
+//                     to `maintenanceTesterIpRanges` only via its ingress
+//                     `ipSecurityRestrictions`; both jobs stay paused. Lets an
+//                     authorized tester run the full application (Okta login,
+//                     streaming, model picker, conversations, upload) before
+//                     ordinary employees are let in.
+// See REVIEW-AND-CUTOVER.md, "Maintenance-mode enforcement" (§8.1, as
+// corrected), for the full enter/verify/release sequence: 'off' -> 'paused'
+// (enter, together with the reviewed target image/config) -> run the
+// migration -> 'litellm-only' (verify LiteLLM directly) -> 'validation'
+// (authorized-tester application checks) -> 'off' (release LibreChat + jobs
+// to everyone), each a separate commit.
+@allowed(['off', 'paused', 'litellm-only', 'validation'])
+param maintenanceState string = 'off'
+// CIDR ranges allowed through LibreChat's ingress while maintenanceState ==
+// 'validation' -- see libreChat.bicep's own param comment for the fail-closed
+// behavior when this is left empty. Supplied by the env bicepparam only for
+// the specific maintenance window, then removed.
+param maintenanceTesterIpRanges array = []
+
 var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 
 // ─── Container App sizing ────────────────────────────────────────────────────────────
@@ -277,6 +328,7 @@ module liteLlm 'liteLlm.bicep' = {
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
     liteLlmMasterKey: liteLlmMasterKey
     databaseUrl: postgresql.outputs.liteLlmConnectionString
+    maintenanceState: maintenanceState
   }
 }
 
@@ -297,6 +349,7 @@ module jobs 'jobs.bicep' = if (deployJobs) {
     location: location
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrName: acr.outputs.name
+    jobsImageDigest: jobsImageDigest
     oktaOrgUrl: oktaOrgUrl
     oktaApiToken: oktaApiToken
     databaseUrl: postgresql.outputs.liteLlmConnectionString
@@ -307,6 +360,13 @@ module jobs 'jobs.bicep' = if (deployJobs) {
     postgresHost: postgresql.outputs.hostname
     postgresUser: postgresql.outputs.adminUser
     postgresPassword: postgresql.outputs.adminPassword
+    maintenanceState: maintenanceState
+    // Synthetic LiteLLM check job inputs (second working-changes follow-up,
+    // Finding 2) -- liteLlm.outputs.fqdn is this environment's internal FQDN
+    // for ca-litellm-<env> (ingress external: false), reachable from any app
+    // (including this job) inside the same Container Apps environment.
+    liteLlmInternalUrl: liteLlm.outputs.fqdn
+    liteLlmMasterKey: liteLlmMasterKey
   }
 }
 
@@ -371,6 +431,8 @@ module libreChat 'libreChat.bicep' = {
     concurrentRequests: libreChatScale.concurrency
     containerCpu: containerSize.cpu
     containerMemory: containerSize.memory
+    maintenanceState: maintenanceState
+    maintenanceTesterIpRanges: maintenanceTesterIpRanges
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     liteLlmInternalUrl: liteLlm.outputs.fqdn
     ragApiInternalUrl: ragApi.outputs.fqdn
