@@ -79,14 +79,14 @@ param oktaOrgUrl = 'https://romtech.okta.com'
 //      image/config were already uploaded and validated in step 1.
 // Do not leave this at anything other than 'off' after the maintenance window
 // closes.
-param maintenanceState = 'validation'
+param maintenanceState = 'off'
 // See step 4 above -- populate with the authorized tester's/operator's actual
 // public IP (as a /32 CIDR, e.g. '203.0.113.4/32') only for the 'validation'
 // step of the maintenance window, then clear back to [] before releasing.
 // Ignored in every state other than 'validation'; see libreChat.bicep's own
 // param comment for what happens if 'validation' is set while this is empty
 // (fails closed -- blocks everyone, including the tester).
-param maintenanceTesterIpRanges = ['47.204.111.140/32']
+param maintenanceTesterIpRanges = []
 
 // Pin the scheduled-jobs image to the exact build verified for this cutover
 // (REVIEW-AND-CUTOVER.md Step 8d(i)). Recorded from the BuildJobsImage stage of the
