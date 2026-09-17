@@ -55,6 +55,9 @@ param ragApiImage string = 'ghcr.io/danny-avila/rag_api:main'
 // bicepparam ONLY when redeploying jobs.bicep to pin the scheduled-jobs image
 // to a specific verified build before REVIEW-AND-CUTOVER.md Step 8d's
 // synthetic check -- see that step for the required verification before use.
+// Reset it to '' in a follow-up commit once the window closes: left set, the
+// scheduled jobs stay frozen on that build and ignore every later image push
+// (see jobs.bicep's param comment for why this is a separate commit).
 param jobsImageDigest string = ''
 
 param oktaOrgUrl string = 'https://romtech.okta.com'

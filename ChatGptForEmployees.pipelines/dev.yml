@@ -112,7 +112,7 @@ stages:
                 echo "Built and pushed librechat-cleanup for commit $(Build.SourceVersion)"
                 echo "  tags:   latest, $(Build.SourceVersion)"
                 echo "  digest: $JOBS_IMAGE_DIGEST"
-                echo "Record this commit + digest pair in the cutover evidence per REVIEW-AND-CUTOVER.md Step 8d prerequisites."
+                echo "During a cutover: record this commit + digest pair, set jobsImageDigest to the digest in the env bicepparam, redeploy, and confirm the deployed job reports this exact digest BEFORE starting the synthetic check job. Reset jobsImageDigest to '' after the window. See REVIEW-AND-CUTOVER.md Step 8d."
             name: BuildPushStep
 
   - stage: UploadConfigs

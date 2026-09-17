@@ -98,9 +98,20 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_OPENAI_API_KEY', secretRef: 'azure-openai-api-key' }
             // Manual-migration mode (LiteLLM v1.99.0 review note 3): startup no
             // longer runs `prisma db push`/auto-repair against the database.
-            // Every future LiteLLM upgrade now requires an explicit, reviewed
-            // migration step (see ChatGptForEmployees.docs/local/REVIEW-AND-CUTOVER.md)
-            // BEFORE the new image is allowed to start against the database.
+            //
+            // READ THIS BEFORE BUMPING liteLlmImage. The container will now start
+            // happily against a schema it has NOT migrated -- a clean-looking boot
+            // is no longer evidence the database matches the image. Every upgrade
+            // now requires, in this order: scale this app to zero, apply the
+            // migrations yourself against the target database, verify, and only
+            // then deploy the new image. The migration itself is run out of the
+            // target image, e.g.
+            //   docker run --rm -e DATABASE_URL=...             //     --entrypoint /app/.venv/bin/prisma <image> migrate deploy             //     --schema /app/litellm-proxy-extras/litellm_proxy_extras/schema.prisma
+            // Skipping this does not fail loudly; it produces a running proxy on a
+            // stale schema. The full procedure, including the baseline remediation
+            // needed on a database that predates Prisma migration history (error
+            // P3005), is in the cutover runbook kept in the maintainer's local
+            // working-docs folder -- ask before attempting an upgrade without it.
             // A conflicting general_settings.disable_prisma_schema_update value
             // in litellm_routing_config.yaml would take precedence over this --
             // confirmed absent in litellm_routing_config.yaml as of this change.

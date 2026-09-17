@@ -30,8 +30,17 @@ param acrName string
 // working-changes follow-up, Finding 2). Empty (default) keeps the existing
 // mutable `:latest` tag; set to a `sha256:...` digest recorded by dev.yml's
 // BuildJobsImage stage to pin all three jobs below to that exact verified
-// build -- see main.bicep's jobsImageDigest comment and
-// REVIEW-AND-CUTOVER.md Step 8d for when/how this must be set.
+// build -- see main.bicep's jobsImageDigest comment and REVIEW-AND-CUTOVER.md
+// Step 8d for when/how this must be set.
+//
+// CLEAR IT AGAIN once the maintenance window closes. While it is set, all three
+// jobs below are frozen on that one build and will silently ignore every later
+// BuildJobsImage run -- the pipeline keeps pushing new images that nothing
+// deploys. Set it only for the duration of a cutover, then reset to '' in a
+// follow-up commit (deliberately NOT in the same commit that ends the window:
+// that deploy already resumes the cron schedules, and un-pinning at the same
+// moment would send the first resumed run to whatever `:latest` points at
+// rather than the build that was just validated).
 param jobsImageDigest string = ''
 param oktaOrgUrl string
 // Maintenance-state enforcement (LiteLLM v1.99.0 review, Follow-up 1 P1;
