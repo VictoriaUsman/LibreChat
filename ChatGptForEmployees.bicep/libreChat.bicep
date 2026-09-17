@@ -266,8 +266,14 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         // above) and 'off' (unrestricted) -- this app must actually be running
         // for Step 8e's tester-only smoke tests to be possible at all. See the
         // param comment above.
+        // maxReplicas is 1, not 0, in the down states: ARM rejects maxReplicas: 0
+        // at preflight (ContainerAppInvalidScaleSpec) and fails the entire
+        // deployment. See the equivalent comment in liteLlm.bicep for the full
+        // reasoning and for why this is a scale-to-zero guarantee enforced by the
+        // absence of a caller, not a platform-enforced hard stop. Verify with
+        // `az containerapp replica list`, do not assume.
         minReplicas: (maintenanceState == 'off' || maintenanceState == 'validation') ? minReplicas : 0
-        maxReplicas: (maintenanceState == 'off' || maintenanceState == 'validation') ? maxReplicas : 0
+        maxReplicas: (maintenanceState == 'off' || maintenanceState == 'validation') ? maxReplicas : 1
         rules: [
           {
             name: 'http-concurrency'

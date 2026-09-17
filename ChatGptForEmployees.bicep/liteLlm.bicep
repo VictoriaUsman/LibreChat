@@ -182,12 +182,31 @@ resource liteLlmApp 'Microsoft.App/containerApps@2024-03-01' = {
       // rate limit, enforcement IS in the request path and the per-replica caveat above
       // applies for real. Verify the key's settings in LiteLLM before scaling prod out.
       scale: {
-        // Only 'paused' forces 0/0 here -- 'litellm-only' and 'off' both run at
-        // normal scale (this app is up in both; see the param comment above for
-        // why 'litellm-only' still blocks ordinary traffic via libreChat.bicep,
-        // not via this app's own scale).
+        // 'paused' drives this app to zero RUNNING replicas; 'litellm-only' and
+        // 'off' both run at normal scale (this app is up in both; see the param
+        // comment above for why 'litellm-only' still blocks ordinary traffic via
+        // libreChat.bicep, not via this app's own scale).
+        //
+        // WHY maxReplicas IS 1 AND NOT 0 (2026-09-17, found during the live dev
+        // cutover): ARM REJECTS maxReplicas: 0 at preflight --
+        //   ContainerAppInvalidScaleSpec: "MaxReplicas must be greater than 0,
+        //   maxReplicas must not be less than minReplicas."
+        // The whole deployment fails and nothing is applied. An earlier version
+        // of this file declared 0/0 here and in libreChat.bicep; it had never been
+        // deployed, and both were rejected on the first real attempt.
+        //
+        // minReplicas: 0 with maxReplicas: 1 means the app scales to zero and
+        // STAYS there as long as nothing sends it traffic. That is a weaker
+        // guarantee than a hard 0/0 and must be treated as such: it is enforced by
+        // the ABSENCE OF A CALLER, not by the platform. During the window the only
+        // callers are libreChat (also driven to zero here) and the manually
+        // triggered synth-check job, so in practice nothing can wake it -- but
+        // REVIEW-AND-CUTOVER.md Step 3 must VERIFY zero running replicas via
+        // `az containerapp replica list` rather than assume it. Revision
+        // deactivation is not an alternative: both apps run in Single revision
+        // mode, where the latest revision is always active.
         minReplicas: maintenanceState == 'paused' ? 0 : minReplicas
-        maxReplicas: maintenanceState == 'paused' ? 0 : maxReplicas
+        maxReplicas: maintenanceState == 'paused' ? 1 : maxReplicas
         rules: [
           {
             name: 'http-concurrency'
