@@ -79,7 +79,7 @@ param oktaOrgUrl = 'https://romtech.okta.com'
 //      image/config were already uploaded and validated in step 1.
 // Do not leave this at anything other than 'off' after the maintenance window
 // closes.
-param maintenanceState = 'paused'
+param maintenanceState = 'litellm-only'
 // See step 4 above -- populate with the authorized tester's/operator's actual
 // public IP (as a /32 CIDR, e.g. '203.0.113.4/32') only for the 'validation'
 // step of the maintenance window, then clear back to [] before releasing.
@@ -87,6 +87,18 @@ param maintenanceState = 'paused'
 // param comment for what happens if 'validation' is set while this is empty
 // (fails closed -- blocks everyone, including the tester).
 param maintenanceTesterIpRanges = []
+
+// Pin the scheduled-jobs image to the exact build verified for this cutover
+// (REVIEW-AND-CUTOVER.md Step 8d(i)). Recorded from the BuildJobsImage stage of the
+// pipeline run for dev commit 8f5cf9b4ca4f444806891bab74957721194c4b9c.
+// The synthetic check in Step 8d must run against a digest-pinned image, not the
+// mutable :latest tag, which can move between a registry check and the image pull.
+// RESET THIS TO '' IN A FOLLOW-UP COMMIT ONCE THE WINDOW CLOSES -- while it is set,
+// job-cgfe-okta-sync-dev and job-cgfe-cleanup-dev share this pin and will silently
+// ignore every later BuildJobsImage run. Deliberately NOT cleared in the same commit
+// that ends the window: that deploy already resumes the cron schedules, and un-pinning
+// simultaneously would send the first resumed run to whatever :latest points at.
+param jobsImageDigest = 'sha256:ef836ac563af0aaa9a45f45575c26fd9bd707326234cbad4993cd7165b4abf0f'
 
 param flagshipModelName = 'gpt-5'
 param fastModelName = 'gpt-5-mini'
