@@ -79,7 +79,7 @@ param oktaOrgUrl = 'https://romtech.okta.com'
 //      image/config were already uploaded and validated in step 1.
 // Do not leave this at anything other than 'off' after the maintenance window
 // closes.
-param maintenanceState = 'off'
+param maintenanceState = 'paused'
 // See step 4 above -- populate with the authorized tester's/operator's actual
 // public IP (as a /32 CIDR, e.g. '203.0.113.4/32') only for the 'validation'
 // step of the maintenance window, then clear back to [] before releasing.
