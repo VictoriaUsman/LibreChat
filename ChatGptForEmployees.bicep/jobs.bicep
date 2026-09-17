@@ -268,11 +268,23 @@ resource synthCheckJob 'Microsoft.App/jobs@2024-03-01' = {
         replicaCompletionCount: 1
         parallelism: 1
       }
-      // Bounded: health checks + one synthetic completion + a short poll for
-      // the async spend-log writer (see the script's own SYNTH_CHECK_MAX_WAIT_
-      // SECONDS, default 30s) -- 120s leaves generous headroom without letting
-      // a hung request block the maintenance window indefinitely.
-      replicaTimeout: 120
+      // Bounded, but sized against the script's ACTUAL worst case, not just its
+      // poll (2026-09-17 independent review, finding F5 -- the previous value of
+      // 120s was derived from SYNTH_CHECK_MAX_WAIT_SECONDS alone and was below
+      // what 05-synthetic-litellm-check.py can legitimately take):
+      //   /health/liveliness   10s connect + 30s read = 40s
+      //   /health/readiness    40s
+      //   chat completion      40s
+      //   spend-log poll       30s + ~10s psycopg2 connect
+      //   -------------------------------------------------
+      //   worst case           ~160s  (read timeouts alone already total 120s)
+      // This job runs immediately after 'litellm-only' scales LiteLLM up from
+      // zero, so a cold /health/readiness -- which opens the DB connection and
+      // enumerates deployments -- is exactly where the first 30s goes. At 120s
+      // with replicaRetryLimit 0, ACA would kill a HEALTHY run, report Failed,
+      // and REVIEW-AND-CUTOVER.md Step 8d would read that as "LiteLLM is broken
+      // against the migrated schema" -- a false stop at the worst moment.
+      replicaTimeout: 300
       // The script owns its own bounded waits/timeouts and always exits
       // explicitly; an ACA-level retry on a genuine failure (e.g. unexpectedly
       // populated content) would silently re-run a check whose result the
