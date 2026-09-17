@@ -207,6 +207,27 @@ var workspaceName = 'cdb-workspace-${toLower(environmentName)}'
 var isProd = environmentName == 'Prod'
 var containerSize = isProd ? { cpu: '1.0', memory: '2Gi' } : { cpu: '0.5', memory: '1Gi' }
 
+// LiteLLM is sized separately from the other two apps, and always at 1.0/2Gi.
+//
+// LiteLLM v1.99.0 does not fit in 1Gi. Measured against the pinned digest: it idles at
+// ~782Mi with no database configured at all, and ~960Mi once DATABASE_URL is set and the
+// Prisma query engine is resident. At a 1Gi limit it is OOM-killed (exit 137) during
+// startup, before it ever binds :4000.
+//
+// That failure is near-invisible, so it is worth knowing the shape of it: the kill is a
+// SIGKILL, which never flushes Python's block-buffered stdout, so the container produces
+// ZERO log lines — and because the app runs in ACA's Single revision mode, traffic stays
+// on the last revision that became ready. The previous version keeps serving and every
+// functional test passes against it while the new revision quietly crash-loops. This is
+// exactly what happened on dev during the v1.99.0 cutover on 2026-09-17.
+//
+// LibreChat (~348Mi) and RAG API (~251Mi) measured in dev have ample room at 0.5/1Gi and
+// deliberately keep using containerSize above; there is no reason to pay for headroom they
+// do not use. ACA's vCPU:GiB ratio is a closed list, so 2Gi cannot be taken without also
+// taking 1.0 vCPU — the pair is kept in one object here for the same reason as above.
+// In Prod this is identical to containerSize; it differs only for Dev and Test.
+var liteLlmSize = { cpu: '1.0', memory: '2Gi' }
+
 // min is the always-on floor and is billed continuously; max is a ceiling that only costs
 // while it is actually in use. LibreChat and LiteLLM floor at 2 in prod so a rolling revision
 // swap never leaves one replica serving alone. RAG API is deliberately left at 1: it is not on
@@ -321,8 +342,8 @@ module liteLlm 'liteLlm.bicep' = {
     minReplicas: liteLlmScale.min
     maxReplicas: liteLlmScale.max
     concurrentRequests: liteLlmScale.concurrency
-    containerCpu: containerSize.cpu
-    containerMemory: containerSize.memory
+    containerCpu: liteLlmSize.cpu
+    containerMemory: liteLlmSize.memory
     appInsightsConnectionString: applicationInsights.outputs.appiConnString
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint
     azureOpenAiApiKey: aiFoundry.outputs.apiKey
