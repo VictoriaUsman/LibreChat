@@ -100,7 +100,7 @@ param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 // cleanly and start serving anyway (§12.8 trap 1), writing against a 16-table schema the new
 // version expects to have 75. Pairing the digest with 'paused' makes the worst case "test is
 // down and nothing has changed" instead of "test is silently running on a mismatched schema."
-param maintenanceState = 'paused'
+param maintenanceState = 'litellm-only'
 // Populate with the authorized tester's actual public IP as a /32 CIDR (e.g.
 // '203.0.113.4/32') ONLY for the 'validation' step, then clear back to [] before releasing.
 // Ignored in every state other than 'validation'. Fails CLOSED when 'validation' is set while
