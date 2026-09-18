@@ -100,7 +100,7 @@ param ragApiImage = 'ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest'
 // cleanly and start serving anyway (§12.8 trap 1), writing against a 16-table schema the new
 // version expects to have 75. Pairing the digest with 'paused' makes the worst case "test is
 // down and nothing has changed" instead of "test is silently running on a mismatched schema."
-param maintenanceState = 'litellm-only'
+param maintenanceState = 'validation'
 // Populate with the authorized tester's actual public IP as a /32 CIDR (e.g.
 // '203.0.113.4/32') ONLY for the 'validation' step, then clear back to [] before releasing.
 // Ignored in every state other than 'validation'. Fails CLOSED when 'validation' is set while
@@ -109,7 +109,9 @@ param maintenanceState = 'litellm-only'
 // Test is the right place to finally verify the DENY path, which dev could not: every egress
 // route on the dev operator's machine shared the allow-listed address, so only the allow path
 // was ever exercised. Have a second person confirm they are blocked.
-param maintenanceTesterIpRanges = []
+param maintenanceTesterIpRanges = [
+  '47.204.111.140/32'
+]
 
 // Pin the scheduled-jobs image for the duration of the window, so the synthetic check runs
 // against a fixed artifact rather than the mutable :latest tag, which can move between a
