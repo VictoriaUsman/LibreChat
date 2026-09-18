@@ -3,16 +3,24 @@
 -- owner privileges, and a fresh catalog comparison against the captured inputs.
 -- This file DOES NOT mark any migration applied and DOES NOT run migrate deploy.
 --
--- REQUIRES an explicit -v target_env=dev argument. Missing, blank, "test", and
--- "prod" values all abort before any DDL runs (see the romchat.target_env
--- guard below). An explicit "dev" argument expresses operator INTENT only --
--- it is not proof the connection itself is to dev. Verify PGHOST/PGDATABASE
--- and the connected role against the dev server separately before running
+-- REQUIRES an explicit -v target_env=<dev|test> argument. Missing, blank, "prod"
+-- and any other value all abort before any DDL runs (see the romchat.target_env
+-- guard below). An explicit argument expresses operator INTENT only -- it is not
+-- proof the connection itself is to that environment. Verify PGHOST/PGDATABASE
+-- and the connected role against the intended server separately before running
 -- this script; see REVIEW-AND-CUTOVER.md section 2 for the supported
 -- invocation and its limitations.
 --
+-- 2026-09-18: "test" added to the allow-list so the Test cutover can run this at
+-- all. Until then the guard permitted "dev" alone, which would have aborted Step 4
+-- of the Test window before any DDL. The safety property is unchanged: the
+-- operator must still state the environment explicitly and it must match the
+-- allow-list. **prod remains deliberately blocked** -- opening it is a separate
+-- decision that should not be made in the middle of a maintenance window.
+--
 -- Run using:
---   psql -X -v ON_ERROR_STOP=1 -v target_env=dev -f 01-baseline-remediation.sql
+--   psql -X -v ON_ERROR_STOP=1 -v target_env=dev  -f 01-baseline-remediation.sql
+--   psql -X -v ON_ERROR_STOP=1 -v target_env=test -f 01-baseline-remediation.sql
 
 \set ON_ERROR_STOP on
 BEGIN;
@@ -34,8 +42,12 @@ SELECT set_config('romchat.target_env', :'target_env', true);
 
 DO $$
 BEGIN
-    IF current_setting('romchat.target_env', true) IS DISTINCT FROM 'dev' THEN
-        RAISE EXCEPTION 'Wrong target environment; remediation aborted';
+    -- Explicit allow-list, not a comparison against a single value: 'prod' and
+    -- anything unrecognised still abort. See the 2026-09-18 note in the header.
+    IF current_setting('romchat.target_env', true) IS NULL
+       OR current_setting('romchat.target_env', true) NOT IN ('dev', 'test') THEN
+        RAISE EXCEPTION 'Wrong target environment (got %); remediation aborted',
+            coalesce(current_setting('romchat.target_env', true), '<unset>');
     END IF;
     -- Secondary check only. Every environment's database is named "litellm",
     -- so this does not by itself prove which environment this connection is
