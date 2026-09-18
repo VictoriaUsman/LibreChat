@@ -88,17 +88,23 @@ param maintenanceState = 'off'
 // (fails closed -- blocks everyone, including the tester).
 param maintenanceTesterIpRanges = []
 
-// Pin the scheduled-jobs image to the exact build verified for this cutover
-// (REVIEW-AND-CUTOVER.md Step 8d(i)). Recorded from the BuildJobsImage stage of the
-// pipeline run for dev commit 8f5cf9b4ca4f444806891bab74957721194c4b9c.
-// The synthetic check in Step 8d must run against a digest-pinned image, not the
-// mutable :latest tag, which can move between a registry check and the image pull.
-// RESET THIS TO '' IN A FOLLOW-UP COMMIT ONCE THE WINDOW CLOSES -- while it is set,
-// job-cgfe-okta-sync-dev and job-cgfe-cleanup-dev share this pin and will silently
-// ignore every later BuildJobsImage run. Deliberately NOT cleared in the same commit
-// that ends the window: that deploy already resumes the cron schedules, and un-pinning
-// simultaneously would send the first resumed run to whatever :latest points at.
-param jobsImageDigest = 'sha256:ef836ac563af0aaa9a45f45575c26fd9bd707326234cbad4993cd7165b4abf0f'
+// Cleared 2026-09-18 -- the v1.99.0 cutover window is closed, so the pin has done its
+// job and must not linger. While it is set, job-cgfe-okta-sync-dev, job-cgfe-cleanup-dev
+// and job-cgfe-synth-check-dev are frozen on that one build and silently ignore every
+// later BuildJobsImage run, which is exactly what would otherwise keep the pymongo fix
+// out of dev.
+//
+// It was pinned to sha256:ef836ac5... (built 2026-09-17 17:41) so Step 8d's synthetic
+// check ran against a fixed artifact rather than the mutable :latest tag, which can move
+// between a registry check and the image pull. Set it again the same way for the Test and
+// Prod windows, and clear it again afterwards.
+//
+// Worth knowing for those windows: freezing the jobs on a FRESH build is not a no-op.
+// That 09-17 build was the first since 2026-08-17, and it resolved a newer pymongo that
+// refuses Cosmos DB's wire version 8 -- so the pin intended to stop the jobs changing is
+// what changed them, and both jobs failed on their first runs after the window. Pin to a
+// build that has actually run, or accept that the pin is also an upgrade.
+param jobsImageDigest = ''
 
 param flagshipModelName = 'gpt-5'
 param fastModelName = 'gpt-5-mini'
