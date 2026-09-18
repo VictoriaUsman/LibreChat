@@ -1,6 +1,14 @@
 openai>=1.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-pymongo>=4.6.0
+# Upper bound is load-bearing, not tidiness. Cosmos DB's Mongo API reports wire
+# version 8; pymongo 4.18.0 dropped support for anything below wire version 9
+# (MongoDB 4.4) and refuses the connection outright with "reports wire version 8,
+# but this version of PyMongo requires at least 9". On 2026-09-18 an unpinned
+# `>=4.6.0` resolved to 4.18.1 at image-build time and broke BOTH Mongo-touching
+# jobs (okta sync, orphaned-file cleanup) on dev the first time they ran on that
+# build. 4.17.0 is the last version that talks to Cosmos. Do not raise this bound
+# without confirming Cosmos reports wire version >= 9.
+pymongo>=4.6.0,<4.18
 psycopg2-binary>=2.9.0
 azure-storage-blob>=12.19.0
