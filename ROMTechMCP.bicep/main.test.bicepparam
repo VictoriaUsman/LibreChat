@@ -1,0 +1,8 @@
+using 'main.bicep'
+
+param appName = 'ROMTechMCP'
+param location = 'eastus'
+param environmentName = 'Test'
+param rgName = 'rg-test-shared'
+param subId = 'e64069c2-4b14-4c32-a1f0-3493457f0eff'
+param tenantId = '04e23ac0-68f3-4873-b961-01af4fe0bd04'
