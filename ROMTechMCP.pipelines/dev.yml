@@ -1,0 +1,31 @@
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: ROMTech/PipelineTemplates
+
+trigger:
+  - dev
+
+name: ROMTechSolutions_$(Build.DefinitionName)_$(Build.SourceBranch)_$(Date:yyyyMMdd).$(Rev:r)
+
+variables:
+  - template: templates/insert-variables-dev.yml
+  - template: insert-variables-dynamic.yml@templates
+
+stages:
+  - template: insert-stage-variables-confirm.yml@templates
+  - template: insert-stage-bicep-whatif.yml@templates
+    parameters:
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)
+  - template: insert-stage-bicep-create.yml@templates
+    parameters:
+      appNameEnv: $(appNameEnv)
+      bicepParamFile: $(bicepParamFile)
+      bicepWorkingDirectory: $(bicepWorkingDirectory)
+      envName: $(envName)
+      resourceGroup: $(resourceGroup)
+      serviceConnection: $(serviceConnection)

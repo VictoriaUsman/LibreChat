@@ -1,0 +1,13 @@
+variables:
+- name: appName
+  value: ROMTechMCP
+- name: bicepFolderName
+  value: bicep
+- name: envTitleCase
+  value: Dev
+- name: grateFolderName
+  value: grate
+- name: serviceConnection
+  value: ROMTechMCPDevSC
+- name: subscriptionId
+  value: e64069c2-4b14-4c32-a1f0-3493457f0eff
