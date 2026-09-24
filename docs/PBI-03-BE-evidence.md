@@ -8,11 +8,16 @@ output backing it, and never paste a secret value, a raw CXOne response
 body, or a credential into this file.
 
 Compile-time evidence that already exists (structural, not deployment) is
-in `tests/infra/` — 77 tests passing as of this writing, covering internal
+in `tests/infra/` — 88 tests passing as of this writing, covering internal
 ingress, fixed `minReplicas`, digest-based image references, pull-identity
-isolation, the single intended role assignment, and that the disabled
-(`deployCxoneMcp=false`) path compiles for every environment. That is not
-a substitute for anything in the table below.
+isolation, the single intended role assignment, that the disabled
+(`deployCxoneMcp=false`) path compiles for every environment, and that
+`scripts/preflight_from_bicepparam.py` is actually wired into all three
+pipeline YAML files (as a `CxoneMcpPreflight` stage running before
+what-if/create, against each environment's real resolved parameters — not
+just callable standalone and never invoked, which is what a review caught
+in the first version of this PBI). That is not a substitute for anything
+in the table below.
 
 ## Acceptance evidence
 

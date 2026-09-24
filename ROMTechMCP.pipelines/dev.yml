@@ -15,6 +15,27 @@ variables:
 
 stages:
   - template: insert-stage-variables-confirm.yml@templates
+  # PBI-03: rejects an enabled (deployCxoneMcp=true) CX1 MCP deployment
+  # whose resolved parameters are malformed — see
+  # scripts/preflight_cxone_mcp.py and docs/PBI-03-BE-implementation.md.
+  # Runs against the SAME resolved values the create stage below will
+  # actually use (via `az bicep build-params` on this environment's own
+  # bicepParamFile), not hand-typed duplicates that could drift from it.
+  # This is a plain stage, not a shared template — this repo has no
+  # visibility into ROMTech/PipelineTemplates' own pool/agent convention,
+  # so the pool below may need to match whatever those templates use.
+  - stage: CxoneMcpPreflight
+    displayName: 'PBI-03: CX1 MCP input preflight'
+    jobs:
+      - job: Preflight
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - script: az bicep install
+            displayName: 'Ensure az bicep CLI is available'
+          - script: python3 scripts/preflight_from_bicepparam.py --bicepparam-file $(bicepWorkingDirectory)/$(bicepParamFile)
+            displayName: 'Validate CX1 MCP inputs (fails the build if deployCxoneMcp=true with invalid inputs)'
+            workingDirectory: $(Build.SourcesDirectory)
   - template: insert-stage-bicep-whatif.yml@templates
     parameters:
       bicepParamFile: $(bicepParamFile)
