@@ -1,0 +1,13 @@
+# Never let any of this into a production build context or image layer.
+.env
+*.env
+!*.env.example
+discovery/results/
+discovery/.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.serena/

@@ -6,11 +6,23 @@ param tenantId string = ''
 // Leave empty to skip the role assignment (useful before the app is deployed).
 param appSystemManagedIdentityObjectId string = ''
 
+// The role assignment below (Key Vault Secrets User) only has any effect
+// when the vault is in RBAC mode — with `accessPolicies: []` and RBAC NOT
+// explicitly enabled, a vault defaults to legacy access-policy mode, where
+// that role assignment would silently do nothing. Default true since this
+// is a new vault with no other consumers yet. If this template has
+// ALREADY been deployed with access-policy-mode consumers relying on it,
+// confirm that before flipping this — switching an existing vault's
+// authorization model can break those consumers (PBI-02 implementation
+// notes, docs/PBI-02-BE-implementation.md).
+param enableRbacAuthorization bool = true
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     name: 'kv-romtech-${toLower(environmentName)}'
     location: 'eastus'
     properties: {
         accessPolicies: []
+        enableRbacAuthorization: enableRbacAuthorization
         sku: {
             family: 'A'
             name: 'standard'
