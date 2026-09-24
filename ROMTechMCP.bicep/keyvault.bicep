@@ -53,3 +53,13 @@ resource roleAssignmentKeyVault 'Microsoft.Authorization/roleAssignments@2022-04
 //     parent: keyVault
 //     properties: { value: mySecretValue }
 // }
+
+// Non-secret — safe to output. Consumed by cxone-containerapp.bicep (via
+// main.bicep) so the app gets a vault URI without main.bicep needing to
+// re-derive the vault's naming convention itself, and by
+// cxone-keyvault-access.bicep, which only needs the vault's NAME (not this
+// output, since it references the vault directly by the same convention —
+// kept here too in case that convention ever needs to change in one place).
+output vaultName string = keyVault.name
+output vaultUri string = keyVault.properties.vaultUri
+

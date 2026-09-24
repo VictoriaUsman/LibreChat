@@ -1,3 +1,4 @@
+from .bootstrap import BootstrapError, build_credential_provider, build_cxone_config
 from .client import CXoneClient
 from .config import CXoneConfig, RetryPolicy, SecretNames
 from .credentials import AzureKeyVaultCredentialProvider, CredentialProvider
@@ -19,6 +20,9 @@ from .errors import (
 )
 
 __all__ = [
+    "BootstrapError",
+    "build_credential_provider",
+    "build_cxone_config",
     "CXoneClient",
     "CXoneConfig",
     "RetryPolicy",
