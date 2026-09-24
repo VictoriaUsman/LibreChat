@@ -169,3 +169,41 @@ class TestDisabledPathCompilesForEveryEnvironment:
     def test_environment_bicepparam_compiles(self, bicepparam: str) -> None:
         result = _compile_params(bicepparam)
         assert result["parameters"]["deployCxoneMcp"]["value"] is False
+
+
+class TestPreflightMergesTemplateDefaults:
+    """A .bicepparam file that omits a parameter relying on the Bicep
+    template's own default (a valid, deployable configuration) must not
+    be treated as if that value were absent/zero — reproduces the review
+    finding where an omitted cxoneTargetPort resolved to 0 instead of the
+    Bicep-declared default of 8000."""
+
+    @pytest.fixture()
+    def bicepparam_omitting_target_port(self, tmp_path: Path) -> Path:
+        import shutil as _shutil
+
+        # az bicep build-params resolves the `using` statement relative to
+        # the .bicepparam file's own location, so main.bicep (and whatever
+        # it references) needs to sit alongside the copy.
+        for name in ("main.bicep", "keyvault.bicep", "cxone-containerapp.bicep", "cxone-keyvault-access.bicep"):
+            _shutil.copy(BICEP_DIR / name, tmp_path / name)
+        content = (BICEP_DIR / "main.dev.bicepparam").read_text(encoding="utf-8")
+        lines = [ln for ln in content.splitlines() if "cxoneTargetPort" not in ln]
+        assert len(lines) == len(content.splitlines()) - 1, "fixture assumption broke: no cxoneTargetPort line found"
+        # deployCxoneMcp's own value (still false, from the copied file) is
+        # irrelevant here — resolve_bicepparam() resolves every parameter's
+        # value regardless of it; that flag is only consulted later, in
+        # preflight_from_bicepparam.main().
+        param_path = tmp_path / "main.omit-port.bicepparam"
+        param_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return param_path
+
+    def test_omitted_target_port_resolves_to_the_bicep_default(self, bicepparam_omitting_target_port: Path) -> None:
+        import sys as _sys
+
+        scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
+        _sys.path.insert(0, str(scripts_dir))
+        from preflight_from_bicepparam import resolve_bicepparam  # noqa: E402
+
+        values = resolve_bicepparam(bicepparam_omitting_target_port)
+        assert values.get("cxoneTargetPort") == 8000

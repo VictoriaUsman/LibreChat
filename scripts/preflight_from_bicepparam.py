@@ -36,10 +36,38 @@ class ResolutionError(RuntimeError):
     distinct from the values resolving fine but failing validation."""
 
 
+def _load_template_defaults(bicep_file: Path) -> dict[str, object]:
+    """Every parameter's Bicep-declared defaultValue, e.g. cxoneTargetPort's
+    8000. `az bicep build-params` only emits entries for parameters the
+    .bicepparam file explicitly assigns — a parameter relying on its Bicep
+    default (a valid, deployable configuration) simply doesn't appear in
+    that output at all, so it must be merged in separately rather than
+    treated as absent/zero."""
+    result = subprocess.run(
+        ["az", "bicep", "build", "--file", str(bicep_file), "--stdout"],
+        capture_output=True,
+        text=True,
+        shell=(sys.platform == "win32"),
+    )
+    if result.returncode != 0:
+        raise ResolutionError(f"az bicep build failed for {bicep_file}: {result.stderr.strip()[:1000]}")
+    try:
+        template = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ResolutionError(f"Unexpected az bicep build output shape: {exc}") from exc
+    return {
+        name: entry["defaultValue"] for name, entry in template.get("parameters", {}).items() if "defaultValue" in entry
+    }
+
+
 def resolve_bicepparam(bicepparam_file: Path) -> dict[str, object]:
-    """Returns {parameter_name: value} for every parameter in the file,
-    exactly as `az deployment group create --parameters @<this>` would see
-    them — not a hand-parsed guess at the .bicepparam syntax."""
+    """Returns {parameter_name: value} for every parameter, matching what
+    `az deployment group create --parameters @<this>` would actually use:
+    the .bicepparam file's explicit assignments layered over the
+    referenced Bicep template's own declared defaults for anything the
+    .bicepparam file omits — never a hand-parsed guess at either file's
+    syntax, and never silently 0/empty for an omitted-but-defaulted value.
+    """
     result = subprocess.run(
         ["az", "bicep", "build-params", "--file", str(bicepparam_file), "--stdout"],
         capture_output=True,
@@ -55,7 +83,14 @@ def resolve_bicepparam(bicepparam_file: Path) -> dict[str, object]:
         params = json.loads(outer["parametersJson"])["parameters"]
     except (json.JSONDecodeError, KeyError) as exc:
         raise ResolutionError(f"Unexpected az bicep build-params output shape: {exc}") from exc
-    return {name: entry["value"] for name, entry in params.items()}
+    supplied = {name: entry["value"] for name, entry in params.items()}
+
+    # All three checked-in .bicepparam files `using 'main.bicep'` from the
+    # same directory as themselves — this tool is PBI-03-specific, not a
+    # generic bicepparam resolver, so it resolves defaults against that
+    # same file rather than parsing the `using` statement generically.
+    defaults = _load_template_defaults(bicepparam_file.parent / "main.bicep")
+    return {**defaults, **supplied}
 
 
 def main(argv: list[str] | None = None) -> int:

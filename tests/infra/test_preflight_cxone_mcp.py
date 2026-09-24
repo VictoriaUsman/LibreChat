@@ -101,3 +101,34 @@ def test_invalid_port_is_rejected() -> None:
     for bad_port in (0, -1, 70000):
         errors = validate_cxone_mcp_inputs(**_valid_kwargs(target_port=bad_port))
         assert any("targetPort" in e for e in errors), f"port {bad_port} should be rejected"
+
+
+def test_whitespace_only_repository_is_treated_as_empty() -> None:
+    errors = validate_cxone_mcp_inputs(**_valid_kwargs(image_repository="   "))
+    assert any("imageRepository is empty" in e for e in errors)
+
+
+def test_registry_server_with_url_scheme_is_rejected() -> None:
+    errors = validate_cxone_mcp_inputs(**_valid_kwargs(registry_server="https://myregistry.azurecr.io"))
+    assert any("not a URL" in e for e in errors)
+
+
+def test_registry_server_with_path_is_rejected() -> None:
+    errors = validate_cxone_mcp_inputs(**_valid_kwargs(registry_server="myregistry.azurecr.io/extra"))
+    assert any("must not contain a path" in e for e in errors)
+
+
+def test_digest_with_trailing_newline_is_rejected() -> None:
+    """`$` in Python regex matches before a trailing newline even under
+    `.match()`, so a naive `^[0-9a-f]{64}$` + `.match()` combination
+    silently accepts a digest with a trailing "\n" — this must use
+    `.fullmatch()` (or an equivalently strict check) instead."""
+    errors = validate_cxone_mcp_inputs(**_valid_kwargs(image_sha256=VALID_DIGEST + "\n"))
+    assert errors
+
+
+def test_leading_or_trailing_whitespace_on_an_otherwise_valid_field_is_rejected() -> None:
+    for field in ("container_apps_environment_id", "image_pull_identity_id"):
+        wrapped = f" {_valid_kwargs()[field]} "
+        errors = validate_cxone_mcp_inputs(**_valid_kwargs(**{field: wrapped}))
+        assert any("whitespace" in e for e in errors), f"expected a whitespace error for {field}"

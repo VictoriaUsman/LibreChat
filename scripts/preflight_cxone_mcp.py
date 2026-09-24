@@ -36,7 +36,7 @@ import argparse
 import re
 import sys
 
-_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+_DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 _ARM_RESOURCE_ID_RE = re.compile(r"^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/.+$", re.IGNORECASE)
 
 # Known placeholder/mutable stand-ins that must never appear in a
@@ -56,22 +56,47 @@ def validate_cxone_mcp_inputs(
     target_port: int,
 ) -> list[str]:
     """Returns a list of problem descriptions; empty means every input is
-    shape-valid. Never raises — a caller always gets a list back."""
+    shape-valid. Never raises — a caller always gets a list back.
+
+    Every string input is checked for leading/trailing whitespace and
+    rejected rather than silently trimmed — a stray space or newline
+    (e.g. from a copy-paste, or a YAML block scalar's trailing "\\n") is a
+    real configuration mistake worth surfacing, not something to paper
+    over. "Empty" means empty-after-stripping, so a whitespace-only value
+    is treated as absent, not as a mysteriously passing non-empty string.
+    """
     errors: list[str] = []
 
-    if not container_apps_environment_id:
-        errors.append("containerAppsEnvironmentId is empty — WI 11711 input required before enabling deployment.")
-    elif not _ARM_RESOURCE_ID_RE.match(container_apps_environment_id):
-        errors.append(
-            f"containerAppsEnvironmentId does not look like an ARM resource ID: {container_apps_environment_id!r}"
-        )
+    def _blank_or_whitespace_wrapped(value: str, field_name: str, *, empty_hint: str = "") -> bool:
+        """Returns True (and appends an error) if `value` is blank or
+        carries leading/trailing whitespace — the two forms of "empty"
+        that a plain `if not value` misses entirely."""
+        if not value.strip():
+            suffix = f" — {empty_hint}" if empty_hint else ""
+            errors.append(f"{field_name} is empty.{suffix}")
+            return True
+        if value != value.strip():
+            errors.append(f"{field_name} has leading/trailing whitespace: {value!r}")
+            return True
+        return False
 
-    if not registry_server:
-        errors.append("registryServer is empty.")
+    if not _blank_or_whitespace_wrapped(
+        container_apps_environment_id,
+        "containerAppsEnvironmentId",
+        empty_hint="WI 11711 input required before enabling deployment.",
+    ):
+        if not _ARM_RESOURCE_ID_RE.match(container_apps_environment_id):
+            errors.append(
+                f"containerAppsEnvironmentId does not look like an ARM resource ID: {container_apps_environment_id!r}"
+            )
 
-    if not image_repository:
-        errors.append("imageRepository is empty.")
-    else:
+    if not _blank_or_whitespace_wrapped(registry_server, "registryServer"):
+        if "://" in registry_server:
+            errors.append(f"registryServer must be a bare login server (host[:port]), not a URL: {registry_server!r}")
+        if "/" in registry_server:
+            errors.append(f"registryServer must not contain a path: {registry_server!r}")
+
+    if not _blank_or_whitespace_wrapped(image_repository, "imageRepository"):
         if ":" in image_repository or "@" in image_repository:
             errors.append(
                 f"imageRepository must not carry a tag or digest — the digest is supplied separately "
@@ -82,10 +107,8 @@ def validate_cxone_mcp_inputs(
             if marker in lowered:
                 errors.append(f"imageRepository looks like a placeholder ({marker!r} found): {image_repository!r}")
 
-    if not image_sha256:
-        errors.append("imageSha256 is empty.")
-    else:
-        if not _DIGEST_RE.match(image_sha256):
+    if not _blank_or_whitespace_wrapped(image_sha256, "imageSha256"):
+        if not _DIGEST_RE.fullmatch(image_sha256):
             errors.append(
                 f"imageSha256 must be exactly 64 lowercase hex characters, got "
                 f"{len(image_sha256)} chars: {image_sha256!r}"
@@ -93,10 +116,13 @@ def validate_cxone_mcp_inputs(
         elif image_sha256 in _PLACEHOLDER_DIGESTS:
             errors.append(f"imageSha256 is a known placeholder value, not a real released digest: {image_sha256!r}")
 
-    if not image_pull_identity_id:
-        errors.append("imagePullIdentityId is empty — WI 11711 input required before enabling deployment.")
-    elif not _ARM_RESOURCE_ID_RE.match(image_pull_identity_id):
-        errors.append(f"imagePullIdentityId does not look like an ARM resource ID: {image_pull_identity_id!r}")
+    if not _blank_or_whitespace_wrapped(
+        image_pull_identity_id,
+        "imagePullIdentityId",
+        empty_hint="WI 11711 input required before enabling deployment.",
+    ):
+        if not _ARM_RESOURCE_ID_RE.match(image_pull_identity_id):
+            errors.append(f"imagePullIdentityId does not look like an ARM resource ID: {image_pull_identity_id!r}")
 
     if image_pull_identity_id and image_pull_identity_id == container_apps_environment_id:
         errors.append("imagePullIdentityId must not be the same resource ID as containerAppsEnvironmentId.")
