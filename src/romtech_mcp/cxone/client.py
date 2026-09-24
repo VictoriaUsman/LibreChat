@@ -265,7 +265,8 @@ class CXoneClient:
 
         if response.status_code == 401:
             log_event(logger, logging.WARNING, "api_401_recovery_attempt", path=path, generation=generation)
-            async with self._auth_lock:
+            await self._acquire_auth_lock(deadline, stage=AuthStage.API_REQUEST)
+            try:
                 if self._generation > generation:
                     # Someone else already refreshed concurrently — reuse it,
                     # no new authentication cycle needed for this 401.
@@ -273,6 +274,8 @@ class CXoneClient:
                 else:
                     await self._authenticate(deadline)
                     token, api_host = self._token, self._api_host
+            finally:
+                self._auth_lock.release()
             response = await self._send_authenticated(api_host, path, params, token, deadline)
             if response.status_code == 401:
                 log_event(logger, logging.ERROR, "api_401_terminal", path=path)
@@ -290,13 +293,29 @@ class CXoneClient:
         if self._is_token_fresh():
             assert self._token is not None and self._api_host is not None
             return self._token, self._api_host, self._generation
-        async with self._auth_lock:
+        await self._acquire_auth_lock(deadline, stage=AuthStage.TOKEN_REQUEST)
+        try:
             if self._is_token_fresh():  # recheck: another caller may have refreshed while we waited for the lock
                 assert self._token is not None and self._api_host is not None
                 return self._token, self._api_host, self._generation
             await self._authenticate(deadline)
             assert self._token is not None and self._api_host is not None
             return self._token, self._api_host, self._generation
+        finally:
+            self._auth_lock.release()
+
+    async def _acquire_auth_lock(self, deadline: Deadline, *, stage: AuthStage) -> None:
+        """Lock waits draw down the same shared deadline as everything
+        else — a caller stuck behind a slow concurrent authentication cycle
+        must not wait past its own budget just because the lock, on its
+        own, has no timeout."""
+        remaining = deadline.remaining()
+        if remaining <= 0:
+            raise DeadlineExceededError(stage=stage)
+        try:
+            await asyncio.wait_for(self._auth_lock.acquire(), timeout=remaining)
+        except TimeoutError:
+            raise DeadlineExceededError(stage=stage) from None
 
     def _is_token_fresh(self) -> bool:
         if self._token is None or self._expiry_monotonic is None:
@@ -371,7 +390,17 @@ class CXoneClient:
         response = await self._send_with_retry(do_request, deadline=deadline, stage=AuthStage.TOKEN_REQUEST)
 
         if response.status_code >= 400:
-            raise self._classify_auth_rejection(response)
+            error = self._classify_auth_rejection(response)
+            log_event(
+                logger,
+                logging.ERROR,
+                "credential_rejected",
+                stage=error.stage.value,
+                credential_class=error.credential_class.value,
+                reason_code=error.reason_code,
+                status_code=error.status_code,
+            )
+            raise error
 
         try:
             body = response.json()
@@ -409,22 +438,25 @@ class CXoneClient:
         except ValueError:
             pass
 
-        mapped_class = _OAUTH_ERROR_TO_CREDENTIAL_CLASS.get(error_code) if error_code else None
-        if mapped_class is CredentialClass.APPLICATION:
-            return ApplicationCredentialRejectedError(
-                reason_code=error_code or "unknown", status_code=response.status_code
-            )
-        if mapped_class is CredentialClass.API_USER:
-            return ApiUserCredentialRejectedError(
-                reason_code=error_code or "unknown", status_code=response.status_code
-            )
+        # error_code, if present at all, is upstream-controlled content —
+        # NEVER embed it verbatim in a "safe" field. Only the two verified,
+        # fixed allowlist strings are ever used as a reason_code; anything
+        # else collapses to a fixed constant, regardless of what the actual
+        # string was (it could be arbitrary length/content, including — in
+        # the worst case — a reflected secret).
+        if error_code in _OAUTH_ERROR_TO_CREDENTIAL_CLASS:
+            mapped_class = _OAUTH_ERROR_TO_CREDENTIAL_CLASS[error_code]
+            if mapped_class is CredentialClass.APPLICATION:
+                return ApplicationCredentialRejectedError(reason_code=error_code, status_code=response.status_code)
+            return ApiUserCredentialRejectedError(reason_code=error_code, status_code=response.status_code)
+
         # Deliberately does not guess: an error code outside the verified
         # allowlist (or no parseable code at all) is reported as ambiguous,
         # per the constraint that the client must report ambiguity rather
-        # than invent a diagnosis.
-        return AmbiguousCredentialRejectedError(
-            reason_code=error_code or "no_error_code", status_code=response.status_code
-        )
+        # than invent a diagnosis — and with a fixed reason_code either way,
+        # never the unrecognized value itself.
+        reason_code = "unknown_oauth_error" if error_code is not None else "no_error_code"
+        return AmbiguousCredentialRejectedError(reason_code=reason_code, status_code=response.status_code)
 
     async def _discover_api_host(self, tenant_id: str, deadline: Deadline) -> str:
         async def do_request() -> httpx.Response:
@@ -478,10 +510,20 @@ class CXoneClient:
         max_attempts = self._config.retry.max_attempts
         while True:
             attempt += 1
-            if deadline.expired:
+            remaining = deadline.remaining()
+            if remaining <= 0:
                 raise DeadlineExceededError(stage=stage, attempt_count=attempt - 1)
             try:
-                response = await do_request()
+                # The pre-loop check above only catches a deadline that was
+                # ALREADY exhausted before this attempt started — it does
+                # nothing about a single in-flight request that itself runs
+                # long. Bound the request itself by whatever budget remains,
+                # so a slow response can't complete "successfully" after the
+                # deadline it was supposed to be governed by has passed.
+                response = await asyncio.wait_for(do_request(), timeout=remaining)
+            except TimeoutError:
+                log_event(logger, logging.ERROR, "request_deadline_exceeded", stage=stage.value, attempt_count=attempt)
+                raise DeadlineExceededError(stage=stage, attempt_count=attempt) from None
             except _TRANSIENT_TRANSPORT_EXCEPTIONS:
                 if attempt >= max_attempts:
                     log_event(

@@ -257,3 +257,82 @@ async def test_slow_vault_access_is_bounded_by_the_overall_deadline(base_config)
     async with client:
         with pytest.raises(DeadlineExceededError):
             await asyncio.wait_for(client.get("/x"), timeout=2)  # outer safety net for the test itself
+
+
+async def test_slow_in_flight_request_does_not_complete_past_the_deadline(base_config) -> None:
+    """A response that would otherwise arrive successfully must not be
+    honored once it has taken longer than the deadline it was governed
+    by — a deadline check only before the await isn't enough on its own."""
+    import time
+
+    from romtech_mcp.cxone.config import CXoneConfig, RetryPolicy, SecretNames
+    from romtech_mcp.cxone.errors import DeadlineExceededError
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://cxone.niceincontact.com/auth/token"):
+            return _token_response()
+        if "cxone-configuration" in url:
+            return _discovery_response()
+        import asyncio as _asyncio
+
+        await _asyncio.sleep(0.125)
+        return httpx.Response(200, json={"skillSummaries": []})
+
+    config = CXoneConfig(
+        vault_url=base_config.vault_url,
+        secret_names=SecretNames(),
+        total_deadline_seconds=0.03,
+        retry=RetryPolicy(max_attempts=1),
+    )
+    client = _make_client(config, httpx.MockTransport(handler), sleeper=FakeSleeper())
+    async with client:
+        t0 = time.monotonic()
+        with pytest.raises(DeadlineExceededError):
+            await client.get("/x")
+        assert time.monotonic() - t0 < 0.125  # cut off near the 30ms deadline, not after the full 125ms
+
+
+async def test_lock_wait_is_also_bounded_by_the_caller_s_own_deadline(base_config) -> None:
+    """A caller queued behind a slow concurrent authentication cycle must
+    not wait past its OWN remaining deadline just because asyncio.Lock has
+    no timeout of its own."""
+    import asyncio as _asyncio
+
+    from romtech_mcp.cxone.config import CXoneConfig, SecretNames
+    from romtech_mcp.cxone.errors import DeadlineExceededError
+
+    release_slow_caller = _asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://cxone.niceincontact.com/auth/token"):
+            await release_slow_caller.wait()  # holds the auth lock until the test lets it go
+            return _token_response()
+        if "cxone-configuration" in url:
+            return _discovery_response()
+        return httpx.Response(200, json={"skillSummaries": []})
+
+    # Both callers share one client (one lock) but the test drives each
+    # call's own Deadline directly rather than through get(), since get()
+    # always uses config.total_deadline_seconds for both.
+    client = _make_client(base_config, httpx.MockTransport(handler), sleeper=FakeSleeper())
+    slow_config = CXoneConfig(vault_url=base_config.vault_url, secret_names=SecretNames(), total_deadline_seconds=10.0)
+    fast_config = CXoneConfig(vault_url=base_config.vault_url, secret_names=SecretNames(), total_deadline_seconds=0.05)
+
+    from romtech_mcp.cxone.client import Deadline
+
+    slow_deadline = Deadline(client._clock, slow_config.total_deadline_seconds)
+    fast_deadline = Deadline(client._clock, fast_config.total_deadline_seconds)
+
+    async def slow_caller() -> None:
+        await client._ensure_auth(slow_deadline)  # acquires the lock first, then blocks in the handler
+
+    async def fast_caller() -> None:
+        await _asyncio.sleep(0.01)  # let the slow caller grab the lock first
+        with pytest.raises(DeadlineExceededError):
+            await client._ensure_auth(fast_deadline)
+        release_slow_caller.set()
+
+    async with client:
+        await _asyncio.wait_for(_asyncio.gather(slow_caller(), fast_caller()), timeout=2)

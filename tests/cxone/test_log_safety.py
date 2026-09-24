@@ -176,3 +176,70 @@ async def test_credential_rejection_error_never_leaks_upstream_description(
     _assert_no_secrets(str(exc_info.value))
     _assert_no_secrets(repr(exc_info.value))
     _assert_no_secrets(caplog.text)
+
+
+async def test_unrecognized_oauth_error_value_never_appears_in_exception_text(
+    base_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An OAuth error code outside the verified allowlist is upstream-
+    controlled content — it must never be echoed verbatim into a "safe"
+    field, even as reason_code. Reproduces a planted secret standing in for
+    that field's value."""
+    from romtech_mcp.cxone.errors import AmbiguousCredentialRejectedError
+
+    caplog.set_level(logging.DEBUG, logger="romtech_mcp.cxone.client")
+    planted = "planted-secret-in-unrecognized-error-field-DO-NOT-LEAK"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith("https://cxone.niceincontact.com/auth/token"):
+            return httpx.Response(400, json={"error": planted})
+        return httpx.Response(200)
+
+    client = CXoneClient(
+        base_config,
+        FakeCredentialProvider(),
+        transport=httpx.MockTransport(handler),
+        clock=FakeClock(),
+        sleeper=FakeSleeper(),
+        jitter=zero_jitter,
+    )
+    async with client:
+        with pytest.raises(AmbiguousCredentialRejectedError) as exc_info:
+            await client.get("/x")
+
+    assert planted not in str(exc_info.value)
+    assert planted not in repr(exc_info.value)
+    assert planted not in caplog.text
+    assert exc_info.value.reason_code == "unknown_oauth_error"
+
+
+async def test_credential_rejection_emits_a_sanitized_log_event(
+    base_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A credential rejection must actually be logged (stage + credential
+    class), not only raised silently — the caller may catch and swallow
+    the exception, so the log event is the only durable record."""
+    from romtech_mcp.cxone.errors import ApplicationCredentialRejectedError
+
+    caplog.set_level(logging.DEBUG, logger="romtech_mcp.cxone.client")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith("https://cxone.niceincontact.com/auth/token"):
+            return httpx.Response(400, json={"error": "invalid_client"})
+        return httpx.Response(200)
+
+    client = CXoneClient(
+        base_config,
+        FakeCredentialProvider(),
+        transport=httpx.MockTransport(handler),
+        clock=FakeClock(),
+        sleeper=FakeSleeper(),
+        jitter=zero_jitter,
+    )
+    async with client:
+        with pytest.raises(ApplicationCredentialRejectedError):
+            await client.get("/x")
+
+    assert "event=credential_rejected" in caplog.text
+    assert "credential_class=application" in caplog.text
+    assert "stage=token_request" in caplog.text
