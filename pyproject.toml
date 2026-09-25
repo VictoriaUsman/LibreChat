@@ -16,6 +16,10 @@ dependencies = [
     # actually constructing ManagedIdentityCredential without it, which
     # raises ImportError at first use, not at import time.
     "aiohttp>=3.10,<4",
+    # zoneinfo (stdlib) has no bundled IANA database on Windows — it relies
+    # on the OS or this package. Explicit here rather than an implicit
+    # transitive dependency, per PBI-04's timezone-window requirements.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

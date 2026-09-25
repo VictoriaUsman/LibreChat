@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "_comment": "Copy to cxone-dashboard-mapping.json and fill in with Ziven's confirmed decisions. Do not flip any 'confirmed'/'verified' flag to true without an actual confirmation/verification behind it — see docs/PBI-04-BE-mapping.md.",
+
+  "source": {
+    "_comment": "Discovery's confirmed values for /skills/summary are a LEAD, not a validated schema for this purpose. verified stays false until checked against an actual response captured for this PBI.",
+    "endpoint_path": "/skills/summary",
+    "api_version": "v27.0",
+    "param_start": "startDate",
+    "param_end": "endDate",
+    "response_array_key": "skillSummaries",
+    "skill_id_field": "skillId",
+    "verified": false
+  },
+
+  "scope": {
+    "included_skill_ids": [],
+    "excluded_skill_ids": [],
+    "excluded_skill_reasons": {},
+    "team_ids": [],
+    "skill_team_relationship": "unconfirmed",
+    "confirmed": false,
+    "confirmer": null,
+    "confirmed_date": null
+  },
+
+  "timezone": {
+    "iana_name": null,
+    "confirmed": false,
+    "confirmer": null,
+    "confirmed_date": null
+  },
+
+  "sla": {
+    "per_skill_thresholds_seconds": {},
+    "target_percentage": null,
+    "numerator_field": null,
+    "denominator_field": null,
+    "short_abandon_seconds": null,
+    "exclusions": [],
+    "confirmed": false,
+    "not_applicable": false,
+    "confirmer": null,
+    "confirmed_date": null
+  },
+
+  "baseline": {
+    "reference_dates": [],
+    "weekday_matching": false,
+    "lookback_count": 0,
+    "interval_width_minutes": null,
+    "aggregation": "unconfirmed",
+    "holiday_exclusions": [],
+    "zero_missing_day_handling": "unconfirmed",
+    "minimum_valid_samples": 0,
+    "confirmed": false,
+    "not_applicable": false,
+    "confirmer": null,
+    "confirmed_date": null
+  },
+
+  "metrics": [
+    {
+      "_comment": "EXAMPLE ROW ONLY — shows the contract shape. Replace with real dashboard metrics; do not leave this row in a real config file.",
+      "key": "example_metric_do_not_use",
+      "dashboard_label": "EXAMPLE — replace with the real dashboard label",
+      "widget": "EXAMPLE — replace with the real widget name",
+      "definition_evidence": "EXAMPLE — cite where this metric's definition was confirmed (dashboard export, config screenshot, etc.)",
+      "source": {
+        "endpoint_path": "/skills/summary",
+        "api_version": "v27.0",
+        "response_field": "contactsOffered"
+      },
+      "request_params": {},
+      "unit": "unconfirmed",
+      "value_type": "unconfirmed",
+      "grain": "unconfirmed",
+      "availability": "unconfirmed",
+      "availability_evidence": "",
+      "scope_join_keys": [],
+      "team_attribution_supported": false,
+      "team_attribution_evidence": "",
+      "formula": {
+        "operation": "sum",
+        "components": [
+          {"name": "offered", "source": {"endpoint_path": "/skills/summary", "api_version": "v27.0", "response_field": "contactsOffered"}}
+        ],
+        "denominator_zero_behavior": "null",
+        "rounding_ndigits": null
+      },
+      "sla_reference": null,
+      "baseline_reference": null,
+      "status": "unconfirmed",
+      "evidence_refs": [],
+      "confirmer": null,
+      "confirmed_date": null,
+      "limitations": [],
+      "unsupported_reason": null
+    }
+  ]
+}
