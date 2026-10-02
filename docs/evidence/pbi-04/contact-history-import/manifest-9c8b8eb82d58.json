@@ -1,0 +1,48 @@
+{
+  "run_id": "9c8b8eb82d58",
+  "generated_at_utc": "2026-10-02T17:41:09.814753+00:00",
+  "code_revision": "634df6b",
+  "code_dirty": true,
+  "inputs": [
+    {
+      "basename": "ContactHistory (20).csv",
+      "sha256": "f06d9f5c7c0607e5cf0c69a7345a9a3bf3384eaeadeb9320554d03158ba5a93f",
+      "rows": 1000,
+      "distinct_contact_ids": 996
+    },
+    {
+      "basename": "ContactHistory (21).csv",
+      "sha256": "68f47b646498831a2a15bc1547af40690ee1496b581ae5bce5855a9e1ff9b9a0",
+      "rows": 1000,
+      "distinct_contact_ids": 999
+    },
+    {
+      "basename": "ContactHistory (22).csv",
+      "sha256": "35bfe3dc59ba384a984e4ef158d8481ac3b9dd58121888e33d0095bedbca7a69",
+      "rows": 30,
+      "distinct_contact_ids": 30
+    }
+  ],
+  "skill_inventory": {
+    "basename": "Skills.csv",
+    "sha256": "463060021dab5f6342b53bd14ef50da1a6580db6e502a6d3f44185ceb3359403",
+    "entries": 16
+  },
+  "source_confirmation": "User confirmed in conversation (no email date recorded) that the three exports together are the full day and all reporting available",
+  "source_timezone": "UTC",
+  "timezone_basis": "ASSUMPTION - not established",
+  "window_utc": [
+    "2026-10-01T00:00:00+00:00",
+    "2026-10-02T00:00:00+00:00"
+  ],
+  "grain": null,
+  "api_input": null,
+  "comparison_status": "not_run (import only)",
+  "acceptance_grade": false,
+  "acceptance_note": "Never implied by this script. Requires an established grain, a real captured API response, a timezone evidence statement, owner acceptance, and unchanged production confirmation flags.",
+  "not_recorded": [
+    "report generation time",
+    "report filters",
+    "source email date"
+  ]
+}

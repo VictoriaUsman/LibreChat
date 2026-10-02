@@ -1,0 +1,17 @@
+Skill ID,Skill Name,Status,Inbound/Outbound,Campaign,Service Level Threshold,Service Level Goal (percentage),Enable Short Abandon Threshold,Short Abandon Threshold,Short Abandons
+21036611,VM Remove From Queue,Active,Inbound,Admin,90,90,FALSE,15,TRUE
+18499110,VM Dequeue - NO AGENT,Active,Inbound,Admin,60,100,FALSE,15,TRUE
+18492667,Default NO-Agent Inbound,Active,Inbound,Admin,90,90,TRUE,90,FALSE
+18499112,Logistics Scheduler VM,Active,Inbound,Logistics Scheduling,190800,90,FALSE,15,TRUE
+35588284,Logistics Scheduler Spanish VM,Active,Inbound,Logistics Scheduling,190800,90,FALSE,15,TRUE
+35588224,Logistics Scheduler Spanish,Active,Inbound,Logistics Scheduling,120,90,TRUE,15,FALSE
+29277623,Logistics Scheduler,Active,Inbound,Logistics Scheduling,120,90,FALSE,15,TRUE
+18499108,Logistics Outbound,Active,Outbound,Logistics Scheduling,60,100,FALSE,15,TRUE
+36302044,Patient Collections VM,Active,Inbound,Patient Collections,185000,90,FALSE,15,TRUE
+36302043,Patient Collections Billing,Active,Inbound,Patient Collections,90,90,TRUE,15,FALSE
+36302048,Patient Collections Bill Spani,Active,Inbound,Patient Collections,90,90,TRUE,15,FALSE
+36301921,Patient Support VM,Active,Inbound,Patient Support,190800,90,FALSE,15,TRUE
+36301865,Patient Support,Active,Inbound,Patient Support,90,90,FALSE,15,TRUE
+35588257,PostDeliveryBilling Spanish,Active,Inbound,Post Delivery,90,90,TRUE,45,FALSE
+35588188,PostDeliveryBilling,Active,Inbound,Post Delivery,90,90,TRUE,45,TRUE
+35588199,PostDelivery Billing VM,Active,Inbound,Post Delivery,190800,90,FALSE,15,TRUE

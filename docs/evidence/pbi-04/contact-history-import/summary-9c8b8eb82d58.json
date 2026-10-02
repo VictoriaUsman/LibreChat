@@ -1,0 +1,215 @@
+{
+  "run_id": "9c8b8eb82d58",
+  "import": {
+    "raw_rows": 2030,
+    "distinct_contact_ids": 2021,
+    "distinct_master_contact_ids": 1661,
+    "exact_repeat_rows": 7,
+    "exact_repeats_within_a_file": 3,
+    "exact_repeats_across_files": 4,
+    "repeated_ids_total": 9,
+    "conflicting_repeated_ids": 2,
+    "conflict_fields": {
+      "team": 2
+    },
+    "masters_with_multiple_contacts": 259,
+    "contacts_under_multiple_skills": 0,
+    "media_types": {
+      "Phone": 2030
+    },
+    "per_skill": [
+      {
+        "skill_name": "CS - Outbound",
+        "rows": 459,
+        "distinct_contacts": 458
+      },
+      {
+        "skill_name": "Cardiac Appointments",
+        "rows": 25,
+        "distinct_contacts": 25
+      },
+      {
+        "skill_name": "Cardiac Billing",
+        "rows": 127,
+        "distinct_contacts": 126
+      },
+      {
+        "skill_name": "Cardiac Delivery Pickup",
+        "rows": 17,
+        "distinct_contacts": 17
+      },
+      {
+        "skill_name": "Cardiac General",
+        "rows": 26,
+        "distinct_contacts": 26
+      },
+      {
+        "skill_name": "Cardiac General Spanish",
+        "rows": 2,
+        "distinct_contacts": 2
+      },
+      {
+        "skill_name": "Cardiac Order Status",
+        "rows": 7,
+        "distinct_contacts": 7
+      },
+      {
+        "skill_name": "Cardiac Tech Support",
+        "rows": 12,
+        "distinct_contacts": 12
+      },
+      {
+        "skill_name": "Customer Service General",
+        "rows": 52,
+        "distinct_contacts": 50
+      },
+      {
+        "skill_name": "Default NO-Agent Inbound",
+        "rows": 250,
+        "distinct_contacts": 250
+      },
+      {
+        "skill_name": "Logistics Outbound",
+        "rows": 52,
+        "distinct_contacts": 52
+      },
+      {
+        "skill_name": "Logistics Scheduler",
+        "rows": 221,
+        "distinct_contacts": 219
+      },
+      {
+        "skill_name": "Logistics Scheduler Spanish",
+        "rows": 6,
+        "distinct_contacts": 6
+      },
+      {
+        "skill_name": "Ortho Billing",
+        "rows": 63,
+        "distinct_contacts": 63
+      },
+      {
+        "skill_name": "Ortho Billing Spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Ortho Delivery Pickup",
+        "rows": 147,
+        "distinct_contacts": 146
+      },
+      {
+        "skill_name": "Ortho Delivery Pickup Spanish",
+        "rows": 3,
+        "distinct_contacts": 3
+      },
+      {
+        "skill_name": "Ortho General",
+        "rows": 104,
+        "distinct_contacts": 104
+      },
+      {
+        "skill_name": "Ortho General Spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Ortho Order Status",
+        "rows": 57,
+        "distinct_contacts": 57
+      },
+      {
+        "skill_name": "Ortho Tech Support",
+        "rows": 131,
+        "distinct_contacts": 131
+      },
+      {
+        "skill_name": "Ortho Tech Support spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Outbound",
+        "rows": 13,
+        "distinct_contacts": 13
+      },
+      {
+        "skill_name": "Patient Collections Bill Spani",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Patient Collections Billing",
+        "rows": 2,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Patient Support",
+        "rows": 15,
+        "distinct_contacts": 15
+      },
+      {
+        "skill_name": "Remote Onboarding",
+        "rows": 8,
+        "distinct_contacts": 8
+      },
+      {
+        "skill_name": "Test IB",
+        "rows": 2,
+        "distinct_contacts": 2
+      },
+      {
+        "skill_name": "VM Remove From Queue",
+        "rows": 225,
+        "distinct_contacts": 224
+      }
+    ],
+    "earliest_start_utc": "2026-10-01T01:35:48Z",
+    "latest_start_utc": "2026-10-01T23:46:14Z",
+    "sum_of_per_skill_distinct_contacts": 2021,
+    "marked_id_rows": 374,
+    "distinct_base_contact_ids": 2021,
+    "base_ids_seen_both_marked_and_unmarked": 0,
+    "shared_contact_ids_between_files": {
+      "ContactHistory (20).csv|ContactHistory (21).csv": 4
+    }
+  },
+  "exact_repeats_removed_by_overlap_rule": 7,
+  "records_after_exact_dedupe": 2023,
+  "skill_resolution": {
+    "resolved": {
+      "Default NO-Agent Inbound": "18492667",
+      "Logistics Outbound": "18499108",
+      "Logistics Scheduler": "29277623",
+      "Logistics Scheduler Spanish": "35588224",
+      "Patient Collections Bill Spani": "36302048",
+      "Patient Collections Billing": "36302043",
+      "Patient Support": "36301865",
+      "VM Remove From Queue": "21036611"
+    },
+    "unmatched": [
+      "CS - Outbound",
+      "Cardiac Appointments",
+      "Cardiac Billing",
+      "Cardiac Delivery Pickup",
+      "Cardiac General",
+      "Cardiac General Spanish",
+      "Cardiac Order Status",
+      "Cardiac Tech Support",
+      "Customer Service General",
+      "Ortho Billing",
+      "Ortho Billing Spanish",
+      "Ortho Delivery Pickup",
+      "Ortho Delivery Pickup Spanish",
+      "Ortho General",
+      "Ortho General Spanish",
+      "Ortho Order Status",
+      "Ortho Tech Support",
+      "Ortho Tech Support spanish",
+      "Outbound",
+      "Remote Onboarding",
+      "Test IB"
+    ],
+    "ambiguous": []
+  }
+}

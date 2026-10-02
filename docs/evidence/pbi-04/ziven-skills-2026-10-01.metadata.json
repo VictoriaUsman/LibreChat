@@ -1,0 +1,23 @@
+{
+  "recorded_date": "2026-10-01",
+  "source_filename": "Skills.csv",
+  "source_sha256": "463060021dab5f6342b53bd14ef50da1a6580db6e502a6d3f44185ceb3359403",
+  "source_email_date": null,
+  "source_export_date": null,
+  "confirmer": "Ziven Nickerson",
+  "row_count": 16,
+  "unique_skill_ids": 16,
+  "retained_columns": [
+    "Skill ID",
+    "Skill Name",
+    "Status",
+    "Inbound/Outbound",
+    "Campaign",
+    "Service Level Threshold",
+    "Service Level Goal (percentage)",
+    "Enable Short Abandon Threshold",
+    "Short Abandon Threshold",
+    "Short Abandons"
+  ],
+  "note": "Selected configuration columns only; source values preserved. No CS/non-CS membership inferred. This is not a full tenant inventory or historical configuration evidence."
+}

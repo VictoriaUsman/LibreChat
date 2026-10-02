@@ -5,6 +5,18 @@ Repository baseline: `c7e330d`; discovery narrative inspected on `PBI-01`
 at `e3d7580`, `discovery/findings.md`. This is an implementation guide,
 not a completed mapping or evidence of dashboard reconciliation.
 
+## Business input update (recorded 2026-10-01)
+
+See [Ziven's evidence and remaining decisions](PBI-04-BE-mapping.md#ziven-evidence-recorded-2026-10-01).
+Eight weeks is now accepted for comparison; detailed baseline and holiday rules
+remain open. Business time is Eastern with UTC report output; exact IANA/DST
+semantics remain to be confirmed. Per-skill SLA settings are supplied for 16
+skills, but the separate main-CS scope is not identifiable in the supplied CSV.
+Historical reconciliation must use a report export because the dashboard is
+live-only under the current subscription. References below to historical
+dashboard figures should therefore be read as historical report figures;
+live-widget mapping remains a separate requirement.
+
 ## Outcome and scope
 
 Produce a business-confirmed, versioned mapping between every metric on
@@ -39,8 +51,9 @@ date. Unanswered settings must remain explicitly unconfirmed, not defaults.
 | Comparison period | At least one closed historical period with retained data and dashboard figures; identical local boundaries and filters; refresh/export timestamp |
 | Comparison rules | Metric-specific rounding and tolerances agreed before comparison; owner who accepts explanations or limitations |
 
-Eight prior same-weekday dates and UTC were discovery/implementation starting
-points, not confirmed business baseline rules. A live SLA setting or current
+Eight weeks is now accepted by Ziven; same-weekday selection and other
+baseline rules remain unconfirmed. UTC is the report display timezone, not
+the confirmed business day boundary. A live SLA setting or current
 team membership is not automatically valid for a historical period.
 
 ### Discovery skill shortlist
