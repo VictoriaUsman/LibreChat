@@ -212,6 +212,29 @@ describe('provisionCxoneAgent', () => {
     expect(await run(true, deps)).toMatchObject({ action: 'update', changedFields: ['tools'] });
   });
 
+  it.each([
+    [
+      'a different effective model in model_parameters',
+      { model: 'other', maxContextTokens: 128000 },
+      'model_parameters.model',
+    ],
+    [
+      'a stray extra parameter',
+      { model: 'ROMTech AI Standard', maxContextTokens: 128000, temperature: 0.2 },
+      'model_parameters.extra',
+    ],
+  ])('treats %s as drift and corrects it', async (_label, params, field) => {
+    const { deps, agents } = fakeDeps();
+    const first = await run(true, deps);
+    agents.set(first.agentId, { ...agents.get(first.agentId)!, model_parameters: params });
+    const result = await run(true, deps);
+    expect(result).toMatchObject({ action: 'update', changedFields: [field] });
+    expect(agents.get(first.agentId)?.model_parameters).toEqual({
+      model: 'ROMTech AI Standard',
+      maxContextTokens: 128000,
+    });
+  });
+
   it('fails on an agent with the same name but a different id', async () => {
     const { deps, agents } = fakeDeps();
     agents.set('agent_other', {

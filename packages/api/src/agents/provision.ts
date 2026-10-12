@@ -210,8 +210,25 @@ export function diffAgent(existing: ProvisionedAgent, desired: DesiredAgent): st
   if (existing.model_parameters?.maxContextTokens !== desired.model_parameters.maxContextTokens) {
     changed.push('model_parameters.maxContextTokens');
   }
+  if (existing.model_parameters?.model !== desired.model_parameters.model) {
+    changed.push('model_parameters.model');
+  }
+  if (hasUnexpectedParameters(existing.model_parameters, desired.model_parameters)) {
+    changed.push('model_parameters.extra');
+  }
   if (!sameSet(existing.tools, desired.tools)) changed.push('tools');
   return changed;
+}
+
+/** Parameters beyond the manifest's (e.g. a stray temperature) change how the agent runs, so they are drift. */
+function hasUnexpectedParameters(
+  existing: ModelParameters | undefined,
+  desired: DesiredAgent['model_parameters'],
+): boolean {
+  const wanted = new Set(Object.keys(desired));
+  return Object.entries(existing ?? {}).some(
+    ([key, value]) => value !== undefined && !wanted.has(key),
+  );
 }
 
 export function desiredAcl(manifest: CxoneAgentManifest): AgentAclEntry[] {
