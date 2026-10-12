@@ -2,7 +2,7 @@ const path = require('path');
 const axios = require('axios');
 const yaml = require('js-yaml');
 const keyBy = require('lodash/keyBy');
-const { loadYaml } = require('@librechat/api');
+const { loadYaml, isolateInvalidMCPServers } = require('@librechat/api');
 const { Providers } = require('@librechat/agents');
 const { logger } = require('@librechat/data-schemas');
 const {
@@ -108,6 +108,8 @@ async function loadCustomConfig(printConfig = true) {
       return null;
     }
   }
+
+  customConfig = isolateInvalidMCPServers(customConfig).config;
 
   const result = configSchema.strict().safeParse(customConfig);
   if (result?.error?.errors?.some((err) => err?.path && err.path?.includes('imageOutputType'))) {

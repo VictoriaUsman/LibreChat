@@ -1,0 +1,13 @@
+{
+  "_comment": "EXAMPLE ONLY - non-secret. Replace every <...> with the environment's real values (Mongo ObjectIds of an existing operator and of the approved group). Hashes: contract content_sha256 from docs/contracts/cxone-mcp-tools.contract.json; instructions = sha256 of the text under '## Instruction text' in config/romchat-cxone-claim-instructions.md (the CLI prints a mismatch if wrong).",
+  "environment": "dev",
+  "provisioningKey": "romchat-cxone",
+  "owner": { "id": "<operator-user-objectid>" },
+  "audience": [{ "type": "group", "id": "<approved-group-objectid>" }],
+  "provider": "LiteLLM Gateway",
+  "model": "<approved model alias, verified to support 128000 context>",
+  "mcpServerName": "romtech-cxone",
+  "contract": { "version": "1.1.0", "sha256": "b641cd4adaee6c9bb98b4db229c2cc182ff143c184b6c9faa6170db3abdb48e8" },
+  "instructions": { "version": 1, "sha256": "<sha256-of-instruction-text>" },
+  "maxContextTokens": 128000
+}

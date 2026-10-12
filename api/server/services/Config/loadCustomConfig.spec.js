@@ -146,6 +146,39 @@ describe('loadCustomConfig', () => {
     );
   });
 
+  describe('PBI-08 MCP endpoint isolation', () => {
+    const goodServer = { type: 'streamable-http', url: 'https://mcp.internal.example/mcp' };
+
+    it.each([
+      ['malformed URL', 'not a url'],
+      ['unresolved endpoint variable', '${CXONE_MCP_URL_UNSET_FOR_TEST}'],
+    ])('loads the rest of the config when the CXOne %s is bad', async (_label, url) => {
+      process.env.CONFIG_PATH = 'cxone.yaml';
+      loadYaml.mockReturnValueOnce({
+        version: '1.0',
+        cache: true,
+        mcpServers: { 'romtech-cxone': { type: 'streamable-http', url }, other: goodServer },
+      });
+
+      const result = await loadCustomConfig();
+
+      expect(Object.keys(result.mcpServers)).toEqual(['other']);
+      const logged = JSON.stringify(logger.error.mock.calls);
+      expect(logged).toContain('romtech-cxone');
+      expect(logged).not.toContain('CXONE_MCP_URL_UNSET_FOR_TEST');
+    });
+
+    it('still exits on an unrelated invalid field alongside a bad CXOne URL', async () => {
+      process.env.CONFIG_PATH = 'cxone.yaml';
+      loadYaml.mockReturnValueOnce({
+        invalidField: true,
+        mcpServers: { 'romtech-cxone': { type: 'streamable-http', url: 'not a url' } },
+      });
+
+      await expect(loadCustomConfig()).rejects.toThrow('process.exit called with "1"');
+    });
+  });
+
   it('should handle and return null on YAML parse error for a string response from remote', async () => {
     process.env.CONFIG_PATH = 'http://example.com/config.yaml';
     process.env.CONFIG_BYPASS_VALIDATION = 'true';

@@ -3,6 +3,7 @@ import { logger } from '@librechat/data-schemas';
 import type * as t from '~/mcp/types';
 import { registryStatusCache as statusCache } from './cache/RegistryStatusCache';
 import { MCPServersRegistry } from './MCPServersRegistry';
+import { sanitizeErrorMessage } from '~/mcp/isolate';
 import { sanitizeUrlForLogging } from '~/mcp/utils';
 import { withTimeout } from '~/utils';
 import { isLeader } from '~/cluster';
@@ -136,7 +137,10 @@ export class MCPServersInitializer {
       );
       MCPServersInitializer.logParsedConfig(serverName, result.config);
     } catch (error) {
-      logger.error(`${MCPServersInitializer.prefix(serverName)} Failed to initialize:`, error);
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.error(
+        `${MCPServersInitializer.prefix(serverName)} Failed to initialize: ${sanitizeErrorMessage(reason)}`,
+      );
       try {
         await MCPServersRegistry.getInstance().addServerStub(serverName, rawConfig, 'CACHE');
         logger.info(

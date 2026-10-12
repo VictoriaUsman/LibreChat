@@ -20,6 +20,7 @@ export * from './mcp/cache';
 export * from './mcp/tools';
 /* Utilities */
 export * from './mcp/utils';
+export * from './mcp/isolate';
 export * from './utils';
 export { default as Tokenizer, countTokens } from './utils/tokenizer';
 export type { EncodingName } from './utils/tokenizer';

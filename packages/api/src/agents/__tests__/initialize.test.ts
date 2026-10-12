@@ -828,6 +828,39 @@ describe('initializeAgent — maxContextTokens', () => {
     // but Math.max(1024, ...) clamps it
     expect(result.maxContextTokens).toBe(1024);
   });
+
+  describe('PBI-08 persistent-agent cap precedence', () => {
+    const run = async (agentCap: number | undefined, presetCap: number | undefined) => {
+      const { agent, req, res, loadTools, db } = createMocks({
+        maxContextTokens: agentCap,
+        modelDefault: 400000,
+        maxOutputTokens: 4096,
+      });
+      return initializeAgent(
+        {
+          req,
+          res,
+          agent,
+          loadTools,
+          endpointOption: {
+            endpoint: EModelEndpoint.agents,
+            model_parameters: presetCap == null ? {} : { maxContextTokens: presetCap },
+          },
+          allowedProviders: new Set([Providers.OPENAI]),
+          isInitialAgent: true,
+        },
+        db,
+      );
+    };
+
+    it('resolves 128000 at the run boundary when agent and spec both set it', async () => {
+      expect((await run(128000, 128000)).maxContextTokens).toBe(128000);
+    });
+
+    it('resolves 128000 from the agent alone when the spec preset carries no cap', async () => {
+      expect((await run(128000, undefined)).maxContextTokens).toBe(128000);
+    });
+  });
 });
 
 describe('initializeAgent — manual skill priming (Phase 3)', () => {

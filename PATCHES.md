@@ -1133,6 +1133,28 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ---
 
+### One bad MCP server entry no longer fails the whole config; sanitized MCP init errors
+
+- **Work item:** PBI-08 (CXOne MCP / agent integration)
+- **Added:** 2026-10-12 by Ian Tristan
+- **Files touched:** `api/server/services/Config/loadCustomConfig.js`,
+  `packages/api/src/mcp/registry/MCPServersInitializer.ts` (new, ours: `packages/api/src/mcp/isolate.ts`,
+  `packages/api/src/agents/provision.ts`, `config/provision-cxone-agent.js`)
+- **What:** Before the strict `configSchema` parse, each `mcpServers` entry is validated on its own
+  (`isolateInvalidMCPServers`); an invalid entry is removed and logged by name and category only. The MCP
+  initializer's per-server failure log now emits a URL-stripped, 200-character message instead of the raw error.
+- **Why:** A malformed or unset `${CXONE_MCP_URL}` made the URL refinement throw (or fail the strict parse), and
+  `loadCustomConfig` then called `process.exit(1)` - one internal service could take ROMChat down. Config cannot
+  express "ignore this server if its URL is bad". Unrelated config errors still exit exactly as before.
+- **How to verify:** Start with `CXONE_MCP_URL` unset: the app is healthy, the log has one
+  `[MCP][romtech-cxone] Excluded from configuration: invalid_url` line with no value, Standard/Fast work. Add an
+  unrelated invalid key: the app still exits. `loadCustomConfig.spec.js` ("PBI-08 MCP endpoint isolation") pins both.
+- **Upstream status:** not submitted.
+- **Merge notes:** One added line before `configSchema.strict().safeParse` plus one import; the initializer change
+  is the `logger.error` call in `initializeServer`. Drop if upstream isolates per-server schema failures itself.
+
+---
+
 ## Upstream merge procedure
 
 When pulling a new upstream release:
