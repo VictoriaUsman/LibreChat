@@ -1,5 +1,9 @@
 # Ziven's reply on the `*` marker, repeated IDs and the two SLA counters (2026-10-08)
 
+> **Partly superseded 2026-10-12** by [ziven-response-2026-10-12.md](ziven-response-2026-10-12.md): the skill-count,
+> media, team-filter, threshold and SLA-configuration questions below were answered there. This file stays as the
+> 2026-10-08 snapshot.
+
 Source: Ziven's written reply to Ian's four questions, plus three dashboard screenshots (the widget list and the two
 widget settings panels). The screenshots show agent names and are **not** copied into this repository; only widget
 settings and totals are transcribed below. Contact IDs and agent names Ziven cited are deliberately left out (same

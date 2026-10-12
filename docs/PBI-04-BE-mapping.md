@@ -14,6 +14,15 @@ metrics are not validated. See [live comparison evidence](evidence/pbi-04/live-c
 Earlier statements below that no API comparison was run describe the October 3
 snapshot and are superseded by this evidence, not by a full PBI sign-off.
 
+**2026-10-12 update:** Ziven's final reply is recorded in
+[ziven-response-2026-10-12.md](evidence/pbi-04/ziven-response-2026-10-12.md) (received 2026-10-12; no email date).
+Confirmed: 29 skills currently selected, two billing skills intended but not selected, no team filters, phone only
+with voicemail excluded, exports in her Eastern timezone, 30%/100% are colour thresholds, reported SLA 90 s / 90% with
+short abandons of 15 s or less excluded, and no historical October 1 dashboard SLA. Skill names are resolved to API IDs
+below; the SLA fields were found in the API but their semantics are **not verified**. Historical SLA reconciliation is
+not done and any deferral needs owner approval. PBI-04 remains open. The current acceptance table is in
+[closure-2026-10-03.md](evidence/pbi-04/closure-2026-10-03.md).
+
 Implementation instructions: [PBI-04-BE-implementation.md](PBI-04-BE-implementation.md).
 
 **2026-10-03 reference update:** the user supplied ContactHistory (20), (21)
@@ -40,11 +49,11 @@ observations below.
 | Decision | Confirmed value | Source / effective date | Confirmer / confirmation date |
 |---|---|---|---|
 | Dashboard/report/widgets/version | Dashboard is live-only; historical comparison requires a report. Exact widgets/report/version pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| Included skill IDs and names | 16 ID/name pairs supplied; CS grouping and final inclusion pending | Skills.csv; see evidence below | Ziven; export/email dates not supplied |
-| Excluded skill IDs and reasons | Pending | Pending | Ziven: pending |
-| Team IDs and historical membership/filter rules | Pending | Pending | Ziven: pending |
+| Included skill IDs and names | 29 selected on the widgets (count from Ziven); the 29 listed below are the October 1 export's skills, a candidate list not confirmed as the widget selection. 16 pairs were supplied earlier in Skills.csv | Ziven reply 2026-10-12; October 6 API capture; live `/skills` 2026-10-12 | Ziven; received 2026-10-12, no email date |
+| Excluded skill IDs and reasons | Voicemail skills excluded (Ziven). Two billing skills intended but not selected. `Billing General VM` not addressed | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
+| Team IDs and historical membership/filter rules | No team filters on either SLA widget | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
 | Business reporting timezone and day boundaries | Eastern; report output UTC. Exact IANA zone, DST and day boundaries pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| SLA thresholds, targets, exclusions and effective dates | Per-skill raw settings supplied; units, API formula semantics and historical effective dates pending | Skills.csv; see evidence below | Ziven; export/email dates not supplied |
+| SLA thresholds, targets, exclusions and effective dates | Reported: 90 s to completion, 90% goal, short abandons of 15 s or less excluded; the API's per-skill settings agree for 20 of the 29 skills only. 30% and 100% widget thresholds are colour thresholds. Formula semantics and effective dates unverified | Ziven reply 2026-10-12; live `/skills` 2026-10-12; Skills.csv | Ziven; received 2026-10-12 |
 | Baseline window, weighting, exclusions and missing-data rules | Eight-week comparison accepted; December/holiday seasonality must be considered. Weighting, holiday policy and missing-data rules pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
 | Comparison period and per-metric tolerance/rounding | Pending | Pending | Pending |
 
@@ -104,9 +113,45 @@ verified IDs, then record Ziven's actual choices. Do not adopt the ranked list
 unchanged by default. Reconcile the PBI's 83 skills with discovery's 85 returned
 rows using dated inventory and unique-ID counts.
 
-| Skill ID | Name | Team relationship and effective period | Discovery rank/source | Include/exclude and reason | Confirmed by/date |
-|---|---|---|---|---|---|
-| Pending inventory | | | | | |
+| Skill ID | Name | Campaign | Resolved by | API SLA settings | Oct 1 export contacts |
+|---|---|---|---|---|---:|
+| 35588248 | Cardiac Appointments | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 25 |
+| 20954831 | Cardiac Billing | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 126 |
+| 20954834 | Cardiac Delivery Pickup | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 17 |
+| 20954836 | Cardiac General | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 26 |
+| 20954837 | Cardiac General Spanish | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 2 |
+| 35588243 | Cardiac Order Status | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 7 |
+| 20954838 | Cardiac Tech Support | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 12 |
+| 35588833 | CS - Outbound | Customer Service | capture + /skills | 30 s / 90% / short-abandon off | 458 |
+| 35588202 | Customer Service General | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 50 |
+| 18492667 | Default NO-Agent Inbound | Admin | Skills.csv + capture + /skills | 90 s / 90% / short-abandon on, 90 s | 250 |
+| 18499108 | Logistics Outbound | Logistics Scheduling | Skills.csv + capture + /skills | 60 s / 100% / short-abandon off | 52 |
+| 29277623 | Logistics Scheduler | Logistics Scheduling | Skills.csv + capture + /skills | 120 s / 90% / short-abandon off | 219 |
+| 35588224 | Logistics Scheduler Spanish | Logistics Scheduling | Skills.csv + capture + /skills | 120 s / 90% / short-abandon on, 15 s | 6 |
+| 18499102 | Ortho Billing | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 63 |
+| 18499103 | Ortho Billing Spanish | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 1 |
+| 18499100 | Ortho Delivery Pickup | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 146 |
+| 18499101 | Ortho Delivery Pickup Spanish | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 3 |
+| 18499104 | Ortho General | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 104 |
+| 18499105 | Ortho General Spanish | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 1 |
+| 35588246 | Ortho Order Status | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 57 |
+| 18499098 | Ortho Tech Support | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 131 |
+| 18499099 | Ortho Tech Support spanish | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 1 |
+| 18499109 | Outbound | Customer Service | capture + /skills | 60 s / 100% / short-abandon off | 13 |
+| 36302048 | Patient Collections Bill Spani | Patient Collections | Skills.csv + capture + /skills | 90 s / 90% / short-abandon on, 15 s | 1 |
+| 36302043 | Patient Collections Billing | Patient Collections | Skills.csv + capture + /skills | 90 s / 90% / short-abandon on, 15 s | 1 |
+| 36301865 | Patient Support | Patient Support | Skills.csv + capture + /skills | 90 s / 90% / short-abandon off | 15 |
+| 36302025 | Remote Onboarding | Customer Service | capture + /skills | 90 s / 90% / short-abandon on, 15 s | 8 |
+| 20954688 | Test IB | Test1 | capture + /skills | 30 s / 90% / short-abandon off | 2 |
+| 21036611 | VM Remove From Queue | Admin | Skills.csv + capture + /skills | 90 s / 90% / short-abandon off | 224 |
+
+Intended additions (Ziven 2026-10-12), not selected, kept separate:
+
+| Skill ID | Name | Campaign | Media | API SLA settings | Oct 1 offered (API summary) |
+|---|---|---|---|---|---:|
+| 36302045 | Billing General | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
+| 36302046 | Billing General Spanish | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
+| 36302047 | Billing General VM | Customer Service | Voice Mail | 185000 s / 90% / short-abandon off | 0 |
 
 ## Metric mapping
 
@@ -116,13 +161,19 @@ baseline dependencies, source schema evidence and configuration versions.
 
 | Metric key / dashboard label | Endpoint/version + response fields | Units/grain/formula reference | Historical/live availability | Scope/config reference | Status / evidence |
 |---|---|---|---|---|---|
-| Pending dashboard inventory | Unconfirmed | Unconfirmed | Unconfirmed | Pending | Not validated |
+| ROMTech Service Level: contacts in SLA / out of SLA / percent | candidate: `/skills/summary` `contactsWithinSLA`, `contactsOutOfSLA`, `serviceLevel` (field names only) | Counts per skill per requested window; formula and short-abandon handling unverified | Dashboard live-only (30-minute trending); API window-aggregated; no October 1 dashboard value | Widget: 2 campaigns, 29 skills, Phone Call, no team filter, 24 intervals / 30 min; 30% is a colour threshold | Not validated: 792 of 2,021 offered on Oct 1 fall in neither count |
+| Customer Service Team SLA: in / out / percent | same candidate fields | same | same | Widget: 1 campaign, 29 skills, all 9 media types, no team filter; 100% is a colour threshold | Not validated; media types differ from the phone-only widget |
+| Customer Service Agent State Count: Available, Unavailable, Inbound, Outbound, Preview, Waiting | candidate: `/skills/summary` `agentsAvailable`, `agentsUnavailable`, `agentsWorking`, `agentsLoggedIn` (names only; per-state mapping unknown) | Live snapshot of agents | Live-only | Widget settings not supplied | Not validated |
+| Customer Service Team Agent Status: per-agent state, time, team, session time | Not identified. `/skills/summary` is per skill, not per agent | Live per-agent view | Live-only | Widget settings not supplied | Unsupported until an agent-level source is verified |
 
 ## Unsupported and live-only metrics
 
 | Dashboard metric | Unavailable field/dimension/semantics | Reason and evidence | Historical restriction | Business acknowledgement / follow-up |
 |---|---|---|---|---|
-| Pending assessment; do not interpret as none | | | | |
+| Any October 1 dashboard value (all four widgets) | Dashboard exposes live data only | Ziven: historical dashboard results unavailable | Use a retained report/API reference | Pending owner approval for any SLA deferral |
+| Customer Service Team Agent Status | No verified per-agent API source; names are personal data and are not stored | Not assessed against an agent endpoint | Live-only | Pending |
+| Short-abandon and 30 s/100% colour behaviour | Colour thresholds are display settings, not metrics | Ziven 2026-10-12 | Not applicable | None |
+| Other dashboard metrics beyond the four widgets seen | Not inventoried | Only four widgets supplied | Unknown | Ziven to supply any others; "none" is not assumed |
 
 ## Historical reconciliation
 
