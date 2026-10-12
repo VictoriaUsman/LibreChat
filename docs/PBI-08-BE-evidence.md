@@ -114,6 +114,26 @@ resumed conversations, ordinary-user UI behaviour of the builder, readiness endp
 from a live conversation, the real (non-fixture) backend, the deployed gateway. The model-drift fix (`015d6241e`) is covered
 by unit tests only, not re-run against the local database.
 
+## Real CXone backend run (2026-10-12, dev machine, read-only)
+
+The fixture server was replaced on the same port by the real aggregation backend (`CXONE_MCP_DATA_BACKEND=cxone` path, dev
+env-file credentials, in-process, same setup as `scripts/smoke_real_backend.py`). It uses the **smoke-only mapping**: scope,
+timezone and metric confirmations are labelled "SMOKE-TEST-ONLY (not a business confirmation)", the two metrics
+(`contacts_handled`, `contacts_offered`) are `candidate`, the live block is unverified. **Figures are real tenant data but
+not business-validated.** Nothing is written to CXone.
+
+- Persistent CXOne agent, USER-role account, "Compare contacts handled on 2026-10-01 (America/New_York) to the usual for
+  that weekday": the model called `compare_periods`; result `status: ok`, `data_source: "cxone"`, historical interval
+  covered, baseline coverage 8 of 8; the answer stated interval, timezone, coverage and "business reconciliation pending".
+- **Finding 9: the committed contract's argument schemas do not match a real server.** Against the real server the
+  provisioning verification reports `argument schema differs` for `compare_periods` and `drill_down`. Only the `metrics`
+  description differs: the contract lists the fixture's eight supported metrics (it is generated from the fixture
+  service), the real server lists only the metrics in its mapping (here two). Descriptions of all three tools and the hash
+  match. Consequence: provisioning against a real deployment will refuse until the contract is generated from the deployed
+  mapping (or the schema comparison deliberately ignores that description text). Not changed here; needs a PBI-06/08 decision.
+- Not covered: Standard/Fast unaffected on the real backend, drill_down/current_state against the real tenant through the
+  agent, long conversations, File Search, the deployed environment. Customer-level data was not inspected or recorded.
+
 ## Open - not performed, not passed
 
 Deployed internal MCP URL and reachability from the LibreChat container; real provisioning and idempotent rerun in an
