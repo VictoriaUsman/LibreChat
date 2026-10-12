@@ -1,0 +1,610 @@
+{
+  "captured_at_utc": "2026-10-06T12:24:11.555561+00:00",
+  "mode": "real_read_only_discovery",
+  "acceptance_grade": false,
+  "endpoint": "/contacts",
+  "api_version": "v27.0",
+  "documentation": "https://developer.niceincontact.com/api/reportingapi",
+  "window_start": "2026-10-01T04:00:00Z",
+  "window_end": "2026-10-02T04:00:00Z",
+  "pages": [
+    {
+      "skip": 0,
+      "rows": 1000,
+      "reported_total": 2021
+    },
+    {
+      "skip": 1000,
+      "rows": 1000,
+      "reported_total": 2021
+    },
+    {
+      "skip": 2000,
+      "rows": 21,
+      "reported_total": 2021
+    }
+  ],
+  "inputs": [
+    {
+      "basename": "ContactHistory (20).csv",
+      "sha256": "f06d9f5c7c0607e5cf0c69a7345a9a3bf3384eaeadeb9320554d03158ba5a93f",
+      "rows": 1000
+    },
+    {
+      "basename": "ContactHistory (21).csv",
+      "sha256": "68f47b646498831a2a15bc1547af40690ee1496b581ae5bce5855a9e1ff9b9a0",
+      "rows": 1000
+    },
+    {
+      "basename": "ContactHistory (22).csv",
+      "sha256": "35bfe3dc59ba384a984e4ef158d8481ac3b9dd58121888e33d0095bedbca7a69",
+      "rows": 30
+    }
+  ],
+  "api_rows": 2021,
+  "api_unique_contact_ids": 2021,
+  "export_rows": 2030,
+  "export_unique_literal_ids": 2021,
+  "literal_id_matches": 1650,
+  "diagnostic_rules": [
+    "report timestamps interpreted as America/New_York",
+    "trailing * removed for diagnostic comparison only",
+    "repeated export contact IDs grouped; all skill/time variants checked",
+    "timestamp differences below one second reported as precision differences, not pre-approved tolerance"
+  ],
+  "normalized_export_unique_ids": 2021,
+  "normalized_matches": 2021,
+  "export_only": 0,
+  "api_only": 0,
+  "matched_skill_name_mismatches": 0,
+  "matched_start_differences_at_least_one_second": 0,
+  "matched_team_name_mismatches": 2,
+  "timestamp_delta_seconds_counts": {
+    "0.14": 7,
+    "0.567": 8,
+    "0.783": 7,
+    "0.68": 11,
+    "0.81": 8,
+    "0.313": 7,
+    "0.833": 12,
+    "0.907": 4,
+    "0.38": 13,
+    "0.667": 5,
+    "0.463": 12,
+    "0.127": 8,
+    "0.333": 7,
+    "0.11": 10,
+    "0.503": 10,
+    "0.343": 5,
+    "0.76": 12,
+    "0.25": 6,
+    "0.367": 10,
+    "0.547": 6,
+    "0.153": 10,
+    "0.293": 6,
+    "0.817": 6,
+    "0.727": 8,
+    "0.97": 9,
+    "0.687": 6,
+    "0.62": 5,
+    "0.117": 9,
+    "0.217": 10,
+    "0.317": 6,
+    "0.977": 14,
+    "0.523": 6,
+    "0.227": 7,
+    "0.967": 5,
+    "0.067": 6,
+    "0.213": 10,
+    "0.063": 4,
+    "0.29": 11,
+    "0.493": 11,
+    "0.247": 9,
+    "0.573": 7,
+    "0.263": 9,
+    "0.163": 7,
+    "0.953": 8,
+    "0.143": 5,
+    "0.98": 9,
+    "0.337": 5,
+    "0.603": 11,
+    "0.057": 5,
+    "0.867": 5,
+    "0.347": 6,
+    "0.707": 6,
+    "0.32": 6,
+    "0.827": 10,
+    "0.537": 9,
+    "0.877": 4,
+    "0.557": 7,
+    "0.083": 6,
+    "0.233": 11,
+    "0.48": 9,
+    "0.55": 7,
+    "0.04": 8,
+    "0.94": 7,
+    "0.64": 8,
+    "0.647": 7,
+    "0.433": 6,
+    "0.563": 9,
+    "0.447": 9,
+    "0.957": 6,
+    "0.71": 5,
+    "0.237": 5,
+    "0.883": 5,
+    "0.39": 4,
+    "0.69": 9,
+    "0.383": 3,
+    "0.673": 4,
+    "0.797": 9,
+    "0.58": 8,
+    "0.733": 7,
+    "0.84": 5,
+    "0.72": 6,
+    "0.27": 8,
+    "0.703": 5,
+    "0.507": 6,
+    "0.57": 10,
+    "0.517": 9,
+    "0.73": 6,
+    "0.847": 5,
+    "0.327": 7,
+    "0.863": 5,
+    "0.393": 5,
+    "0.52": 5,
+    "0.197": 10,
+    "0.777": 8,
+    "0.8": 9,
+    "0.06": 8,
+    "0.097": 8,
+    "0.137": 9,
+    "0.66": 8,
+    "0.157": 8,
+    "0.223": 6,
+    "0.103": 8,
+    "0.47": 4,
+    "0.043": 9,
+    "0.23": 3,
+    "0.813": 7,
+    "0.093": 10,
+    "0.457": 3,
+    "0.113": 6,
+    "0.787": 8,
+    "0.147": 6,
+    "0.617": 8,
+    "0.527": 10,
+    "0.747": 5,
+    "0.03": 7,
+    "0.413": 6,
+    "0.323": 8,
+    "0.203": 8,
+    "0.037": 10,
+    "0.42": 9,
+    "0.047": 6,
+    "0.18": 6,
+    "0.837": 2,
+    "0.43": 5,
+    "0.51": 6,
+    "0.973": 5,
+    "0.93": 7,
+    "0.403": 7,
+    "0.87": 6,
+    "0.85": 6,
+    "0.92": 4,
+    "0.437": 7,
+    "0.377": 7,
+    "0.31": 6,
+    "0.273": 9,
+    "0.6": 10,
+    "0.577": 7,
+    "0.01": 13,
+    "0.243": 7,
+    "0.83": 9,
+    "0.033": 6,
+    "0.89": 7,
+    "0.983": 3,
+    "0.54": 13,
+    "0.307": 11,
+    "0.77": 8,
+    "0.743": 6,
+    "0.607": 10,
+    "0.947": 6,
+    "0.497": 6,
+    "0.027": 5,
+    "0.427": 5,
+    "0.767": 6,
+    "0.407": 13,
+    "0.053": 12,
+    "0.807": 5,
+    "0.593": 5,
+    "0.453": 6,
+    "0.613": 6,
+    "0.927": 8,
+    "0.717": 5,
+    "0.893": 7,
+    "0.79": 8,
+    "0.007": 7,
+    "0.903": 7,
+    "0.357": 11,
+    "0.633": 6,
+    "0.987": 11,
+    "0.087": 7,
+    "0.853": 5,
+    "0.597": 10,
+    "0.993": 10,
+    "0.937": 6,
+    "0.173": 7,
+    "0.477": 5,
+    "0.26": 4,
+    "0.78": 4,
+    "0.99": 7,
+    "0.96": 8,
+    "0.02": 9,
+    "0.91": 8,
+    "0.37": 7,
+    "0.44": 10,
+    "0.653": 7,
+    "0.583": 8,
+    "0.643": 10,
+    "0.61": 6,
+    "0.823": 15,
+    "0.353": 5,
+    "0.657": 6,
+    "0.36": 9,
+    "0.16": 8,
+    "0.1": 5,
+    "0.467": 3,
+    "0.63": 3,
+    "0.873": 16,
+    "0.723": 5,
+    "0.887": 3,
+    "0.207": 9,
+    "0.9": 4,
+    "0.297": 6,
+    "0.943": 10,
+    "0.933": 9,
+    "0.023": 8,
+    "0.95": 3,
+    "0.267": 7,
+    "0.167": 8,
+    "0.12": 6,
+    "0.623": 7,
+    "0.45": 8,
+    "0.41": 6,
+    "0.423": 11,
+    "0.763": 8,
+    "0.963": 6,
+    "0.24": 12,
+    "0.88": 9,
+    "0.017": 5,
+    "0.897": 7,
+    "0.75": 7,
+    "0.187": 7,
+    "0.07": 6,
+    "0.86": 5,
+    "0.663": 4,
+    "0.913": 8,
+    "0.283": 8,
+    "0.483": 5,
+    "0.7": 6,
+    "0.553": 4,
+    "0.09": 6,
+    "0.177": 7,
+    "0.077": 4,
+    "0.33": 7,
+    "0.697": 6,
+    "0.28": 6,
+    "0.857": 5,
+    "0.803": 7,
+    "0.843": 6,
+    "0.193": 4,
+    "0.287": 11,
+    "0.013": 4,
+    "0.21": 6,
+    "0.5": 2,
+    "0.34": 13,
+    "0.737": 3,
+    "0.17": 6,
+    "0.133": 7,
+    "0.757": 9,
+    "0.82": 2,
+    "0.3": 8,
+    "0.793": 8,
+    "0.773": 6,
+    "0.473": 5,
+    "0.19": 7,
+    "0.387": 4,
+    "0.05": 8,
+    "0.373": 9,
+    "0.543": 4,
+    "0.4": 9,
+    "0.08": 4,
+    "0.627": 3,
+    "0.56": 7,
+    "0.997": 4,
+    "0.253": 6,
+    "0.003": 5,
+    "0.257": 4,
+    "0.303": 4,
+    "0.35": 7,
+    "0.65": 3,
+    "0.22": 6,
+    "0.587": 4,
+    "0.74": 7,
+    "0.107": 5,
+    "0.713": 5,
+    "0.917": 3,
+    "0.363": 4,
+    "0.397": 1,
+    "0.753": 5,
+    "0.2": 6,
+    "0.073": 4,
+    "0.277": 6,
+    "0.49": 4,
+    "0.533": 3,
+    "0.123": 3,
+    "0.417": 3,
+    "0.0": 2,
+    "0.693": 3,
+    "0.67": 6,
+    "0.46": 5,
+    "0.15": 4,
+    "0.683": 4,
+    "0.637": 2,
+    "0.53": 7,
+    "0.183": 3,
+    "0.677": 3,
+    "0.487": 2,
+    "0.59": 5,
+    "0.513": 6,
+    "0.13": 6,
+    "0.923": 7,
+    "0.443": 3
+  },
+  "marked_contact_transfer_labels": {
+    "None": 310,
+    "ReSkill": 57,
+    "Consult": 3,
+    "ReAgent": 1
+  },
+  "per_skill": [
+    {
+      "name": "CS - Outbound",
+      "api_skill_ids": [
+        "35588833"
+      ],
+      "export_distinct_contacts": 458,
+      "api_contacts": 458
+    },
+    {
+      "name": "Cardiac Appointments",
+      "api_skill_ids": [
+        "35588248"
+      ],
+      "export_distinct_contacts": 25,
+      "api_contacts": 25
+    },
+    {
+      "name": "Cardiac Billing",
+      "api_skill_ids": [
+        "20954831"
+      ],
+      "export_distinct_contacts": 126,
+      "api_contacts": 126
+    },
+    {
+      "name": "Cardiac Delivery Pickup",
+      "api_skill_ids": [
+        "20954834"
+      ],
+      "export_distinct_contacts": 17,
+      "api_contacts": 17
+    },
+    {
+      "name": "Cardiac General",
+      "api_skill_ids": [
+        "20954836"
+      ],
+      "export_distinct_contacts": 26,
+      "api_contacts": 26
+    },
+    {
+      "name": "Cardiac General Spanish",
+      "api_skill_ids": [
+        "20954837"
+      ],
+      "export_distinct_contacts": 2,
+      "api_contacts": 2
+    },
+    {
+      "name": "Cardiac Order Status",
+      "api_skill_ids": [
+        "35588243"
+      ],
+      "export_distinct_contacts": 7,
+      "api_contacts": 7
+    },
+    {
+      "name": "Cardiac Tech Support",
+      "api_skill_ids": [
+        "20954838"
+      ],
+      "export_distinct_contacts": 12,
+      "api_contacts": 12
+    },
+    {
+      "name": "Customer Service General",
+      "api_skill_ids": [
+        "35588202"
+      ],
+      "export_distinct_contacts": 50,
+      "api_contacts": 50
+    },
+    {
+      "name": "Default NO-Agent Inbound",
+      "api_skill_ids": [
+        "18492667"
+      ],
+      "export_distinct_contacts": 250,
+      "api_contacts": 250
+    },
+    {
+      "name": "Logistics Outbound",
+      "api_skill_ids": [
+        "18499108"
+      ],
+      "export_distinct_contacts": 52,
+      "api_contacts": 52
+    },
+    {
+      "name": "Logistics Scheduler",
+      "api_skill_ids": [
+        "29277623"
+      ],
+      "export_distinct_contacts": 219,
+      "api_contacts": 219
+    },
+    {
+      "name": "Logistics Scheduler Spanish",
+      "api_skill_ids": [
+        "35588224"
+      ],
+      "export_distinct_contacts": 6,
+      "api_contacts": 6
+    },
+    {
+      "name": "Ortho Billing",
+      "api_skill_ids": [
+        "18499102"
+      ],
+      "export_distinct_contacts": 63,
+      "api_contacts": 63
+    },
+    {
+      "name": "Ortho Billing Spanish",
+      "api_skill_ids": [
+        "18499103"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Ortho Delivery Pickup",
+      "api_skill_ids": [
+        "18499100"
+      ],
+      "export_distinct_contacts": 146,
+      "api_contacts": 146
+    },
+    {
+      "name": "Ortho Delivery Pickup Spanish",
+      "api_skill_ids": [
+        "18499101"
+      ],
+      "export_distinct_contacts": 3,
+      "api_contacts": 3
+    },
+    {
+      "name": "Ortho General",
+      "api_skill_ids": [
+        "18499104"
+      ],
+      "export_distinct_contacts": 104,
+      "api_contacts": 104
+    },
+    {
+      "name": "Ortho General Spanish",
+      "api_skill_ids": [
+        "18499105"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Ortho Order Status",
+      "api_skill_ids": [
+        "35588246"
+      ],
+      "export_distinct_contacts": 57,
+      "api_contacts": 57
+    },
+    {
+      "name": "Ortho Tech Support",
+      "api_skill_ids": [
+        "18499098"
+      ],
+      "export_distinct_contacts": 131,
+      "api_contacts": 131
+    },
+    {
+      "name": "Ortho Tech Support spanish",
+      "api_skill_ids": [
+        "18499099"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Outbound",
+      "api_skill_ids": [
+        "18499109"
+      ],
+      "export_distinct_contacts": 13,
+      "api_contacts": 13
+    },
+    {
+      "name": "Patient Collections Bill Spani",
+      "api_skill_ids": [
+        "36302048"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Patient Collections Billing",
+      "api_skill_ids": [
+        "36302043"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Patient Support",
+      "api_skill_ids": [
+        "36301865"
+      ],
+      "export_distinct_contacts": 15,
+      "api_contacts": 15
+    },
+    {
+      "name": "Remote Onboarding",
+      "api_skill_ids": [
+        "36302025"
+      ],
+      "export_distinct_contacts": 8,
+      "api_contacts": 8
+    },
+    {
+      "name": "Test IB",
+      "api_skill_ids": [
+        "20954688"
+      ],
+      "export_distinct_contacts": 2,
+      "api_contacts": 2
+    },
+    {
+      "name": "VM Remove From Queue",
+      "api_skill_ids": [
+        "21036611"
+      ],
+      "export_distinct_contacts": 224,
+      "api_contacts": 224
+    }
+  ],
+  "limitations": [
+    "No SLA/AHT/ASA/abandonment reconciliation",
+    "No production CS scope confirmation",
+    "Marker meaning, duplicate policy, timezone/window and timestamp tolerance not independently accepted",
+    "No PBI-owner scope-change approval"
+  ]
+}

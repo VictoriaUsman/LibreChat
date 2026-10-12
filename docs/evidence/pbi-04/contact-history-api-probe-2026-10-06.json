@@ -1,0 +1,610 @@
+{
+  "captured_at_utc": "2026-10-06T12:22:48.662648+00:00",
+  "mode": "real_read_only_discovery",
+  "acceptance_grade": false,
+  "endpoint": "/contacts",
+  "api_version": "v27.0",
+  "documentation": "https://developer.niceincontact.com/api/reportingapi",
+  "window_start": "2026-10-01T00:00:00Z",
+  "window_end": "2026-10-02T00:00:00Z",
+  "pages": [
+    {
+      "skip": 0,
+      "rows": 1000,
+      "reported_total": 2025
+    },
+    {
+      "skip": 1000,
+      "rows": 1000,
+      "reported_total": 2025
+    },
+    {
+      "skip": 2000,
+      "rows": 25,
+      "reported_total": 2025
+    }
+  ],
+  "inputs": [
+    {
+      "basename": "ContactHistory (20).csv",
+      "sha256": "f06d9f5c7c0607e5cf0c69a7345a9a3bf3384eaeadeb9320554d03158ba5a93f",
+      "rows": 1000
+    },
+    {
+      "basename": "ContactHistory (21).csv",
+      "sha256": "68f47b646498831a2a15bc1547af40690ee1496b581ae5bce5855a9e1ff9b9a0",
+      "rows": 1000
+    },
+    {
+      "basename": "ContactHistory (22).csv",
+      "sha256": "35bfe3dc59ba384a984e4ef158d8481ac3b9dd58121888e33d0095bedbca7a69",
+      "rows": 30
+    }
+  ],
+  "api_rows": 2025,
+  "api_unique_contact_ids": 2025,
+  "export_rows": 2030,
+  "export_unique_literal_ids": 2021,
+  "literal_id_matches": 1617,
+  "diagnostic_rules": [
+    "report timestamps interpreted as UTC",
+    "trailing * removed for diagnostic comparison only",
+    "repeated export contact IDs grouped; all skill/time variants checked",
+    "timestamp differences below one second reported as precision differences, not pre-approved tolerance"
+  ],
+  "normalized_export_unique_ids": 2021,
+  "normalized_matches": 1988,
+  "export_only": 33,
+  "api_only": 37,
+  "matched_skill_name_mismatches": 0,
+  "matched_start_differences_at_least_one_second": 1988,
+  "matched_team_name_mismatches": 2,
+  "timestamp_delta_seconds_counts": {
+    "14400.873": 16,
+    "14400.807": 5,
+    "14400.21": 6,
+    "14400.34": 13,
+    "14400.473": 5,
+    "14400.363": 4,
+    "14400.787": 8,
+    "14400.35": 5,
+    "14400.36": 9,
+    "14400.423": 11,
+    "14400.94": 7,
+    "14400.097": 8,
+    "14400.69": 9,
+    "14400.773": 6,
+    "14400.017": 5,
+    "14400.647": 7,
+    "14400.8": 9,
+    "14400.42": 9,
+    "14400.17": 6,
+    "14400.047": 6,
+    "14400.09": 6,
+    "14400.503": 10,
+    "14400.75": 7,
+    "14400.07": 6,
+    "14400.277": 6,
+    "14400.823": 14,
+    "14400.88": 9,
+    "14400.573": 7,
+    "14400.403": 7,
+    "14400.453": 6,
+    "14400.767": 6,
+    "14400.04": 8,
+    "14400.997": 4,
+    "14400.173": 7,
+    "14400.217": 9,
+    "14400.163": 7,
+    "14400.93": 7,
+    "14400.103": 8,
+    "14400.76": 12,
+    "14400.96": 8,
+    "14400.633": 6,
+    "14400.91": 8,
+    "14400.687": 6,
+    "14400.477": 5,
+    "14400.357": 11,
+    "14400.68": 11,
+    "14400.293": 6,
+    "14400.167": 8,
+    "14400.537": 9,
+    "14400.803": 7,
+    "14400.493": 11,
+    "14400.793": 8,
+    "14400.02": 9,
+    "14400.337": 5,
+    "14400.107": 5,
+    "14400.64": 7,
+    "14400.29": 11,
+    "14400.77": 8,
+    "14400.9": 3,
+    "14400.33": 7,
+    "14400.32": 6,
+    "14400.43": 5,
+    "14400.953": 8,
+    "14400.367": 10,
+    "14400.54": 13,
+    "14400.697": 6,
+    "14400.533": 3,
+    "14400.27": 8,
+    "14400.853": 5,
+    "14400.413": 6,
+    "14400.14": 7,
+    "14400.417": 3,
+    "14400.583": 8,
+    "14400.093": 10,
+    "14400.973": 5,
+    "14400.16": 8,
+    "14400.303": 4,
+    "14400.613": 6,
+    "14400.143": 5,
+    "14400.617": 8,
+    "14400.38": 13,
+    "14400.977": 14,
+    "14400.31": 6,
+    "14400.203": 8,
+    "14400.247": 9,
+    "14400.993": 10,
+    "14400.023": 7,
+    "14400.577": 6,
+    "14400.55": 7,
+    "14400.967": 5,
+    "14400.74": 7,
+    "14400.6": 10,
+    "14400.783": 7,
+    "14400.37": 7,
+    "14400.05": 8,
+    "14400.447": 9,
+    "14400.003": 5,
+    "14400.407": 13,
+    "14400.797": 9,
+    "14400.877": 4,
+    "14400.79": 8,
+    "14400.117": 9,
+    "14400.15": 4,
+    "14400.913": 7,
+    "14400.44": 10,
+    "14400.813": 7,
+    "14400.983": 3,
+    "14400.25": 6,
+    "14400.257": 4,
+    "14400.41": 6,
+    "14400.83": 9,
+    "14400.563": 9,
+    "14400.747": 5,
+    "14400.147": 6,
+    "14400.46": 5,
+    "14400.47": 4,
+    "14400.463": 12,
+    "14400.497": 5,
+    "14400.48": 9,
+    "14400.623": 6,
+    "14400.523": 6,
+    "14400.947": 6,
+    "14400.987": 11,
+    "14400.89": 7,
+    "14400.307": 11,
+    "14400.077": 4,
+    "14400.81": 8,
+    "14400.127": 8,
+    "14400.587": 4,
+    "14400.72": 5,
+    "14400.267": 6,
+    "14400.063": 4,
+    "14400.327": 7,
+    "14400.52": 5,
+    "14400.013": 4,
+    "14400.083": 6,
+    "14400.763": 8,
+    "14400.11": 9,
+    "14400.557": 7,
+    "14400.233": 11,
+    "14400.39": 4,
+    "14400.507": 6,
+    "14400.553": 4,
+    "14400.643": 10,
+    "14400.273": 9,
+    "14400.2": 6,
+    "14400.517": 8,
+    "14400.78": 4,
+    "14400.317": 6,
+    "14400.4": 9,
+    "14400.903": 7,
+    "14400.387": 4,
+    "14400.897": 7,
+    "14400.57": 10,
+    "14400.907": 4,
+    "14400.63": 3,
+    "14400.393": 5,
+    "14400.067": 6,
+    "14400.007": 7,
+    "14400.753": 5,
+    "14400.97": 9,
+    "14400.443": 3,
+    "14400.743": 6,
+    "14400.03": 7,
+    "14400.85": 6,
+    "14400.7": 6,
+    "14400.187": 7,
+    "14400.5": 2,
+    "14400.373": 9,
+    "14400.113": 6,
+    "14400.49": 4,
+    "14400.833": 11,
+    "14400.757": 9,
+    "14400.87": 6,
+    "14400.717": 5,
+    "14400.13": 6,
+    "14400.603": 10,
+    "14400.153": 10,
+    "14400.737": 3,
+    "14400.06": 8,
+    "14400.123": 3,
+    "14400.657": 6,
+    "14400.243": 7,
+    "14400.333": 7,
+    "14400.933": 9,
+    "14400.62": 5,
+    "14400.957": 5,
+    "14400.927": 8,
+    "14400.45": 8,
+    "14400.707": 6,
+    "14400.923": 7,
+    "14400.777": 8,
+    "14400.727": 7,
+    "14400.037": 10,
+    "14400.713": 5,
+    "14400.827": 10,
+    "14400.683": 4,
+    "14400.283": 8,
+    "14400.547": 6,
+    "14400.937": 6,
+    "14400.98": 9,
+    "14400.177": 7,
+    "14400.703": 5,
+    "14400.817": 6,
+    "14400.607": 9,
+    "14400.24": 11,
+    "14400.157": 8,
+    "14400.057": 5,
+    "14400.663": 4,
+    "14400.227": 7,
+    "14400.12": 6,
+    "14400.61": 6,
+    "14400.213": 9,
+    "14400.377": 7,
+    "14400.53": 6,
+    "14400.843": 6,
+    "14400.99": 6,
+    "14400.627": 3,
+    "14400.01": 12,
+    "14400.887": 3,
+    "14400.51": 6,
+    "14400.723": 4,
+    "14400.313": 7,
+    "14400.84": 5,
+    "14400.3": 8,
+    "14400.66": 8,
+    "14400.263": 9,
+    "14400.513": 6,
+    "14400.433": 6,
+    "14400.597": 10,
+    "14400.323": 8,
+    "14400.207": 9,
+    "14400.297": 6,
+    "14400.86": 5,
+    "14400.857": 5,
+    "14400.56": 7,
+    "14400.883": 5,
+    "14400.59": 5,
+    "14400.18": 6,
+    "14400.053": 12,
+    "14400.287": 11,
+    "14400.19": 7,
+    "14400.22": 6,
+    "14400.073": 4,
+    "14400.677": 3,
+    "14400.653": 7,
+    "14400.467": 3,
+    "14400.917": 3,
+    "14400.237": 5,
+    "14400.28": 6,
+    "14400.137": 9,
+    "14400.027": 5,
+    "14400.253": 6,
+    "14400.483": 5,
+    "14400.92": 4,
+    "14400.527": 10,
+    "14400.67": 6,
+    "14400.58": 7,
+    "14400.033": 6,
+    "14400.353": 5,
+    "14400.837": 2,
+    "14400.197": 10,
+    "14400.26": 4,
+    "14400.427": 5,
+    "14400.043": 9,
+    "14400.087": 7,
+    "14400.963": 6,
+    "14400.893": 7,
+    "14400.567": 6,
+    "14400.733": 5,
+    "14400.397": 1,
+    "14400.23": 3,
+    "14400.193": 4,
+    "14400.1": 5,
+    "14400.223": 6,
+    "14400.133": 7,
+    "14400.847": 5,
+    "14400.673": 4,
+    "14400.347": 6,
+    "14400.457": 3,
+    "14400.65": 3,
+    "14400.593": 5,
+    "14400.437": 7,
+    "14400.543": 4,
+    "14400.73": 6,
+    "14400.867": 5,
+    "14400.943": 9,
+    "14400.863": 5,
+    "14400.95": 3,
+    "14400.183": 2,
+    "14400.08": 4,
+    "14400.0": 2,
+    "14400.487": 2,
+    "14400.82": 2,
+    "14400.383": 3,
+    "14400.343": 5,
+    "14400.71": 5,
+    "14400.667": 5,
+    "14400.693": 3,
+    "14400.637": 2
+  },
+  "marked_contact_transfer_labels": {
+    "None": 310,
+    "ReSkill": 57,
+    "ReAgent": 1,
+    "Consult": 3
+  },
+  "per_skill": [
+    {
+      "name": "CS - Outbound",
+      "api_skill_ids": [
+        "35588833"
+      ],
+      "export_distinct_contacts": 458,
+      "api_contacts": 459
+    },
+    {
+      "name": "Cardiac Appointments",
+      "api_skill_ids": [
+        "35588248"
+      ],
+      "export_distinct_contacts": 25,
+      "api_contacts": 25
+    },
+    {
+      "name": "Cardiac Billing",
+      "api_skill_ids": [
+        "20954831"
+      ],
+      "export_distinct_contacts": 126,
+      "api_contacts": 126
+    },
+    {
+      "name": "Cardiac Delivery Pickup",
+      "api_skill_ids": [
+        "20954834"
+      ],
+      "export_distinct_contacts": 17,
+      "api_contacts": 17
+    },
+    {
+      "name": "Cardiac General",
+      "api_skill_ids": [
+        "20954836"
+      ],
+      "export_distinct_contacts": 26,
+      "api_contacts": 26
+    },
+    {
+      "name": "Cardiac General Spanish",
+      "api_skill_ids": [
+        "20954837"
+      ],
+      "export_distinct_contacts": 2,
+      "api_contacts": 2
+    },
+    {
+      "name": "Cardiac Order Status",
+      "api_skill_ids": [
+        "35588243"
+      ],
+      "export_distinct_contacts": 7,
+      "api_contacts": 7
+    },
+    {
+      "name": "Cardiac Tech Support",
+      "api_skill_ids": [
+        "20954838"
+      ],
+      "export_distinct_contacts": 12,
+      "api_contacts": 12
+    },
+    {
+      "name": "Customer Service General",
+      "api_skill_ids": [
+        "35588202"
+      ],
+      "export_distinct_contacts": 50,
+      "api_contacts": 50
+    },
+    {
+      "name": "Default NO-Agent Inbound",
+      "api_skill_ids": [
+        "18492667"
+      ],
+      "export_distinct_contacts": 250,
+      "api_contacts": 249
+    },
+    {
+      "name": "Logistics Outbound",
+      "api_skill_ids": [
+        "18499108"
+      ],
+      "export_distinct_contacts": 52,
+      "api_contacts": 52
+    },
+    {
+      "name": "Logistics Scheduler",
+      "api_skill_ids": [
+        "29277623"
+      ],
+      "export_distinct_contacts": 219,
+      "api_contacts": 217
+    },
+    {
+      "name": "Logistics Scheduler Spanish",
+      "api_skill_ids": [
+        "35588224"
+      ],
+      "export_distinct_contacts": 6,
+      "api_contacts": 6
+    },
+    {
+      "name": "Ortho Billing",
+      "api_skill_ids": [
+        "18499102"
+      ],
+      "export_distinct_contacts": 63,
+      "api_contacts": 63
+    },
+    {
+      "name": "Ortho Billing Spanish",
+      "api_skill_ids": [
+        "18499103"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Ortho Delivery Pickup",
+      "api_skill_ids": [
+        "18499100"
+      ],
+      "export_distinct_contacts": 146,
+      "api_contacts": 146
+    },
+    {
+      "name": "Ortho Delivery Pickup Spanish",
+      "api_skill_ids": [
+        "18499101"
+      ],
+      "export_distinct_contacts": 3,
+      "api_contacts": 3
+    },
+    {
+      "name": "Ortho General",
+      "api_skill_ids": [
+        "18499104"
+      ],
+      "export_distinct_contacts": 104,
+      "api_contacts": 106
+    },
+    {
+      "name": "Ortho General Spanish",
+      "api_skill_ids": [
+        "18499105"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Ortho Order Status",
+      "api_skill_ids": [
+        "35588246"
+      ],
+      "export_distinct_contacts": 57,
+      "api_contacts": 57
+    },
+    {
+      "name": "Ortho Tech Support",
+      "api_skill_ids": [
+        "18499098"
+      ],
+      "export_distinct_contacts": 131,
+      "api_contacts": 135
+    },
+    {
+      "name": "Ortho Tech Support spanish",
+      "api_skill_ids": [
+        "18499099"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Outbound",
+      "api_skill_ids": [
+        "18499109"
+      ],
+      "export_distinct_contacts": 13,
+      "api_contacts": 13
+    },
+    {
+      "name": "Patient Collections Bill Spani",
+      "api_skill_ids": [
+        "36302048"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Patient Collections Billing",
+      "api_skill_ids": [
+        "36302043"
+      ],
+      "export_distinct_contacts": 1,
+      "api_contacts": 1
+    },
+    {
+      "name": "Patient Support",
+      "api_skill_ids": [
+        "36301865"
+      ],
+      "export_distinct_contacts": 15,
+      "api_contacts": 15
+    },
+    {
+      "name": "Remote Onboarding",
+      "api_skill_ids": [
+        "36302025"
+      ],
+      "export_distinct_contacts": 8,
+      "api_contacts": 9
+    },
+    {
+      "name": "Test IB",
+      "api_skill_ids": [
+        "20954688"
+      ],
+      "export_distinct_contacts": 2,
+      "api_contacts": 2
+    },
+    {
+      "name": "VM Remove From Queue",
+      "api_skill_ids": [
+        "21036611"
+      ],
+      "export_distinct_contacts": 224,
+      "api_contacts": 223
+    }
+  ],
+  "limitations": [
+    "No SLA/AHT/ASA/abandonment reconciliation",
+    "No production CS scope confirmation",
+    "Marker meaning, duplicate policy, timezone/window and timestamp tolerance not independently accepted",
+    "No PBI-owner scope-change approval"
+  ]
+}

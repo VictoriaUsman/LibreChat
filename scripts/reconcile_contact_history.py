@@ -45,7 +45,9 @@ from typing import Any
 from romtech_mcp.mapping.contact_history import (
     ContactHistoryError, dedupe_exact, load_contact_history, load_skill_inventory, resolve_skills, summarize,
 )
-from romtech_mcp.mapping.contact_history_reconcile import ApiContact, ApiContactFetch, compare_contacts
+from romtech_mcp.mapping.contact_history_reconcile import (
+    MARKER_RULES, REPEAT_RULES, ApiContact, ApiContactFetch, compare_contacts,
+)
 from romtech_mcp.mapping.models import ComparisonOutcome, CoverageState
 
 
@@ -93,8 +95,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--import-only", action="store_true", help="import and summarize; no comparison attempted")
     p.add_argument("--grain", help="established comparison grain (e.g. contact); omitted -> comparison is UNRESOLVED")
     p.add_argument("--timestamp-tolerance-seconds", type=float, help="declared up front; 0 = exact")
-    p.add_argument("--id-marker-rule", help="documented meaning of a trailing '*' on contact IDs, if established")
-    p.add_argument("--overlap-rule", help="documented rule explaining conflicting repeated IDs, if any")
+    p.add_argument("--id-marker-rule", choices=MARKER_RULES,
+                   help="named rule for a trailing '*' on contact IDs; the export must satisfy it or the run is UNRESOLVED")
+    p.add_argument("--repeat-rule", choices=REPEAT_RULES,
+                   help="named rule explaining repeated IDs that differ in team/agent only; covers nothing else")
     p.add_argument("--output-dir", type=Path, required=True)
     return p
 
@@ -118,7 +122,7 @@ def run(args: argparse.Namespace) -> int:
         comparison = compare_contacts(
             imported.records, resolution, api, window_start_utc=args.window_start, window_end_utc=args.window_end,
             grain=args.grain, timestamp_tolerance_seconds=args.timestamp_tolerance_seconds,
-            overlap_rule_documented=bool(args.overlap_rule), id_marker_explained=bool(args.id_marker_rule),
+            conflict_rule=args.repeat_rule, id_marker_rule=args.id_marker_rule,
         )
         status = comparison.outcome.value
         exit_code = {ComparisonOutcome.MATCH: 0, ComparisonOutcome.MISMATCH: 1}.get(comparison.outcome, 2)
@@ -140,6 +144,7 @@ def run(args: argparse.Namespace) -> int:
         "timezone_basis": "evidence: " + args.timezone_evidence if args.timezone_evidence else "ASSUMPTION - not established",
         "window_utc": [args.window_start.isoformat(), args.window_end.isoformat()],
         "grain": args.grain,
+        "rules": {"id_marker_rule": args.id_marker_rule, "repeat_rule": args.repeat_rule},
         "api_input": None if api is None else {
             "basename": args.api_fixture.name, "endpoint_path": api.endpoint_path, "api_version": api.api_version,
             "real_capture": api.captured, "coverage": api.coverage.value,
@@ -154,7 +159,7 @@ def run(args: argparse.Namespace) -> int:
     body: dict[str, Any] = {
         "run_id": run_id,
         "import": dataclasses.asdict(summary),
-        "exact_repeats_removed_by_overlap_rule": removed,
+        "exact_repeats_removed_by_overlap_rule": removed,  # identical in every kept field, agent token included
         "records_after_exact_dedupe": len(deduped),
         "skill_resolution": {
             "resolved": resolution.resolved, "unmatched": list(resolution.unmatched),

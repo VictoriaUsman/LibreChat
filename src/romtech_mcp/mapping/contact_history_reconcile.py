@@ -6,8 +6,13 @@ and a missing one yields UNRESOLVED, never a quiet MATCH:
 
   - the grain being compared is stated (`grain`), and both sides use it;
   - every export skill name resolved to a skill ID (no unmatched/ambiguous);
-  - the export has no unexplained conflicting repeated IDs;
-  - the API fetch is COMPLETE (pagination verified) and covers the window;
+  - the export has no unexplained conflicting repeated IDs (a named rule may explain team/agent
+    differences ONLY; it never covers skill, start time or any other compared field, and every variant of a
+    repeated ID is still compared with the API record);
+  - a trailing '*' on a contact ID is accepted only under a named rule the export itself satisfies;
+  - the API fetch is COMPLETE (pagination verified) and covers the window, and returns no contact ID
+    twice with a different skill or start time (identical repeats are collapsed and counted; conflicting
+    ones are UNRESOLVED, never resolved by taking the first record);
   - the timestamp tolerance, if any, is supplied by the caller up front.
 
 Counts use zero tolerance. Duration is not compared: its units and lifecycle
@@ -22,8 +27,17 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .contact_history import ContactRecord, SkillResolution, dedupe_exact, summarize
+from .contact_history import (
+    FIELD_LABELS, TEAM_OR_AGENT, ContactRecord, SkillResolution, dedupe_exact, differing_fields, summarize,
+)
 from .models import ComparisonOutcome, CoverageState
+
+# Named rules. Each id stands for evidence recorded in docs/evidence/pbi-04/ziven-response-2026-10-08.md;
+# free text is not accepted, and an unknown id is an error rather than a quiet pass.
+REPEAT_RULE_TEAM_OR_AGENT_ONLY = "repeat-differs-in-team-or-agent-only"
+MARKER_RULE_CHILD_LEG = "child-leg-master-contact"
+REPEAT_RULES = (REPEAT_RULE_TEAM_OR_AGENT_ONLY,)
+MARKER_RULES = (MARKER_RULE_CHILD_LEG,)
 
 
 @dataclass(frozen=True)
@@ -67,6 +81,11 @@ class ContactComparison:
     # Identity lists for LOCAL, access-controlled artifacts only; never written into committed evidence.
     export_only_ids: tuple[str, ...] = ()
     api_only_ids: tuple[str, ...] = ()
+    conflict_rule: str | None = None
+    id_marker_rule: str | None = None
+    repeated_ids_explained_by_rule: int = 0
+    child_leg_rows: int = 0  # rows marked '*' (counted, not collapsed: each keeps its own ID and master)
+    api_exact_repeats_removed: int = 0  # API records identical to an earlier one in ID, skill and start
 
 
 def compare_contacts(
@@ -78,9 +97,13 @@ def compare_contacts(
     window_end_utc: datetime,
     grain: str | None,
     timestamp_tolerance_seconds: float | None,
-    overlap_rule_documented: bool = False,
-    id_marker_explained: bool = False,
+    conflict_rule: str | None = None,
+    id_marker_rule: str | None = None,
 ) -> ContactComparison:
+    if conflict_rule is not None and conflict_rule not in REPEAT_RULES:
+        raise ValueError(f"unknown repeat rule {conflict_rule!r}; supported: {', '.join(REPEAT_RULES)}")
+    if id_marker_rule is not None and id_marker_rule not in MARKER_RULES:
+        raise ValueError(f"unknown ID-marker rule {id_marker_rule!r}; supported: {', '.join(MARKER_RULES)}")
     reasons: list[str] = []
     if window_end_utc <= window_start_utc:
         raise ValueError("window end must be after window start")
@@ -96,23 +119,40 @@ def compare_contacts(
             f"{len(resolution.unmatched)} skill name(s) unmatched and {len(resolution.ambiguous)} ambiguous "
             "against the skill inventory")
     summary = summarize(list(export_records))
-    if summary.conflicting_repeated_ids and not overlap_rule_documented:
-        reasons.append(f"{summary.conflicting_repeated_ids} repeated contact ID(s) have differing fields and are unexplained")
-    marked = sum(1 for r in export_records if r.id_marker)
-    if marked and not id_marker_explained:
+    explained = _repeat_conflicts(export_records, conflict_rule, reasons)
+    marked = sum(1 for r in export_records if r.is_child_leg)
+    if marked and id_marker_rule is None:
         reasons.append(
             f"{marked} export row(s) have a trailing '*' on the contact ID whose meaning is not established; "
             "it is not assumed to be ignorable")
+    elif marked or id_marker_rule is not None:
+        _check_child_leg_rule(summary, reasons)
     if api is None:
         reasons.append("no API records supplied")
     elif api.coverage is not CoverageState.COMPLETE:
         reasons.append("API fetch coverage is not verified complete (pagination/partial fetch)")
+    api_repeats_removed = 0
+    if api is not None:
+        # Checked over ALL returned records, in or out of the window, so a conflicting copy cannot hide.
+        seen_api: dict[str, set[tuple]] = {}
+        for a in api.records:
+            variants = seen_api.setdefault(a.contact_id, set())
+            if (a.skill_id, a.start_utc) in variants:
+                api_repeats_removed += 1
+            variants.add((a.skill_id, a.start_utc))
+        api_conflicts = sum(1 for v in seen_api.values() if len(v) > 1)
+        if api_conflicts:
+            reasons.append(
+                f"{api_conflicts} API contact ID(s) were returned more than once with a different skill or start "
+                "time; the API grain is not one record per contact ID")
 
     in_window = [r for r in export_records if window_start_utc <= r.start_utc < window_end_utc]
     deduped, removed = dedupe_exact(in_window)
-    export_by_id: dict[str, ContactRecord] = {}
+    # Every surviving row stays in its ID's variant list; none is dropped for being second.
+    variants_by_id: dict[str, list[ContactRecord]] = {}
     for r in deduped:
-        export_by_id.setdefault(r.contact_id, r)  # base ID: marker meaning is explained or already UNRESOLVED
+        variants_by_id.setdefault(r.own_contact_id, []).append(r)
+    export_by_id = {cid: rows[0] for cid, rows in variants_by_id.items()}  # representative, for per-skill counts
 
     base = dict(
         grain=grain, window_start_utc=_iso(window_start_utc), window_end_utc=_iso(window_end_utc),
@@ -120,6 +160,8 @@ def compare_contacts(
         export_rows_outside_window=len(export_records) - len(in_window), export_exact_repeats_removed=removed,
         export_unique_contacts=len(export_by_id), timestamp_tolerance_seconds=timestamp_tolerance_seconds or 0.0,
         api_fetch_is_real_capture=None if api is None else api.captured,
+        conflict_rule=conflict_rule, id_marker_rule=id_marker_rule, repeated_ids_explained_by_rule=explained,
+        child_leg_rows=marked, api_exact_repeats_removed=api_repeats_removed,
     )
     if api is None or api.coverage is not CoverageState.COMPLETE or reasons:
         # Counts that need both sides are meaningless without them; report what is known.
@@ -138,10 +180,11 @@ def compare_contacts(
     api_only = sorted(set(api_by_id) - set(export_by_id))
     skill_mismatches = start_mismatches = 0
     for cid in matched_ids:
-        e, a = export_by_id[cid], api_by_id[cid]
-        if resolution.resolved.get(e.skill_name) != a.skill_id:
+        a = api_by_id[cid]
+        # ALL variants of a repeated ID are checked, so an explained difference cannot hide a discrepancy.
+        if any(resolution.resolved.get(e.skill_name) != a.skill_id for e in variants_by_id[cid]):
             skill_mismatches += 1
-        if abs(e.start_utc - a.start_utc) > tolerance:
+        if any(abs(e.start_utc - a.start_utc) > tolerance for e in variants_by_id[cid]):
             start_mismatches += 1
     per_skill: dict[str, Counter] = {}
     for e in export_by_id.values():
@@ -158,6 +201,50 @@ def compare_contacts(
         per_skill={k: {"export": v.get("export", 0), "api": v.get("api", 0)} for k, v in sorted(per_skill.items())},
         export_only_ids=tuple(export_only), api_only_ids=tuple(api_only), **base,
     )
+
+
+def _repeat_conflicts(records, rule: str | None, reasons: list[str]) -> int:
+    """Classifies repeated raw IDs whose rows differ in some kept field. Returns how many a named rule
+    explains. Without the rule all of them are unexplained; with it, only team/agent-only differences are."""
+    by_id: dict[str, list[ContactRecord]] = {}
+    for r in records:
+        by_id.setdefault(r.raw_contact_id, []).append(r)
+    explained = 0
+    unexplained = 0
+    uncovered: set[str] = set()
+    for rows in by_id.values():
+        if len({r.comparable() for r in rows}) < 2:
+            continue
+        differing = differing_fields(rows)
+        if rule is not None and differing <= TEAM_OR_AGENT:
+            explained += 1
+        else:
+            unexplained += 1
+            uncovered |= {FIELD_LABELS.get(f, f) for f in differing} if rule is not None else set()
+    if unexplained and rule is None:
+        reasons.append(f"{unexplained} repeated contact ID(s) have differing fields and are unexplained")
+    elif unexplained:
+        reasons.append(
+            f"{unexplained} repeated contact ID(s) differ in fields the repeat rule does not cover "
+            f"({', '.join(sorted(uncovered))}); the rule explains team/agent differences only")
+    return explained
+
+
+def _check_child_leg_rule(summary, reasons: list[str]) -> None:
+    """MARKER_RULE_CHILD_LEG holds only if the export itself agrees: every '*' row has a Master Contact ID
+    that is a different contact, no unmarked row does, and no ID appears both ways."""
+    if summary.marked_rows_whose_master_is_not_a_different_contact:
+        reasons.append(
+            f"{summary.marked_rows_whose_master_is_not_a_different_contact} '*' row(s) are not a child leg under the "
+            "rule: Master Contact ID is missing or equal to the row's own ID")
+    if summary.unmarked_rows_whose_master_is_a_different_contact:
+        reasons.append(
+            f"{summary.unmarked_rows_whose_master_is_a_different_contact} row(s) have a different Master Contact ID "
+            "but are not marked '*', so the child-leg rule does not describe this export")
+    if summary.base_ids_seen_both_marked_and_unmarked:
+        reasons.append(
+            f"{summary.base_ids_seen_both_marked_and_unmarked} contact ID(s) appear both with and without '*'; "
+            "the own ID is not unique")
 
 
 def _iso(dt: datetime) -> str:

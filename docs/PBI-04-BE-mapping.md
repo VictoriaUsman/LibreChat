@@ -1,9 +1,18 @@
 # PBI-04-BE: dashboard mapping and acceptance evidence
 
-Status: **partially confirmed; not validated**. Prepared 2026-09-25; updated
+Status: **partially confirmed; not fully validated**. Prepared 2026-09-25; updated
 2026-10-01 with Ziven's reply and Skills.csv. Some business settings are now
 confirmed; final scope and paired report/API measurements remain outstanding.
 No blank row is acceptance evidence.
+
+**2026-10-06 live comparison update:** real `/contacts` API retrieval now works
+through the existing discovery setup. The Eastern full-day interpretation of
+October 1 matches all 2,021 distinct exported contact IDs, all 29 per-skill
+counts, skill names and displayed-second start times. Two team differences and
+the marker/timezone/duplicate acceptance rules remain unresolved; other business
+metrics are not validated. See [live comparison evidence](evidence/pbi-04/live-comparison-2026-10-06.md).
+Earlier statements below that no API comparison was run describe the October 3
+snapshot and are superseded by this evidence, not by a full PBI sign-off.
 
 Implementation instructions: [PBI-04-BE-implementation.md](PBI-04-BE-implementation.md).
 

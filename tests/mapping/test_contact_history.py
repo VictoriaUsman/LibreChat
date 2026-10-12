@@ -12,7 +12,9 @@ from romtech_mcp.mapping.contact_history import (
     ContactHistoryError, dedupe_exact, load_contact_history, load_skill_inventory, parse_start_time,
     resolve_skills, summarize,
 )
-from romtech_mcp.mapping.contact_history_reconcile import ApiContact, ApiContactFetch, compare_contacts
+from romtech_mcp.mapping.contact_history_reconcile import (
+    MARKER_RULE_CHILD_LEG, REPEAT_RULE_TEAM_OR_AGENT_ONLY, ApiContact, ApiContactFetch, compare_contacts,
+)
 from romtech_mcp.mapping.models import ComparisonOutcome, CoverageState
 
 HEADER = ["Contact ID", "Master Contact ID", "Media Type", "Skill", "Agent", "Team", "DNIS/To", "ANI/From",
@@ -22,8 +24,8 @@ W_START = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
 W_END = datetime(2026, 10, 2, 0, 0, tzinfo=timezone.utc)
 
 
-def line(cid, master, skill, start, *, duration="0:30", team="Team A", media="Phone"):
-    cells = [cid, master, media, skill, SECRET_AGENT, team, SECRET_PHONE, SECRET_PHONE, "Land line", start, duration,
+def line(cid, master, skill, start, *, duration="0:30", team="Team A", media="Phone", agent=SECRET_AGENT):
+    cells = [cid, master, media, skill, agent, team, SECRET_PHONE, SECRET_PHONE, "Land line", start, duration,
              "", "Resolved", "", ""]
     return ",".join(f'"{c}"' if "," in c else c for c in cells)
 
@@ -282,7 +284,28 @@ def test_conflicting_repeated_ids_are_unresolved_until_explained(tmp_path):
     fetch = api([ApiContact("1", "11", t(1))])
     c = run_compare(recs, res, fetch)
     assert c.outcome is ComparisonOutcome.UNRESOLVED and any("unexplained" in r for r in c.unresolved_reasons)
-    assert run_compare(recs, res, fetch, overlap_rule_documented=True).outcome is not ComparisonOutcome.UNRESOLVED
+    # a documented rule covers team/agent differences only; it can never explain away a skill difference
+    with_rule = run_compare(recs, res, fetch, conflict_rule=REPEAT_RULE_TEAM_OR_AGENT_ONLY)
+    assert with_rule.outcome is ComparisonOutcome.UNRESOLVED and any("skill_name" in r for r in with_rule.unresolved_reasons)
+
+
+def test_conflicting_api_duplicates_are_unresolved_not_first_record_wins(clean):
+    """Regression: only the first API record per contact ID was kept, so a second record with another skill
+    (or start) still produced MATCH."""
+    recs, res, good = clean
+    other_skill = list(good) + [ApiContact("1", "12", t(0))]
+    other_start = list(good) + [ApiContact("1", "11", t(0, 5))]
+    for records in (other_skill, other_start, other_skill[::-1]):  # order must not matter
+        c = run_compare(recs, res, api(records))
+        assert c.outcome is ComparisonOutcome.UNRESOLVED and any("API contact ID" in r for r in c.unresolved_reasons)
+    outside = list(good) + [ApiContact("1", "12", datetime(2026, 10, 3, tzinfo=timezone.utc))]  # out-of-window copy
+    assert run_compare(recs, res, api(outside)).outcome is ComparisonOutcome.UNRESOLVED
+
+
+def test_identical_api_duplicates_are_collapsed_and_counted(clean):
+    recs, res, good = clean
+    c = run_compare(recs, res, api(list(good) + [good[0]]))
+    assert c.outcome is ComparisonOutcome.MATCH and c.api_exact_repeats_removed == 1 and c.api_unique_contacts == 3
 
 
 def test_inverted_window_and_negative_tolerance_are_rejected(clean):
@@ -389,10 +412,110 @@ def test_bare_asterisk_or_other_suffixes_are_still_rejected(tmp_path):
 
 
 def test_marked_ids_make_the_comparison_unresolved_until_the_meaning_is_documented(tmp_path):
-    p = write_csv(tmp_path / "m.csv", [line("1*", "1", "Alpha", "10/1/2026 1:00:00 AM")])
+    p = write_csv(tmp_path / "m.csv", [line("1*", "9", "Alpha", "10/1/2026 1:00:00 AM")])
     recs = load_contact_history([p], source_timezone="UTC").records
     res = resolve_skills({"Alpha"}, {"Alpha": ["11"]})
     fetch = api([ApiContact("1", "11", t(1))])
     c = run_compare(recs, res, fetch)
     assert c.outcome is ComparisonOutcome.UNRESOLVED and any("'*'" in r for r in c.unresolved_reasons)
-    assert run_compare(recs, res, fetch, id_marker_explained=True).outcome is ComparisonOutcome.MATCH
+    ok = run_compare(recs, res, fetch, id_marker_rule=MARKER_RULE_CHILD_LEG)
+    assert ok.outcome is ComparisonOutcome.MATCH and ok.child_leg_rows == 1 and ok.id_marker_rule == MARKER_RULE_CHILD_LEG
+
+
+# ------------------------------------------- review fixes: repeats and the child-leg rule
+def _one(tmp_path, rows, name="r.csv"):
+    return load_contact_history([write_csv(tmp_path / name, rows)], source_timezone="UTC").records
+
+
+ALPHA_BETA = ({"Alpha", "Beta"}, {"Alpha": ["11"], "Beta": ["12"]})
+
+
+def test_a_rule_never_hides_a_conflicting_skill_on_a_repeated_id(tmp_path):
+    """Regression: any documented rule used to bypass the conflict check and the first row won, so a second
+    row with a different skill produced MATCH."""
+    recs = _one(tmp_path, [line("1", "1", "Alpha", "10/1/2026 1:00:00 AM"), line("1", "1", "Beta", "10/1/2026 1:00:00 AM")])
+    res = resolve_skills(*ALPHA_BETA)
+    for api_skill in ("11", "12"):  # whichever row the API agrees with, the other one is a discrepancy
+        c = run_compare(recs, res, api([ApiContact("1", api_skill, t(1))]), conflict_rule=REPEAT_RULE_TEAM_OR_AGENT_ONLY)
+        assert c.outcome is not ComparisonOutcome.MATCH
+
+
+def test_a_rule_never_hides_a_conflicting_start_time_on_a_repeated_id(tmp_path):
+    recs = _one(tmp_path, [line("1", "1", "Alpha", "10/1/2026 1:00:00 AM"), line("1", "1", "Alpha", "10/1/2026 1:05:00 AM")])
+    c = run_compare(recs, resolve_skills({"Alpha"}, {"Alpha": ["11"]}), api([ApiContact("1", "11", t(1))]),
+                    conflict_rule=REPEAT_RULE_TEAM_OR_AGENT_ONLY)
+    assert c.outcome is ComparisonOutcome.UNRESOLVED and any("start_utc" in r for r in c.unresolved_reasons)
+
+
+def test_team_and_agent_only_repeats_are_explained_only_by_the_named_rule(tmp_path):
+    recs = _one(tmp_path, [
+        line("1", "1", "Alpha", "10/1/2026 1:00:00 AM", team="Team A", agent="Agent One"),
+        line("1", "1", "Alpha", "10/1/2026 1:00:00 AM", team="Team B", agent="Agent Two"),  # refusal: next team
+        line("2", "2", "Alpha", "10/1/2026 2:00:00 AM", agent="Agent One"),
+        line("2", "2", "Alpha", "10/1/2026 2:00:00 AM", agent="Agent Two"),  # same team, other agent
+    ])
+    res = resolve_skills({"Alpha"}, {"Alpha": ["11"]})
+    fetch = api([ApiContact("1", "11", t(1)), ApiContact("2", "11", t(2))])
+    without = run_compare(recs, res, fetch)
+    assert without.outcome is ComparisonOutcome.UNRESOLVED and any("unexplained" in r for r in without.unresolved_reasons)
+    with_rule = run_compare(recs, res, fetch, conflict_rule=REPEAT_RULE_TEAM_OR_AGENT_ONLY)
+    assert with_rule.outcome is ComparisonOutcome.MATCH and with_rule.export_unique_contacts == 2
+    assert with_rule.repeated_ids_explained_by_rule == 2 and with_rule.conflict_rule == REPEAT_RULE_TEAM_OR_AGENT_ONLY
+    with pytest.raises(ValueError):
+        run_compare(recs, res, fetch, conflict_rule="any free text")
+
+
+def test_agent_only_repeats_are_not_called_exact_and_no_agent_name_survives(tmp_path):
+    recs = _one(tmp_path, [
+        line("1", "1", "Alpha", "10/1/2026 1:00:00 AM", agent="Agent One"),
+        line("1", "1", "Alpha", "10/1/2026 1:00:00 AM", agent="Agent One"),   # identical in every column
+        line("2", "2", "Alpha", "10/1/2026 2:00:00 AM", agent="Agent One"),
+        line("2", "2", "Alpha", "10/1/2026 2:00:00 AM", agent="Agent Two"),   # same selected fields, other agent
+    ])
+    s = summarize(recs)
+    assert s.exact_repeat_rows == 1  # only the genuinely identical pair
+    assert s.repeats_differing_only_in_agent == 1
+    assert s.conflicting_repeated_ids == 1 and s.conflict_fields == {"agent": 1}
+    assert s.repeated_ids_differing_only_in_team_or_agent == 1
+    kept, removed = dedupe_exact(recs)
+    assert removed == 1 and len(kept) == 3  # the agent-only repeat is kept, not silently merged
+    dumped = repr(recs) + repr(s)
+    assert "Agent One" not in dumped and "Agent Two" not in dumped
+
+
+def test_child_leg_rule_preserves_own_id_and_master_and_requires_master_to_differ(tmp_path):
+    recs = _one(tmp_path, [
+        line("10", "10", "Alpha", "10/1/2026 1:00:00 AM"),    # parent: master is itself
+        line("11*", "10", "Alpha", "10/1/2026 1:01:00 AM"),   # child leg: own ID 11, master 10
+    ])
+    parent, child = recs
+    assert (parent.is_child_leg, parent.own_contact_id, parent.master_contact_id) == (False, "10", "10")
+    assert (child.is_child_leg, child.own_contact_id, child.master_contact_id, child.raw_contact_id) == (True, "11", "10", "11*")
+    res = resolve_skills({"Alpha"}, {"Alpha": ["11"]})
+    fetch = api([ApiContact("10", "11", t(1)), ApiContact("11", "11", t(1, 1))])
+    c = run_compare(recs, res, fetch, id_marker_rule=MARKER_RULE_CHILD_LEG)
+    assert c.outcome is ComparisonOutcome.MATCH and c.matched == 2 and c.child_leg_rows == 1  # never collapsed into the parent
+
+
+@pytest.mark.parametrize("rows,fragment", [
+    ([line("1*", "1", "Alpha", "10/1/2026 1:00:00 AM")], "child leg"),                 # marked, master is itself
+    ([line("1*", "", "Alpha", "10/1/2026 1:00:00 AM")], "child leg"),                  # marked, no master
+    ([line("1", "5", "Alpha", "10/1/2026 1:00:00 AM")], "not marked"),                 # unmarked row with another master
+    ([line("1*", "5", "Alpha", "10/1/2026 1:00:00 AM"), line("1", "1", "Alpha", "10/1/2026 1:00:00 AM")], "both"),
+])
+def test_child_leg_rule_is_unresolved_when_the_export_contradicts_it(tmp_path, rows, fragment):
+    recs = _one(tmp_path, rows)
+    c = run_compare(recs, resolve_skills({"Alpha"}, {"Alpha": ["11"]}), api([ApiContact("1", "11", t(1))]),
+                    id_marker_rule=MARKER_RULE_CHILD_LEG)
+    assert c.outcome is ComparisonOutcome.UNRESOLVED and any(fragment in r for r in c.unresolved_reasons), c.unresolved_reasons
+
+
+def test_free_text_rule_acknowledgements_are_rejected(tmp_path, exports, script):
+    recs = _one(tmp_path, [line("1*", "9", "Alpha", "10/1/2026 1:00:00 AM")])
+    with pytest.raises(ValueError):
+        run_compare(recs, resolve_skills({"Alpha"}, {"Alpha": ["11"]}), api([ApiContact("1", "11", t(1))]),
+                    id_marker_rule="the star means something")
+    for flag in ("--id-marker-rule", "--repeat-rule"):
+        with pytest.raises(SystemExit) as e:
+            script.main(cli_args(tmp_path, exports, flag, "free text"))
+        assert e.value.code == 2

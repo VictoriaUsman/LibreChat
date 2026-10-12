@@ -3,8 +3,11 @@ Contact History CSV export importer and analysis (PBI-04 closure).
 
 Reads the report exports in place and keeps ONLY what a reconciliation needs:
 contact/master IDs, media type, skill name, team, start time and the raw
-duration text. Telephone fields, agent names and dispositions are never read
-into a record, so nothing downstream (logs, manifests, evidence) can leak them.
+duration text. Telephone fields and dispositions are never read. The Agent
+column is read only to form an opaque, per-import salted token so that two rows
+for one contact can be told apart without the name being kept: the token is
+random between runs, is never written to evidence, and cannot be reversed to a
+name. Nothing downstream (logs, manifests, evidence) can leak an agent name.
 
 Nothing here decides what a "contact offered" or "contact handled" is. The
 export's grain (contact, routed leg, transfer or master interaction) has to be
@@ -18,6 +21,8 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
+import os
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -50,6 +55,19 @@ class ContactRecord:
     start_local: datetime  # naive: the export's displayed wall clock
     start_utc: datetime  # start_local interpreted in the declared source timezone
     duration_text: str  # retained verbatim: units/meaning not established
+    agent_token: str = ""  # opaque per-import token of the Agent cell ("" = absent); equality only, never a name
+
+    @property
+    def own_contact_id(self) -> str:
+        """The contact's own ID (digits only). A child leg has its own ID; it is never collapsed into the
+        parent's, which is `master_contact_id`."""
+        return self.contact_id
+
+    @property
+    def is_child_leg(self) -> bool:
+        """True when the export printed the trailing '*'. Whether that is a child leg is a rule, not an
+        assumption: see contact_history_reconcile.MARKER_RULE_CHILD_LEG and its evidence."""
+        return bool(self.id_marker)
 
     @property
     def raw_contact_id(self) -> str:
@@ -57,10 +75,15 @@ class ContactRecord:
         export's own row identity is; whether `123*` and `123` are one contact is not established."""
         return self.contact_id + self.id_marker
 
-    def comparable(self) -> tuple:
-        """Fields that must agree for two rows to be an EXACT repeat."""
+    def selected_fields(self) -> tuple:
+        """Every field this importer keeps except the agent token: repeats equal on these but not on the
+        agent are repeats across SELECTED fields only, not exact repeats of the exported row."""
         return (self.raw_contact_id, self.master_contact_id, self.media_type, self.skill_name, self.team,
                 self.start_utc, self.duration_text)
+
+    def comparable(self) -> tuple:
+        """Fields that must agree for two rows to be an EXACT repeat (selected fields plus the agent)."""
+        return self.selected_fields() + (self.agent_token,)
 
 
 @dataclass(frozen=True)
@@ -122,6 +145,12 @@ def load_contact_history(paths: list[Path], *, source_timezone: str) -> ContactH
         raise ContactHistoryError(f"unknown source timezone {source_timezone!r}") from None
     records: list[ContactRecord] = []
     summaries: list[FileSummary] = []
+    salt = os.urandom(16)  # per import, never stored: tokens are comparable within a run only
+
+    def agent_token(text: str) -> str:
+        normalized = " ".join(text.split()).casefold()
+        return hmac.new(salt, normalized.encode("utf-8"), "sha256").hexdigest()[:12] if normalized else ""
+
     for path in paths:
         name = path.name
         file_records: list[ContactRecord] = []
@@ -167,6 +196,7 @@ def load_contact_history(paths: list[Path], *, source_timezone: str) -> ContactH
                     source_file=name, row_number=row_number, contact_id=contact_id, id_marker=marker, master_contact_id=master,
                     media_type=cell("Media Type"), skill_name=cell("Skill"), team=cell("Team"),
                     start_local=local, start_utc=utc, duration_text=cell("Duration"),
+                    agent_token=agent_token(cell("Agent")),
                 ))
         summaries.append(FileSummary(
             basename=name, sha256=file_sha256(path), rows=len(file_records),
@@ -189,7 +219,7 @@ class ContactHistorySummary:
     raw_rows: int
     distinct_contact_ids: int
     distinct_master_contact_ids: int
-    exact_repeat_rows: int  # rows that exactly repeat an earlier row (any file)
+    exact_repeat_rows: int  # rows identical to an earlier row in EVERY kept field including the agent token
     exact_repeats_within_a_file: int
     exact_repeats_across_files: int
     repeated_ids_total: int  # contact IDs that appear more than once
@@ -206,9 +236,22 @@ class ContactHistorySummary:
     distinct_base_contact_ids: int  # digits only, marker ignored
     base_ids_seen_both_marked_and_unmarked: int
     shared_contact_ids_between_files: dict[str, int] = field(default_factory=dict)  # "a|b" -> count
+    repeats_differing_only_in_agent: int = 0  # repeat rows equal in every selected field but not the agent
+    repeated_ids_differing_only_in_team_or_agent: int = 0
+    marked_rows_whose_master_is_not_a_different_contact: int = 0  # '*' rows with no master or master == own ID
+    unmarked_rows_whose_master_is_a_different_contact: int = 0  # unmarked rows that look like child legs
+    rows_with_agent_token: int = 0  # 0 means the Agent column was absent or empty, so agent differences are invisible
 
 
-_FIELDS = ("id_marker", "master_contact_id", "media_type", "skill_name", "team", "start_utc", "duration_text")
+_FIELDS = ("id_marker", "master_contact_id", "media_type", "skill_name", "team", "start_utc", "duration_text",
+           "agent_token")
+FIELD_LABELS = {"agent_token": "agent"}
+TEAM_OR_AGENT = frozenset({"team", "agent_token"})
+
+
+def differing_fields(rows: list[ContactRecord]) -> frozenset[str]:
+    """Names (attribute names) of the kept fields that are not identical across `rows`."""
+    return frozenset(f for f in _FIELDS if len({getattr(r, f) for r in rows}) > 1)
 
 
 def summarize(records: tuple[ContactRecord, ...] | list[ContactRecord]) -> ContactHistorySummary:
@@ -219,7 +262,8 @@ def summarize(records: tuple[ContactRecord, ...] | list[ContactRecord]) -> Conta
     for r in records:
         markers_by_base[r.contact_id].add(r.id_marker)
     seen_exact: dict[tuple, ContactRecord] = {}
-    exact_within = exact_across = 0
+    seen_selected: set[tuple] = set()
+    exact_within = exact_across = agent_only = 0
     for r in records:
         key = r.comparable()
         if key in seen_exact:
@@ -228,15 +272,19 @@ def summarize(records: tuple[ContactRecord, ...] | list[ContactRecord]) -> Conta
             else:
                 exact_across += 1
         else:
+            if r.selected_fields() in seen_selected:
+                agent_only += 1
             seen_exact[key] = r
-    conflicts = 0
+            seen_selected.add(r.selected_fields())
+    conflicts = team_or_agent_only = 0
     conflict_fields: Counter[str] = Counter()
     for rows in by_id.values():
         if len({r.comparable() for r in rows}) > 1:
             conflicts += 1
-            for f in _FIELDS:
-                if len({getattr(r, f) for r in rows}) > 1:
-                    conflict_fields[f] += 1
+            differing = differing_fields(rows)
+            team_or_agent_only += differing <= TEAM_OR_AGENT
+            for f in differing:
+                conflict_fields[FIELD_LABELS.get(f, f)] += 1
     masters: dict[str, set[str]] = defaultdict(set)
     for r in records:
         if r.master_contact_id:
@@ -278,12 +326,19 @@ def summarize(records: tuple[ContactRecord, ...] | list[ContactRecord]) -> Conta
         marked_id_rows=sum(1 for r in records if r.id_marker),
         distinct_base_contact_ids=len(markers_by_base),
         base_ids_seen_both_marked_and_unmarked=sum(1 for m in markers_by_base.values() if len(m) > 1),
+        repeats_differing_only_in_agent=agent_only, repeated_ids_differing_only_in_team_or_agent=team_or_agent_only,
+        marked_rows_whose_master_is_not_a_different_contact=sum(
+            1 for r in records if r.is_child_leg and (not r.master_contact_id or r.master_contact_id == r.own_contact_id)),
+        unmarked_rows_whose_master_is_a_different_contact=sum(
+            1 for r in records
+            if not r.is_child_leg and r.master_contact_id and r.master_contact_id != r.own_contact_id),
+        rows_with_agent_token=sum(1 for r in records if r.agent_token),
     )
 
 
 def dedupe_exact(records: tuple[ContactRecord, ...] | list[ContactRecord]) -> tuple[tuple[ContactRecord, ...], int]:
-    """Removes ONLY rows that exactly repeat an earlier row in every compared field (the documented
-    export-overlap rule). Returns (kept records, removed count) so the removal stays auditable.
+    """Removes ONLY rows that exactly repeat an earlier row in every kept field, the agent token included
+    (the documented export-overlap rule); a repeat that differs only in agent is kept. Returns (kept records, removed count) so the removal stays auditable.
     Repeated IDs whose fields differ are NOT touched: they remain conflicts to be explained."""
     seen: set[tuple] = set()
     kept: list[ContactRecord] = []
