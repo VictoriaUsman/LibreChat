@@ -261,21 +261,23 @@ stages:
                 # capabilities, CXOne MCP identity headers) before upload. When cxoneAgentId is set
                 # for this environment, render the CXOne modelSpec with that real agent ID; if it is
                 # unset the spec is simply absent. A placeholder ID is never rendered (script rejects it).
-                python3 -m pip install --quiet pyyaml
+                python3 -m pip install --quiet pyyaml || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
                 CONFIG_SRC="$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml"
                 CONFIG_SCRIPT="$(Build.SourcesDirectory)/ChatGptForEmployees/scripts/render_librechat_config.py"
-                python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --validate
+                python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --validate || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
                 CXONE_AGENT_ID='$(cxoneAgentId)'
                 case "$CXONE_AGENT_ID" in
                   ""|'$('*) echo "cxoneAgentId not set: CXOne modelSpec not rendered" ;;
                   *)
-                    python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --agent-id "$CXONE_AGENT_ID" --out /tmp/librechat_cxone.yaml
+                    python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --agent-id "$CXONE_AGENT_ID" --out /tmp/librechat_cxone.yaml || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
                     CONFIG_SRC=/tmp/librechat_cxone.yaml ;;
                 esac
 
                 sed "s|\${LITELLM_URL}|${LITELLM_URL}|g" \
                   "$CONFIG_SRC" \
-                  > /tmp/librechat_processed.yaml
+                  > /tmp/librechat_processed.yaml || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
+                  [ -s /tmp/librechat_processed.yaml ] || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
+                  python3 "$CONFIG_SCRIPT" --config /tmp/librechat_processed.yaml --validate || { echo "##vso[task.logissue type=error]librechat.yaml validation/rendering failed; config NOT uploaded"; exit 1; }
 
                 az storage file upload \
                   --account-name $(storageAccountName) \
