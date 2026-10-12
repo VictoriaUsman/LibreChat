@@ -136,7 +136,11 @@ def main(argv=None):
 
     if not args.out:
         parser.error("--out is required when rendering")
-    rendered = render(text, args.agent_id)
+    try:
+        rendered = render(text, args.agent_id)
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
     problems = validate(yaml.safe_load(rendered), require_cxone_spec=True)
     if problems:
         for problem in problems:
