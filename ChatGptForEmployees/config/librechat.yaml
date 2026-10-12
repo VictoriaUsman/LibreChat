@@ -275,7 +275,15 @@ interface:
   # only removes the endpoint/model dropdown beside it. Also
   # hides the API-key gear icon. PBI: Remove Redundant Model Selector.
   modelSelect: false
-  agents: false
+  # PBI-08: USE must be granted or /api/agents/:id returns 403 "Insufficient permissions ... USE" and the
+  # CXOne conversation dies before reaching the model (found in local testing). create/share/public stay false
+  # and endpoints.agents.disableBuilder stays true, so there is still no builder and no user-created agents;
+  # who may open the CXOne agent is decided by its ACLs, not by this flag.
+  agents:
+    use: true
+    create: false
+    share: false
+    public: false
   memories: false
   bookmarks: false
   prompts: false

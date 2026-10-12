@@ -63,8 +63,13 @@ def validate(config, require_cxone_spec=False):
     agents = (config.get("endpoints") or {}).get("agents") or {}
     if agents.get("disableBuilder") is not True:
         problems.append("endpoints.agents.disableBuilder must remain true")
-    if (config.get("interface") or {}).get("agents") is not False:
-        problems.append("interface.agents must remain false")
+    iface_agents = (config.get("interface") or {}).get("agents")
+    if iface_agents is not False:
+        # USE is required for the persistent CXOne agent to be reachable; nothing else may be granted.
+        if not isinstance(iface_agents, dict) or iface_agents.get("use") is not True:
+            problems.append("interface.agents must be false or {use: true, create/share/public: false}")
+        elif any(iface_agents.get(k) is not False for k in ("create", "share", "public")):
+            problems.append("interface.agents must keep create, share and public false")
     missing = REQUIRED_CAPABILITIES - set(agents.get("capabilities") or [])
     if missing:
         problems.append(f"agents capabilities lost: {sorted(missing)}")

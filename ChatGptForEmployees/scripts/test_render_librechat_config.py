@@ -62,6 +62,20 @@ class RenderTests(unittest.TestCase):
         del config["mcpServers"]
         self.assertIn("requires mcpServers", " ".join(r.validate(config)))
 
+    def test_interface_agents_may_grant_use_but_never_create_share_or_public(self):
+        config = yaml.safe_load(load())
+        self.assertEqual(
+            config["interface"]["agents"],
+            {"use": True, "create": False, "share": False, "public": False},
+        )
+        for key in ("create", "share", "public"):
+            broken = yaml.safe_load(load())
+            broken["interface"]["agents"][key] = True
+            self.assertIn("create, share and public", " ".join(r.validate(broken)))
+        broken = yaml.safe_load(load())
+        broken["interface"]["agents"] = True
+        self.assertTrue(r.validate(broken))
+
     def test_mcp_server_sends_session_identity_headers(self):
         server = yaml.safe_load(load())["mcpServers"][r.SERVER_NAME]
         self.assertEqual(server["headers"]["x-romchat-user-id"], "{{LIBRECHAT_USER_ID}}")
