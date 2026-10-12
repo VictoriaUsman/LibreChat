@@ -78,6 +78,14 @@ param helpUrl string
 param ttsApiKey string
 param ttsInstanceName string
 param ttsDeploymentName string
+// PBI-08: internal CXOne reporting MCP server, referenced from librechat.yaml as
+// ${CXONE_MCP_URL} / ${CXONE_MCP_CONTEXT_SECRET}. Both default to '' so an environment
+// that has not deployed the MCP server is unchanged: with no URL the server is excluded
+// at config load (fork isolateInvalidMCPServers) and LibreChat still starts. The URL
+// must be the INTERNAL service URL including its MCP route; never a public endpoint.
+param cxoneMcpUrl string = ''
+@secure()
+param cxoneMcpContextSecret string = ''
 
 var appName = 'ca-librechat-${toLower(envName)}'
 var allowRegistration = false
@@ -142,6 +150,8 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'openid-session-secret', value: openIdSessionSecret }
         { name: 'azure-storage-connection-string', value: storageConnectionString }
         { name: 'tts-api-key', value: ttsApiKey }
+        // Container App secret values may not be empty, so only declare it when set.
+        ...(empty(cxoneMcpContextSecret) ? [] : [ { name: 'cxone-mcp-context-secret', value: cxoneMcpContextSecret } ])
         // ACR admin password (read at deploy time) so the app can pull its image from
         // acrcgfe<env>. Mirrors jobs.bicep: the deploy SP can read a registry's own creds
         // but can't assign an AcrPull role, so we pull with admin creds (WI 12306 hardens).
@@ -217,6 +227,9 @@ resource libreChatApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'TTS_INSTANCE_NAME', value: ttsInstanceName }
             { name: 'TTS_DEPLOYMENT_NAME', value: ttsDeploymentName }
             { name: 'TTS_API_KEY', secretRef: 'tts-api-key' }
+            // PBI-08 CXOne MCP (mcpServers.romtech-cxone in librechat.yaml).
+            { name: 'CXONE_MCP_URL', value: cxoneMcpUrl }
+            ...(empty(cxoneMcpContextSecret) ? [] : [ { name: 'CXONE_MCP_CONTEXT_SECRET', secretRef: 'cxone-mcp-context-secret' } ])
           ]
           volumeMounts: [
             {

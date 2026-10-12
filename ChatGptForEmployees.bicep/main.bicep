@@ -140,6 +140,11 @@ param openIdClientId string
 param openIdClientSecret string
 @secure()
 param openIdSessionSecret string
+// PBI-08: internal CXOne MCP endpoint (INTERNAL URL incl. MCP route) and the shared
+// context secret. Empty = CXOne not deployed in this environment; LibreChat still starts.
+param cxoneMcpUrl string = ''
+@secure()
+param cxoneMcpContextSecret string = ''
 @secure()
 // Defaulted empty so the deployment doesn't require it when deployJobs=false
 // (the env bicepparam supplies the real Key Vault value only when enabling the job).
@@ -477,6 +482,8 @@ module libreChat 'libreChat.bicep' = {
     ttsApiKey: aiFoundry.outputs.apiKey
     ttsInstanceName: aiFoundry.outputs.accountName
     ttsDeploymentName: aiFoundry.outputs.ttsDeploymentName
+    cxoneMcpUrl: cxoneMcpUrl
+    cxoneMcpContextSecret: cxoneMcpContextSecret
   }
 }
 

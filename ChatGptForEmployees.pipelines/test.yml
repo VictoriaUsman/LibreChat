@@ -259,8 +259,24 @@ stages:
                   --output tsv)
                 LITELLM_URL="http://${LITELLM_FQDN}"
 
+                # PBI-08: validate the config invariants (builder disabled, 64000 caps, File Search
+                # capabilities, CXOne MCP identity headers) before upload. When cxoneAgentId is set
+                # for this environment, render the CXOne modelSpec with that real agent ID; if it is
+                # unset the spec is simply absent. A placeholder ID is never rendered (script rejects it).
+                python3 -m pip install --quiet pyyaml
+                CONFIG_SRC="$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml"
+                CONFIG_SCRIPT="$(Build.SourcesDirectory)/ChatGptForEmployees/scripts/render_librechat_config.py"
+                python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --validate
+                CXONE_AGENT_ID='$(cxoneAgentId)'
+                case "$CXONE_AGENT_ID" in
+                  ""|'$('*) echo "cxoneAgentId not set: CXOne modelSpec not rendered" ;;
+                  *)
+                    python3 "$CONFIG_SCRIPT" --config "$CONFIG_SRC" --agent-id "$CXONE_AGENT_ID" --out /tmp/librechat_cxone.yaml
+                    CONFIG_SRC=/tmp/librechat_cxone.yaml ;;
+                esac
+
                 sed "s|\${LITELLM_URL}|${LITELLM_URL}|g" \
-                  "$(Build.SourcesDirectory)/ChatGptForEmployees/config/librechat.yaml" \
+                  "$CONFIG_SRC" \
                   > /tmp/librechat_processed.yaml
 
                 az storage file upload \

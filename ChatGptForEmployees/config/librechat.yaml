@@ -100,6 +100,32 @@ registration:
   allowedDomains:
     - "romtech.com"
 
+# PBI-08: internal CXOne reporting MCP server (contract 1.1.0: compare_periods,
+# drill_down, current_state). Only the dedicated server-provisioned agent binds
+# these tools; there is no builder and no endpoint menu. Trust notes:
+#   - CXONE_MCP_URL / CXONE_MCP_CONTEXT_SECRET are injected per environment
+#     (libreChat.bicep); an unset URL excludes ONLY this server at config load
+#     (isolateInvalidMCPServers) and logs name + category, never the value.
+#   - The context secret only establishes trusted cache identity on the MCP
+#     server. It is NOT access control: approved users are enforced by the
+#     agent's ACLs and the private network boundary.
+#   - No tenant header is sent: LibreChat has no tenant placeholder. The MCP
+#     server's single-tenant policy applies (see docs/PBI-08-BE-evidence.md).
+#   - {{LIBRECHAT_BODY_CONVERSATIONID}} is empty on the first message of a new
+#     conversation; the server then runs the tool uncached (never cross-user).
+#   - timeout 30s > the server's 20s deadline; initTimeout bounds startup.
+mcpServers:
+  romtech-cxone:
+    type: streamable-http
+    url: "${CXONE_MCP_URL}"
+    startup: true
+    initTimeout: 15000
+    timeout: 30000
+    headers:
+      x-romchat-user-id: "{{LIBRECHAT_USER_ID}}"
+      x-romchat-conversation-id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
+      x-romchat-context-secret: "${CXONE_MCP_CONTEXT_SECRET}"
+
 endpoints:
   # File Search (RAG) is surfaced via an ephemeral `file_search` capability on the
   # agents endpoint — NOT the agent builder. interface.agents:false + disableBuilder
