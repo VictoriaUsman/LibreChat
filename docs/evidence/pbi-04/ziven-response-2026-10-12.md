@@ -176,11 +176,33 @@ it is not verified. (The wider all-department population has a much larger gap, 
 
 ## Repeated two-team contact IDs and the end-of-day remark
 
+Ian's question 6 was team attribution: if a contact is refused by one team and handled by another, should it count against
+both teams or only the handling team? Ziven's item 6 answered when the two-team situation occurs (only in the transition
+at the end of the day, as CS agents clock out and Outplex takes over) and said the attribution question is one for the
+Customer Service Supervisor. **No attribution rule was given.** The contact comparison does not need one (it excludes
+team and agent from its key); any team-level metric would.
+
 In the October 1 export (times as displayed, Eastern) the three repeated IDs that differ in team and/or agent are: one at
 16:40 between `CS - Tier 2 Spanish` and `Outplex CS` (consistent with her transition statement), one at 16:08 with a blank
-team on one row, and one at 09:01 within a single team (agent-only). The 09:01 case is a morning repeat with no Outplex
-team, so her end-of-day explanation does not cover it as relayed. This is a question for the Customer Service Supervisor,
-as she suggests; it does not block the contact comparison, which excludes team and agent from its key.
+team on one row (her October 8 reply describes a refusal followed by voicemail), and one at 09:01 within a single team
+(agent-only). The 09:01 case is a morning repeat with no Outplex team, so her end-of-day statement does not cover it.
+
+## Final-input status (no further questions to Ziven)
+
+Her final reply is the last input this PBI takes from her. Against Ian's six questions in the final message:
+
+| Ian's question | Outcome |
+|---|---|
+| 1. Skill IDs/names and team filters for each SLA counter | **Partly answered.** CS Team SLA widget: 29 names (Set A); no team selections on either widget; two billing skills added but not selected. **The ROMTech Service Level widget's skills were not supplied.** |
+| 2. SLA settings | Answered (see statements above); semantics against API fields still to be verified by this branch |
+| 3. Media types | Answered: phone only for now |
+| 4. October 1 SLA results | Answered: not available in the subscription |
+| 5. Report timezone | Answered: the exporting user's timezone, Eastern for her. The IANA name and DST rule were not stated (inferred `America/New_York`, supported by the matches) |
+| 6. Team attribution | **Not answered**: referred to the Customer Service Supervisor |
+
+Recorded as limitations, not as open questions for Ziven: the ROMTech widget skill list, the team attribution rule, and the
+IANA zone name. Baseline rules were not part of the final message; the October 1 reply accepted eight weeks and left the
+rest open, so baseline scope is a PBI-owner decision.
 
 ## Effect on the acceptance table
 
