@@ -18,8 +18,9 @@ snapshot and are superseded by this evidence, not by a full PBI sign-off.
 [ziven-response-2026-10-12.md](evidence/pbi-04/ziven-response-2026-10-12.md) (received 2026-10-12; no email date).
 Confirmed: 29 skills currently selected, two billing skills intended but not selected, no team filters, phone only
 with voicemail excluded, exports in her Eastern timezone, 30%/100% are colour thresholds, reported SLA 90 s / 90% with
-short abandons of 15 s or less excluded, and no historical October 1 dashboard SLA. Skill names are resolved to API IDs
-below; the SLA fields were found in the API but their semantics are **not verified**. Historical SLA reconciliation is
+short abandons of 15 s or less excluded, and no historical October 1 dashboard SLA. Ziven's 29 CS skill names are
+not yet entered, so Set A is unresolved; the table below is the separate full-export population. The SLA fields were found
+in the API but their semantics are **not verified**. Historical SLA reconciliation is
 not done and any deferral needs owner approval. PBI-04 remains open. The current acceptance table is in
 [closure-2026-10-03.md](evidence/pbi-04/closure-2026-10-03.md).
 
@@ -49,11 +50,11 @@ observations below.
 | Decision | Confirmed value | Source / effective date | Confirmer / confirmation date |
 |---|---|---|---|
 | Dashboard/report/widgets/version | Dashboard is live-only; historical comparison requires a report. Exact widgets/report/version pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| Included skill IDs and names | 29 selected on the widgets (count from Ziven); the 29 listed below are the October 1 export's skills, a candidate list not confirmed as the widget selection. 16 pairs were supplied earlier in Skills.csv | Ziven reply 2026-10-12; October 6 API capture; live `/skills` 2026-10-12 | Ziven; received 2026-10-12, no email date |
-| Excluded skill IDs and reasons | Voicemail skills excluded (Ziven). Two billing skills intended but not selected. `Billing General VM` not addressed | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
+| Included skill IDs and names | Ziven's 29 CS skills: names not yet entered here, so IDs unresolved (no list is substituted). The October 1 export's 29 skills (all departments) are tabulated below as a separate population. 16 pairs were supplied earlier in Skills.csv | Ziven reply 2026-10-12; October 6 API capture; live `/skills` 2026-10-12 | Ziven; received 2026-10-12, no email date |
+| Excluded skill IDs and reasons | Voicemail skills excluded (Ziven), including `Billing General VM`. Two billing skills intended but not selected | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
 | Team IDs and historical membership/filter rules | No team filters on either SLA widget | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
 | Business reporting timezone and day boundaries | Eastern; report output UTC. Exact IANA zone, DST and day boundaries pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| SLA thresholds, targets, exclusions and effective dates | Reported: 90 s to completion, 90% goal, short abandons of 15 s or less excluded; the API's per-skill settings agree for 20 of the 29 skills only. 30% and 100% widget thresholds are colour thresholds. Formula semantics and effective dates unverified | Ziven reply 2026-10-12; live `/skills` 2026-10-12; Skills.csv | Ziven; received 2026-10-12 |
+| SLA thresholds, targets, exclusions and effective dates | Reported: 90 s to completion, 90% goal, short abandons of 15 s or less excluded; not yet compared with the API settings for her CS list. 30% and 100% widget thresholds are colour thresholds. Formula semantics and effective dates unverified | Ziven reply 2026-10-12; live `/skills` 2026-10-12; Skills.csv | Ziven; received 2026-10-12 |
 | Baseline window, weighting, exclusions and missing-data rules | Eight-week comparison accepted; December/holiday seasonality must be considered. Weighting, holiday policy and missing-data rules pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
 | Comparison period and per-metric tolerance/rounding | Pending | Pending | Pending |
 
@@ -112,6 +113,9 @@ Start with the volume-ranked names in the implementation guide, recover their
 verified IDs, then record Ziven's actual choices. Do not adopt the ranked list
 unchanged by default. Reconcile the PBI's 83 skills with discovery's 85 returned
 rows using dated inventory and unique-ID counts.
+
+October 1 export population, **all departments, not the CS scope** (kept for the contact reconciliation; Ziven's own
+29-name CS list is the one still to be resolved):
 
 | Skill ID | Name | Campaign | Resolved by | API SLA settings | Oct 1 export contacts |
 |---|---|---|---|---|---:|

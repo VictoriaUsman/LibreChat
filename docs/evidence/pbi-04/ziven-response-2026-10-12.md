@@ -20,17 +20,38 @@ stays as the 2026-10-08 snapshot.
 | Historical October 1 dashboard SLA results | Unavailable |
 
 Not stated: an IANA zone name (Eastern is read as `America/New_York`, consistent with the October 6 exact match, but
-not named by her); the list of the 29 selected skills; which campaigns the two widgets select.
+not named by her); which campaigns the two widgets select. (Her 29 CS skill names are not in this branch yet; see Set A.)
 
-## Two separate skill sets
+## Two separate skill sets, plus the full-export population
 
-**Set A: the 29 currently selected.** Ziven gave a count, not names. The only 29-skill list this branch holds is the
-29 distinct skills in the October 1 export (captured via the API on 2026-10-06), so it is **the candidate list, not a
-confirmed copy of the widget selection**. Each of the 29 resolves to exactly one API skill ID; all 29 are present and
-active in the live `/skills` inventory (2026-10-12); the 8 that also appear in Ziven's 16-row `Skills.csv` carry the
-same IDs. No name is unresolved. The other 21 are resolved by the October 6 capture and the live inventory only, not by
-the supplied CSV. Per-skill settings are the API's `serviceLevelThreshold`, `serviceLevelGoal`, `enableShortAbandon`
-and `shortAbandonThreshold`.
+**Set A: Ziven's 29 CS skills (the widget selection). Not resolved yet.** The relayed summary this entry was written
+from carried the count (29) but not the 29 names, and the names are not in this repository, so **no IDs have been
+resolved for Set A and none are guessed.** An earlier draft of this file substituted the October 1 export's 29 skills.
+That was wrong: the export spans departments (it includes Logistics skills and `Test IB`), so it is not the CS scope.
+To finish without further clarification from Ziven: enter her 29 names, resolve each by exact name against the live
+`/skills` inventory (cross-checked with the October 6 capture), and record any unresolved name explicitly. Then the
+settings comparison below is recalculated for that list.
+
+**Set B: intended additions, not selected (kept separate from Set A).**
+
+| Skill ID | Name | Campaign | Media | API SLA settings | Oct 1 offered (API summary) |
+|---|---|---|---|---|---:|
+| 36302045 | Billing General | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
+| 36302046 | Billing General Spanish | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
+| 36302047 | Billing General VM | Customer Service | Voice Mail | 185000 s / 90% / short-abandon off | 0 |
+
+- "Biling General Spanish" is not an inventory name; the only near match is `Billing General Spanish` (36302046).
+  Treated as the same skill by correcting the spelling.
+- `Billing General VM` (36302047, media Voice Mail) is **excluded**: Ziven excluded voicemail from the widgets. It is
+  not an addition and not an open question.
+- Neither billing addition is in `Skills.csv` or the October 1 export (0 offered on 2026-10-01 Eastern).
+
+## Full-export population (October 1 export, all departments): not the CS scope
+
+Preserved for the contact reconciliation only. These are the 29 distinct skills in the October 1 export, captured via
+the API on 2026-10-06. Each resolves to exactly one API skill ID and all are active in the live `/skills` inventory
+(2026-10-12); the 8 also in `Skills.csv` carry the same IDs. Mixed departments (Customer Service, Logistics
+Scheduling, Admin, Patient Collections, Patient Support, a test campaign).
 
 | Skill ID | Name | Campaign | Resolved by | API SLA settings | Oct 1 export contacts |
 |---|---|---|---|---|---:|
@@ -64,21 +85,6 @@ and `shortAbandonThreshold`.
 | 20954688 | Test IB | Test1 | capture + /skills | 30 s / 90% / short-abandon off | 2 |
 | 21036611 | VM Remove From Queue | Admin | Skills.csv + capture + /skills | 90 s / 90% / short-abandon off | 224 |
 
-**Set B: intended additions, not selected.**
-
-| Skill ID | Name | Campaign | Media | API SLA settings | Oct 1 offered (API summary) |
-|---|---|---|---|---|---:|
-| 36302045 | Billing General | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
-| 36302046 | Billing General Spanish | Customer Service | Phone Call | 90 s / 90% / short-abandon on, 15 s | 0 |
-| 36302047 | Billing General VM | Customer Service | Voice Mail | 185000 s / 90% / short-abandon off | 0 |
-
-- "Biling General Spanish" is not an inventory name; the only near match is `Billing General Spanish`
-  (36302046). Treated as the same skill by correcting the spelling: **an inference, to be confirmed**.
-- The inventory also has `Billing General VM` (36302047, media Voice Mail). Ziven did not mention it and voicemail
-  is excluded from the widgets; confirm it is not an intended addition.
-- Neither billing skill is in `Skills.csv` or the October 1 export (0 offered on 2026-10-01 Eastern), so they add no
-  October 1 check.
-
 ## API access and fields (read-only, 2026-10-12)
 
 Access was **not blocked**: the existing discovery setup authenticated (credentials not printed or stored) and
@@ -91,7 +97,7 @@ returned both endpoints. Sanitised output: [skill-inventory-and-sla-fields-2026-
   `contactsOutOfSLA`, `serviceLevel`, `serviceLevelGoal`, `serviceLevelThreshold`, `abandonCount`, `abandonRate` and others.
   It returns a row for every skill on any date, so presence or zeros prove nothing about retention.
 
-Exploratory numbers for the 29 skills, Eastern day 2026-10-01 (`[2026-10-01T04:00Z, 2026-10-02T04:00Z)`), **not a
+Exploratory numbers for the 29 export-population skills (all departments, not the CS scope), Eastern day 2026-10-01 (`[2026-10-01T04:00Z, 2026-10-02T04:00Z)`), **not a
 validation**:
 
 | Check | Result |
@@ -99,11 +105,12 @@ validation**:
 | `contactsOffered` equals the export's distinct contacts, per skill | 29 of 29 skills; totals 2,021 and 2,021 |
 | `contactsWithinSLA` / `contactsOutOfSLA` summed | 482 / 747 (1,229 together, fewer than the 2,021 offered) |
 | `contactsHandled` / `abandonCount` summed | 1,356 / 405 |
-| Skills whose API settings are 90 s, 90%, short-abandon on at 15 s | 20 of 29 |
-| Other settings among the 29 | 2 skill(s) 60 s/100%/off 15 s, 2 skill(s) 30 s/90%/off 15 s, 2 skill(s) 90 s/90%/off 15 s, 1 skill(s) 90 s/90%/on 90 s, 1 skill(s) 120 s/90%/off 15 s, 1 skill(s) 120 s/90%/on 15 s |
+| Export-population skills with API settings 90 s, 90%, short-abandon on at 15 s | 20 of 29 |
+| Other settings in the export population | 2 skill(s) 60 s/100%/off 15 s, 2 skill(s) 30 s/90%/off 15 s, 2 skill(s) 90 s/90%/off 15 s, 1 skill(s) 90 s/90%/on 90 s, 1 skill(s) 120 s/90%/off 15 s, 1 skill(s) 120 s/90%/on 15 s |
 
-So Ziven's reported configuration holds for 20 of the 29 skills in the API's per-skill settings, not all of them.
-Whether the dashboard widgets use the per-skill API settings or one widget-level configuration is not established.
+This is a statement about the mixed-department export population only. It is **not** a comparison with the CS
+configuration Ziven described, because her CS list is not yet entered; do not read it as a discrepancy. Whether
+the dashboard widgets use the per-skill API settings or one widget-level configuration is also not established.
 
 ## SLA semantics: still unverified
 
