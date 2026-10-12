@@ -76,6 +76,12 @@ class RenderTests(unittest.TestCase):
         broken["interface"]["agents"] = True
         self.assertTrue(r.validate(broken))
 
+    def test_cxone_server_is_agent_only(self):
+        config = yaml.safe_load(load())
+        self.assertIs(config["mcpServers"][r.SERVER_NAME]["chatMenu"], False)
+        del config["mcpServers"][r.SERVER_NAME]["chatMenu"]
+        self.assertIn("chatMenu: false", " ".join(r.validate(config)))
+
     def test_mcp_server_sends_session_identity_headers(self):
         server = yaml.safe_load(load())["mcpServers"][r.SERVER_NAME]
         self.assertEqual(server["headers"]["x-romchat-user-id"], "{{LIBRECHAT_USER_ID}}")

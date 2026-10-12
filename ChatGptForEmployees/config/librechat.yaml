@@ -118,6 +118,9 @@ mcpServers:
   romtech-cxone:
     type: streamable-http
     url: "${CXONE_MCP_URL}"
+    # Agent-only: hidden from the chat menu AND (fork patch) rejected when a request puts it in
+    # ephemeralAgent.mcp, so Standard/Fast chats cannot reach the CXOne tools; only the provisioned agent can.
+    chatMenu: false
     startup: true
     initTimeout: 15000
     timeout: 30000
@@ -151,6 +154,9 @@ endpoints:
     capabilities:
       - file_search
       - artifacts
+      # PBI-08: without `tools` the agent run silently drops every MCP tool (ToolService filters them
+      # on the `tools` capability), so the CXOne agent answers with no data. Found in local testing.
+      - tools
   custom:
     - name: "LiteLLM Gateway"
       apiKey: "${LITELLM_VIRTUAL_KEY}"

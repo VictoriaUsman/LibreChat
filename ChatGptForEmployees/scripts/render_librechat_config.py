@@ -29,7 +29,7 @@ SHARED_CAP = 64000
 BASELINE_SPECS = ("romtech-ai-standard", "romtech-ai-fast")
 AGENT_ID_PATTERN = re.compile(r"^agent_[A-Za-z0-9_-]{21}$")
 INSERT_BEFORE = "# Feature governance"
-REQUIRED_CAPABILITIES = {"file_search", "artifacts"}
+REQUIRED_CAPABILITIES = {"file_search", "artifacts", "tools"}
 
 SPEC_TEMPLATE = """    # PBI-08: dedicated CXOne reporting agent. agent_id is rendered per environment
     # from the provisioning command's output; do not hand-edit it. The agent owns its
@@ -80,6 +80,8 @@ def validate(config, require_cxone_spec=False):
         headers = {k.lower() for k in (server.get("headers") or {})}
         if server.get("type") != "streamable-http":
             problems.append(f"{SERVER_NAME} must use type streamable-http")
+        if server.get("chatMenu") is not False:
+            problems.append(f"{SERVER_NAME} must set chatMenu: false (agent-only server)")
         if "x-romchat-user-id" not in headers:
             problems.append(f"{SERVER_NAME} must send x-romchat-user-id from the session")
         if "x-romchat-conversation-id" not in headers:
