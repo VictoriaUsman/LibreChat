@@ -14,6 +14,7 @@ import type {
   Agent,
 } from 'librechat-data-provider';
 import { getCustomEndpointConfig } from '~/app/config';
+import { selectableEphemeralServers } from '~/mcp/utils';
 
 const { mcp_all, mcp_delimiter } = Constants;
 type ModelParametersWithPromptPrefix = AgentModelParameters & { promptPrefix?: string | null };
@@ -55,7 +56,7 @@ export async function loadEphemeralAgent(
     modelSpec = modelSpecs?.list?.find((s) => s.name === spec) ?? null;
   }
   const ephemeralAgent: TEphemeralAgent | undefined = req.body?.ephemeralAgent;
-  const mcpServers = new Set<string>(ephemeralAgent?.mcp);
+  const mcpServers = selectableEphemeralServers(ephemeralAgent?.mcp, req.config?.mcpConfig);
   const userId = req.user?.id ?? '';
   if (modelSpec?.mcpServers) {
     for (const mcpServer of modelSpec.mcpServers) {

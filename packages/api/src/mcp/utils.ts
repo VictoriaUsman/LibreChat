@@ -3,6 +3,21 @@ import type { ParsedServerConfig } from '~/mcp/types';
 
 export const mcpToolPattern = new RegExp(`^.+${Constants.mcp_delimiter}.+$`);
 
+/**
+ * Request-supplied MCP server names (`ephemeralAgent.mcp`) minus servers configured with `chatMenu: false`.
+ * Those are reachable only through server-provisioned agents; the chat menu hides them, and this makes the
+ * server side agree so a hand-built request cannot select them.
+ */
+export function selectableEphemeralServers(
+  requested: string[] | undefined,
+  mcpConfig: object | null | undefined,
+): Set<string> {
+  const hidden = (name: string): boolean =>
+    (mcpConfig as Record<string, { chatMenu?: boolean } | undefined> | null | undefined)?.[name]
+      ?.chatMenu === false;
+  return new Set<string>((requested ?? []).filter((name) => !hidden(name)));
+}
+
 /** Whether a server should use MCP OAuth handling. */
 export function isOAuthServer(
   config: Pick<ParsedServerConfig, 'requiresOAuth' | 'oauth'>,

@@ -41,7 +41,7 @@ describe('isolateInvalidMCPServers', () => {
   });
 
   it('does not alter configs without mcpServers', () => {
-    const config = { version: '1.2.0' };
+    const config: { version: string; mcpServers?: Record<string, unknown> } = { version: '1.2.0' };
     expect(isolateInvalidMCPServers(config).config).toBe(config);
   });
 });

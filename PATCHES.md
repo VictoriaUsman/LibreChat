@@ -1155,6 +1155,27 @@ Keep the patch set as small as possible. Add entries below as patches land.
 
 ---
 
+### MCP servers with `chatMenu: false` cannot be selected from a request's `ephemeralAgent.mcp`
+
+- **Work item:** PBI-08 (CXOne MCP / agent integration)
+- **Added:** 2026-10-12 by Ian Tristan
+- **Files touched:** `packages/api/src/agents/load.ts`, `packages/api/src/agents/added.ts`,
+  `packages/api/src/mcp/utils.ts` (+ `packages/api/src/agents/ephemeral.spec.ts`)
+- **What:** The server names a client puts in `ephemeralAgent.mcp` are filtered through
+  `selectableEphemeralServers`, which drops any server whose YAML config has `chatMenu: false`. Servers an admin
+  attaches through `modelSpecs[].mcpServers` are unaffected.
+- **Why:** The persistent CXOne agent needs the `tools` agents capability, and ephemeral (Standard/Fast) chats share it.
+  Measured locally: with `tools` on, a hand-built request `{ephemeralAgent:{mcp:["romtech-cxone"]}}` from a plain
+  Standard chat called the CXOne tool for any signed-in user. `chatMenu: false` only hid the server in the UI; nothing
+  enforced it. Config alone cannot restrict an MCP server to one agent.
+- **How to verify:** POST a Standard-model chat with `ephemeralAgent.mcp:["romtech-cxone"]`: no `CallToolRequest`
+  reaches the MCP server and the model has no CXOne tools. The same user on the CXOne persistent agent still calls them.
+- **Upstream status:** not submitted.
+- **Merge notes:** One-line change at the `new Set(ephemeralAgent?.mcp)` site in each loader plus a helper. If upstream
+  adds per-server access control for YAML servers, drop this.
+
+---
+
 ## Upstream merge procedure
 
 When pulling a new upstream release:

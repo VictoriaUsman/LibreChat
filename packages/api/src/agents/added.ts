@@ -10,6 +10,7 @@ import {
 } from 'librechat-data-provider';
 import type { Agent, TConversation } from 'librechat-data-provider';
 import { getCustomEndpointConfig } from '~/app/config';
+import { selectableEphemeralServers } from '~/mcp/utils';
 
 const { mcp_all, mcp_delimiter } = Constants;
 
@@ -124,7 +125,7 @@ export async function loadAddedAgent(
         artifacts?: unknown;
       }
     | undefined;
-  const mcpServers = new Set<string>(ephemeralAgent?.mcp);
+  const mcpServers = selectableEphemeralServers(ephemeralAgent?.mcp, appConfig?.mcpConfig);
   const userId = req.user?.id ?? '';
 
   const modelSpecs = (
