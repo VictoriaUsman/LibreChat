@@ -271,6 +271,34 @@ describe('provisionCxoneAgent', () => {
       expect(acl.get(first.agentId) ?? []).toEqual([]);
     });
 
+    it('restores a replaced audience role and the full prior model parameters on rollback', async () => {
+      const { deps, agents, acl } = fakeDeps();
+      const first = await run(true, deps);
+      const prior = agents.get(first.agentId)!;
+      agents.set(first.agentId, {
+        ...prior,
+        tools: ['file_search'],
+        model_parameters: { model: prior.model, maxContextTokens: 64000, temperature: 0.2 },
+      });
+      acl.set(
+        first.agentId,
+        (acl.get(first.agentId) ?? [])
+          .filter((e) => e.principalId !== 'grp2')
+          .map((e) => (e.principalId === 'grp1' ? { ...e, accessRoleId: 'agent_editor' } : e)),
+      );
+      failGrantFor(deps, 'grp2');
+      await expect(run(true, deps)).rejects.toThrow(/db down.*previous version restored/);
+      expect(agents.get(first.agentId)?.model_parameters).toEqual({
+        model: prior.model,
+        maxContextTokens: 64000,
+        temperature: 0.2,
+      });
+      const roles = Object.fromEntries(
+        (acl.get(first.agentId) ?? []).map((e) => [e.principalId, e.accessRoleId]),
+      );
+      expect(roles).toEqual({ owner1: 'agent_owner', grp1: 'agent_editor' });
+    });
+
     it('reports an incomplete rollback instead of hiding it', async () => {
       const { deps } = fakeDeps();
       failGrantFor(deps, 'grp2');

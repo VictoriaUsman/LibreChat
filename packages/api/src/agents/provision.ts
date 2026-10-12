@@ -44,6 +44,15 @@ export interface AgentAclEntry {
   accessRoleId: string;
 }
 
+export type ModelParameters = { maxContextTokens?: number } & Record<
+  string,
+  string | number | boolean | undefined
+>;
+
+export type AgentUpdate = Omit<DesiredAgent, 'id' | 'model_parameters'> & {
+  model_parameters: ModelParameters;
+};
+
 export interface ProvisionedAgent {
   id: string;
   name?: string;
@@ -51,7 +60,7 @@ export interface ProvisionedAgent {
   instructions?: string;
   provider: string;
   model: string;
-  model_parameters?: { maxContextTokens?: number } & Record<string, string | number | boolean>;
+  model_parameters?: ModelParameters;
   tools?: string[];
 }
 
@@ -69,7 +78,7 @@ export interface DesiredAgent {
 export interface ProvisionDeps {
   findAgentsByIdOrName: (id: string, name: string) => Promise<ProvisionedAgent[]>;
   createAgent: (data: DesiredAgent & { author: string }) => Promise<ProvisionedAgent>;
-  updateAgent: (id: string, data: Omit<DesiredAgent, 'id'>) => Promise<ProvisionedAgent | null>;
+  updateAgent: (id: string, data: AgentUpdate) => Promise<ProvisionedAgent | null>;
   getAcl: (agentId: string) => Promise<AgentAclEntry[]>;
   grant: (entry: AgentAclEntry & { agentId: string; grantedBy: string }) => Promise<void>;
   revoke: (entry: AgentAclEntry & { agentId: string }) => Promise<void>;
@@ -331,7 +340,14 @@ export async function provisionCxoneAgent(
     }
     await verifyReadBack(deps, desired, wantedAcl);
   } catch (error) {
-    const rollback = await rollbackRun(deps, desired, existing, granted);
+    const rollback = await rollbackRun(
+      deps,
+      desired,
+      existing,
+      granted,
+      currentAcl,
+      manifest.owner.id,
+    );
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`${reason}. Rollback: ${rollback}`);
   }
@@ -364,6 +380,8 @@ async function rollbackRun(
   desired: DesiredAgent,
   existing: ProvisionedAgent | undefined,
   granted: AgentAclEntry[],
+  priorAcl: AgentAclEntry[],
+  grantedBy: string,
 ): Promise<string> {
   const failures: string[] = [];
   const attempt = async (label: string, step: () => Promise<unknown>): Promise<void> => {
@@ -375,7 +393,15 @@ async function rollbackRun(
   };
 
   const audienceFirst = [...granted].reverse();
+  const priorByKey = new Map(priorAcl.map((e) => [aclKey(e), e]));
   for (const entry of audienceFirst) {
+    const prior = priorByKey.get(aclKey(entry));
+    if (prior != null) {
+      await attempt(`restore ${aclKey(entry)}`, () =>
+        deps.grant({ ...prior, agentId: desired.id, grantedBy }),
+      );
+      continue;
+    }
     await attempt(`revoke ${aclKey(entry)}`, () => deps.revoke({ ...entry, agentId: desired.id }));
   }
   if (existing != null) {
@@ -386,12 +412,7 @@ async function rollbackRun(
         instructions: existing.instructions ?? '',
         provider: existing.provider,
         model: existing.model,
-        model_parameters: {
-          model: existing.model,
-          maxContextTokens:
-            existing.model_parameters?.maxContextTokens ??
-            desired.model_parameters.maxContextTokens,
-        },
+        model_parameters: { ...(existing.model_parameters ?? desired.model_parameters) },
         tools: existing.tools ?? [],
       }),
     );
