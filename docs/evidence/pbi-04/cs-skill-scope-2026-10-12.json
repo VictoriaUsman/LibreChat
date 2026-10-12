@@ -1,0 +1,834 @@
+{
+  "captured_at_utc": "2026-10-12T04:41:07.376925+00:00",
+  "mode": "real_read_only_discovery",
+  "acceptance_grade": false,
+  "inventory_size_incl_inactive": 159,
+  "window_utc": [
+    "2026-10-01T04:00:00Z",
+    "2026-10-02T04:00:00Z"
+  ],
+  "set_a_cs_widget_29": [
+    {
+      "ziven_name": "Remote Onboarding",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "36302025",
+      "inventory": {
+        "skillId": 36302025,
+        "skillName": "Remote Onboarding",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": true
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 8,
+        "contactsHandled": 4,
+        "contactsWithinSLA": 1,
+        "contactsOutOfSLA": 7,
+        "abandonCount": 4
+      },
+      "export_distinct_contacts": 8
+    },
+    {
+      "ziven_name": "Cardiac Appointments",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "35588248",
+      "inventory": {
+        "skillId": 35588248,
+        "skillName": "Cardiac Appointments",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 25,
+        "contactsHandled": 20,
+        "contactsWithinSLA": 11,
+        "contactsOutOfSLA": 13,
+        "abandonCount": 5
+      },
+      "export_distinct_contacts": 25
+    },
+    {
+      "ziven_name": "Cardiac Appointments Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "35588249",
+      "inventory": {
+        "skillId": 35588249,
+        "skillName": "Cardiac Appointments Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Cardiac Billing",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954831",
+      "inventory": {
+        "skillId": 20954831,
+        "skillName": "Cardiac Billing",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 126,
+        "contactsHandled": 105,
+        "contactsWithinSLA": 51,
+        "contactsOutOfSLA": 75,
+        "abandonCount": 21
+      },
+      "export_distinct_contacts": 126
+    },
+    {
+      "ziven_name": "Cardiac Billing Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954832",
+      "inventory": {
+        "skillId": 20954832,
+        "skillName": "Cardiac Billing Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Cardiac Delivery Pickup",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954834",
+      "inventory": {
+        "skillId": 20954834,
+        "skillName": "Cardiac Delivery Pickup",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 17,
+        "contactsHandled": 10,
+        "contactsWithinSLA": 9,
+        "contactsOutOfSLA": 8,
+        "abandonCount": 7
+      },
+      "export_distinct_contacts": 17
+    },
+    {
+      "ziven_name": "Cardiac Delivery Pickup Spanish",
+      "rule": "inventory_30_char_truncation",
+      "matches": 1,
+      "skill_id": "20954835",
+      "inventory": {
+        "skillId": 20954835,
+        "skillName": "Cardiac Delivery Pickup Spanis",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Cardiac General",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954836",
+      "inventory": {
+        "skillId": 20954836,
+        "skillName": "Cardiac General",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 26,
+        "contactsHandled": 21,
+        "contactsWithinSLA": 8,
+        "contactsOutOfSLA": 17,
+        "abandonCount": 5
+      },
+      "export_distinct_contacts": 26
+    },
+    {
+      "ziven_name": "Cardiac General Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954837",
+      "inventory": {
+        "skillId": 20954837,
+        "skillName": "Cardiac General Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 2,
+        "contactsHandled": 1,
+        "contactsWithinSLA": 1,
+        "contactsOutOfSLA": 1,
+        "abandonCount": 1
+      },
+      "export_distinct_contacts": 2
+    },
+    {
+      "ziven_name": "Cardiac Sales",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954625",
+      "inventory": {
+        "skillId": 20954625,
+        "skillName": "Cardiac Sales",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Cardiac Sales Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954628",
+      "inventory": {
+        "skillId": 20954628,
+        "skillName": "Cardiac Sales Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Cardiac Tech Support",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954838",
+      "inventory": {
+        "skillId": 20954838,
+        "skillName": "Cardiac Tech Support",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 12,
+        "contactsHandled": 12,
+        "contactsWithinSLA": 4,
+        "contactsOutOfSLA": 8,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 12
+    },
+    {
+      "ziven_name": "Cardiac Tech Support Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954840",
+      "inventory": {
+        "skillId": 20954840,
+        "skillName": "Cardiac Tech Support Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Customer Service General",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "35588202",
+      "inventory": {
+        "skillId": 35588202,
+        "skillName": "Customer Service General",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 50,
+        "contactsHandled": 37,
+        "contactsWithinSLA": 12,
+        "contactsOutOfSLA": 37,
+        "abandonCount": 13
+      },
+      "export_distinct_contacts": 50
+    },
+    {
+      "ziven_name": "Customer Service General Spanish",
+      "rule": "inventory_30_char_truncation",
+      "matches": 1,
+      "skill_id": "35588203",
+      "inventory": {
+        "skillId": 35588203,
+        "skillName": "Customer Service General Spani",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Order Status Cardiac",
+      "rule": "same_words_reordered",
+      "matches": 1,
+      "skill_id": "35588243",
+      "inventory": {
+        "skillId": 35588243,
+        "skillName": "Cardiac Order Status",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 7,
+        "contactsHandled": 4,
+        "contactsWithinSLA": 3,
+        "contactsOutOfSLA": 3,
+        "abandonCount": 3
+      },
+      "export_distinct_contacts": 7
+    },
+    {
+      "ziven_name": "Order Status Cardiac Spanish",
+      "rule": "same_words_reordered",
+      "matches": 1,
+      "skill_id": "35588244",
+      "inventory": {
+        "skillId": 35588244,
+        "skillName": "Cardiac Order Status Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Order Status Ortho",
+      "rule": "same_words_reordered",
+      "matches": 1,
+      "skill_id": "35588246",
+      "inventory": {
+        "skillId": 35588246,
+        "skillName": "Ortho Order Status",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 57,
+        "contactsHandled": 42,
+        "contactsWithinSLA": 25,
+        "contactsOutOfSLA": 32,
+        "abandonCount": 15
+      },
+      "export_distinct_contacts": 57
+    },
+    {
+      "ziven_name": "Order Status Ortho Spanish",
+      "rule": "same_words_reordered",
+      "matches": 1,
+      "skill_id": "35588247",
+      "inventory": {
+        "skillId": 35588247,
+        "skillName": "Ortho Order Status Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Ortho Billing",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "18499102",
+      "inventory": {
+        "skillId": 18499102,
+        "skillName": "Ortho Billing",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 63,
+        "contactsHandled": 50,
+        "contactsWithinSLA": 26,
+        "contactsOutOfSLA": 35,
+        "abandonCount": 13
+      },
+      "export_distinct_contacts": 63
+    },
+    {
+      "ziven_name": "Ortho Billing Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "18499103",
+      "inventory": {
+        "skillId": 18499103,
+        "skillName": "Ortho Billing Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 1,
+        "contactsHandled": 1,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 1,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 1
+    },
+    {
+      "ziven_name": "Ortho Delivery_Pickup",
+      "rule": "normalized",
+      "matches": 1,
+      "skill_id": "18499100",
+      "inventory": {
+        "skillId": 18499100,
+        "skillName": "Ortho Delivery Pickup",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 146,
+        "contactsHandled": 123,
+        "contactsWithinSLA": 62,
+        "contactsOutOfSLA": 84,
+        "abandonCount": 23
+      },
+      "export_distinct_contacts": 146
+    },
+    {
+      "ziven_name": "Ortho Delivery_Pickup Spanish",
+      "rule": "normalized",
+      "matches": 1,
+      "skill_id": "18499101",
+      "inventory": {
+        "skillId": 18499101,
+        "skillName": "Ortho Delivery Pickup Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 3,
+        "contactsHandled": 1,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 3,
+        "abandonCount": 2
+      },
+      "export_distinct_contacts": 3
+    },
+    {
+      "ziven_name": "Ortho General",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "18499104",
+      "inventory": {
+        "skillId": 18499104,
+        "skillName": "Ortho General",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 104,
+        "contactsHandled": 80,
+        "contactsWithinSLA": 40,
+        "contactsOutOfSLA": 63,
+        "abandonCount": 24
+      },
+      "export_distinct_contacts": 104
+    },
+    {
+      "ziven_name": "Ortho General Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "18499105",
+      "inventory": {
+        "skillId": 18499105,
+        "skillName": "Ortho General Spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 1,
+        "contactsHandled": 1,
+        "contactsWithinSLA": 1,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 1
+    },
+    {
+      "ziven_name": "Ortho Sales",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954624",
+      "inventory": {
+        "skillId": 20954624,
+        "skillName": "Ortho Sales",
+        "campaignName": "Ortho Sales",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Ortho Sales Spanish",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "20954629",
+      "inventory": {
+        "skillId": 20954629,
+        "skillName": "Ortho Sales Spanish",
+        "campaignName": "Ortho Sales",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Ortho Tech Support",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "18499098",
+      "inventory": {
+        "skillId": 18499098,
+        "skillName": "Ortho Tech Support",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 131,
+        "contactsHandled": 106,
+        "contactsWithinSLA": 46,
+        "contactsOutOfSLA": 85,
+        "abandonCount": 25
+      },
+      "export_distinct_contacts": 131
+    },
+    {
+      "ziven_name": "Ortho Tech Support Spanish",
+      "rule": "normalized",
+      "matches": 1,
+      "skill_id": "18499099",
+      "inventory": {
+        "skillId": 18499099,
+        "skillName": "Ortho Tech Support spanish",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 1,
+        "contactsHandled": 1,
+        "contactsWithinSLA": 1,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 1
+    }
+  ],
+  "set_b_intended_additions": [
+    {
+      "ziven_name": "Billing General",
+      "rule": "exact",
+      "matches": 1,
+      "skill_id": "36302045",
+      "inventory": {
+        "skillId": 36302045,
+        "skillName": "Billing General",
+        "campaignName": "Customer Service",
+        "mediaTypeName": "Phone Call",
+        "isActive": true,
+        "isOutbound": false,
+        "serviceLevelThreshold": 90,
+        "serviceLevelGoal": 90,
+        "enableShortAbandon": true,
+        "shortAbandonThreshold": 15,
+        "countShortAbandons": false
+      },
+      "summary_oct1_eastern": {
+        "contactsOffered": 0,
+        "contactsHandled": 0,
+        "contactsWithinSLA": 0,
+        "contactsOutOfSLA": 0,
+        "abandonCount": 0
+      },
+      "export_distinct_contacts": 0
+    },
+    {
+      "ziven_name": "Biling General Spanish",
+      "rule": "unresolved",
+      "matches": 0
+    }
+  ],
+  "limitations": [
+    "Names differ from the inventory for several skills; non-exact rules are inferences listed per row",
+    "Settings are the CURRENT API values, not October 1 configuration",
+    "SLA semantics unverified"
+  ]
+}

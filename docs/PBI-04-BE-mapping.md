@@ -18,9 +18,9 @@ snapshot and are superseded by this evidence, not by a full PBI sign-off.
 [ziven-response-2026-10-12.md](evidence/pbi-04/ziven-response-2026-10-12.md) (received 2026-10-12; no email date).
 Confirmed: 29 skills currently selected, two billing skills intended but not selected, no team filters, phone only
 with voicemail excluded, exports in her Eastern timezone, 30%/100% are colour thresholds, reported SLA 90 s / 90% with
-short abandons of 15 s or less excluded, and no historical October 1 dashboard SLA. Ziven's 29 CS skill names are
-not yet entered, so Set A is unresolved; the table below is the separate full-export population. The SLA fields were found
-in the API but their semantics are **not verified**. Historical SLA reconciliation is
+short abandons of 15 s or less excluded, and no historical October 1 dashboard SLA. Ziven's 29 CS skill names (Customer Service Team SLA widget) are resolved to API IDs below as Set A; the two intended
+billing additions and the all-department export population are kept separate. The SLA fields were found in the API but
+their semantics (she says completion time, not answer time) are **not verified**. Historical SLA reconciliation is
 not done and any deferral needs owner approval. PBI-04 remains open. The current acceptance table is in
 [closure-2026-10-03.md](evidence/pbi-04/closure-2026-10-03.md).
 
@@ -50,11 +50,11 @@ observations below.
 | Decision | Confirmed value | Source / effective date | Confirmer / confirmation date |
 |---|---|---|---|
 | Dashboard/report/widgets/version | Dashboard is live-only; historical comparison requires a report. Exact widgets/report/version pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| Included skill IDs and names | Ziven's 29 CS skills: names not yet entered here, so IDs unresolved (no list is substituted). The October 1 export's 29 skills (all departments) are tabulated below as a separate population. 16 pairs were supplied earlier in Skills.csv | Ziven reply 2026-10-12; October 6 API capture; live `/skills` 2026-10-12 | Ziven; received 2026-10-12, no email date |
+| Included skill IDs and names | Customer Service Team SLA widget: Ziven's 29 names, all resolved to unique API IDs (Set A below; 4 name matches are word-order inferences). ROMTech Service Level widget: skill list not supplied. The export's 29 all-department skills are a separate population. 16 pairs were supplied earlier in Skills.csv | Ziven reply 2026-10-12; October 6 API capture; live `/skills` 2026-10-12 | Ziven; received 2026-10-12, no email date |
 | Excluded skill IDs and reasons | Voicemail skills excluded (Ziven), including `Billing General VM`. Two billing skills intended but not selected | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
 | Team IDs and historical membership/filter rules | No team filters on either SLA widget | Ziven reply 2026-10-12 | Ziven; received 2026-10-12 |
 | Business reporting timezone and day boundaries | Eastern; report output UTC. Exact IANA zone, DST and day boundaries pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
-| SLA thresholds, targets, exclusions and effective dates | Reported: 90 s to completion, 90% goal, short abandons of 15 s or less excluded; not yet compared with the API settings for her CS list. 30% and 100% widget thresholds are colour thresholds. Formula semantics and effective dates unverified | Ziven reply 2026-10-12; live `/skills` 2026-10-12; Skills.csv | Ziven; received 2026-10-12 |
+| SLA thresholds, targets, exclusions and effective dates | Reported: 90 s to completion, 90% goal, short abandons of 15 s or less excluded; the API's current per-skill settings equal it for all 29 CS skills (current values, not October 1). 30% and 100% widget thresholds are colour thresholds. Formula semantics and effective dates unverified | Ziven reply 2026-10-12; live `/skills` 2026-10-12; Skills.csv | Ziven; received 2026-10-12 |
 | Baseline window, weighting, exclusions and missing-data rules | Eight-week comparison accepted; December/holiday seasonality must be considered. Weighting, holiday policy and missing-data rules pending | Ziven reply, recorded 2026-10-01 | Ziven; email date not supplied |
 | Comparison period and per-metric tolerance/rounding | Pending | Pending | Pending |
 
@@ -114,8 +114,43 @@ verified IDs, then record Ziven's actual choices. Do not adopt the ranked list
 unchanged by default. Reconcile the PBI's 83 skills with discovery's 85 returned
 rows using dated inventory and unique-ID counts.
 
-October 1 export population, **all departments, not the CS scope** (kept for the contact reconciliation; Ziven's own
-29-name CS list is the one still to be resolved):
+**Set A: Ziven's 29 Customer Service Team SLA skills** (last column: API `contactsOffered` / Oct 1 export contacts):
+
+| Ziven's name | Match rule | Skill ID | Inventory name | Campaign | Oct 1 offered / export |
+|---|---|---|---|---|---:|
+| Remote Onboarding | exact | 36302025 | Remote Onboarding | Customer Service | 8 / 8 |
+| Cardiac Appointments | exact | 35588248 | Cardiac Appointments | Customer Service | 25 / 25 |
+| Cardiac Appointments Spanish | exact | 35588249 | Cardiac Appointments Spanish | Customer Service | 0 / 0 |
+| Cardiac Billing | exact | 20954831 | Cardiac Billing | Customer Service | 126 / 126 |
+| Cardiac Billing Spanish | exact | 20954832 | Cardiac Billing Spanish | Customer Service | 0 / 0 |
+| Cardiac Delivery Pickup | exact | 20954834 | Cardiac Delivery Pickup | Customer Service | 17 / 17 |
+| Cardiac Delivery Pickup Spanish | inventory 30-char name limit | 20954835 | Cardiac Delivery Pickup Spanis | Customer Service | 0 / 0 |
+| Cardiac General | exact | 20954836 | Cardiac General | Customer Service | 26 / 26 |
+| Cardiac General Spanish | exact | 20954837 | Cardiac General Spanish | Customer Service | 2 / 2 |
+| Cardiac Sales | exact | 20954625 | Cardiac Sales | Customer Service | 0 / 0 |
+| Cardiac Sales Spanish | exact | 20954628 | Cardiac Sales Spanish | Customer Service | 0 / 0 |
+| Cardiac Tech Support | exact | 20954838 | Cardiac Tech Support | Customer Service | 12 / 12 |
+| Cardiac Tech Support Spanish | exact | 20954840 | Cardiac Tech Support Spanish | Customer Service | 0 / 0 |
+| Customer Service General | exact | 35588202 | Customer Service General | Customer Service | 50 / 50 |
+| Customer Service General Spanish | inventory 30-char name limit | 35588203 | Customer Service General Spani | Customer Service | 0 / 0 |
+| Order Status Cardiac | same words, order differs (inferred) | 35588243 | Cardiac Order Status | Customer Service | 7 / 7 |
+| Order Status Cardiac Spanish | same words, order differs (inferred) | 35588244 | Cardiac Order Status Spanish | Customer Service | 0 / 0 |
+| Order Status Ortho | same words, order differs (inferred) | 35588246 | Ortho Order Status | Customer Service | 57 / 57 |
+| Order Status Ortho Spanish | same words, order differs (inferred) | 35588247 | Ortho Order Status Spanish | Customer Service | 0 / 0 |
+| Ortho Billing | exact | 18499102 | Ortho Billing | Customer Service | 63 / 63 |
+| Ortho Billing Spanish | exact | 18499103 | Ortho Billing Spanish | Customer Service | 1 / 1 |
+| Ortho Delivery_Pickup | case/underscore only | 18499100 | Ortho Delivery Pickup | Customer Service | 146 / 146 |
+| Ortho Delivery_Pickup Spanish | case/underscore only | 18499101 | Ortho Delivery Pickup Spanish | Customer Service | 3 / 3 |
+| Ortho General | exact | 18499104 | Ortho General | Customer Service | 104 / 104 |
+| Ortho General Spanish | exact | 18499105 | Ortho General Spanish | Customer Service | 1 / 1 |
+| Ortho Sales | exact | 20954624 | Ortho Sales | Ortho Sales | 0 / 0 |
+| Ortho Sales Spanish | exact | 20954629 | Ortho Sales Spanish | Ortho Sales | 0 / 0 |
+| Ortho Tech Support | exact | 18499098 | Ortho Tech Support | Customer Service | 131 / 131 |
+| Ortho Tech Support Spanish | case/underscore only | 18499099 | Ortho Tech Support spanish | Customer Service | 1 / 1 |
+
+**Set B (intended additions, not selected):** `Billing General` 36302045; "Biling General Spanish" unresolved by name, candidate `Billing General Spanish` 36302046 (inferred); `Billing General VM` excluded (voicemail).
+
+October 1 export population, **all departments, not the CS scope** (kept for the contact reconciliation):
 
 | Skill ID | Name | Campaign | Resolved by | API SLA settings | Oct 1 export contacts |
 |---|---|---|---|---|---:|
@@ -165,8 +200,8 @@ baseline dependencies, source schema evidence and configuration versions.
 
 | Metric key / dashboard label | Endpoint/version + response fields | Units/grain/formula reference | Historical/live availability | Scope/config reference | Status / evidence |
 |---|---|---|---|---|---|
-| ROMTech Service Level: contacts in SLA / out of SLA / percent | candidate: `/skills/summary` `contactsWithinSLA`, `contactsOutOfSLA`, `serviceLevel` (field names only) | Counts per skill per requested window; formula and short-abandon handling unverified | Dashboard live-only (30-minute trending); API window-aggregated; no October 1 dashboard value | Widget: 2 campaigns, 29 skills, Phone Call, no team filter, 24 intervals / 30 min; 30% is a colour threshold | Not validated: 792 of 2,021 offered on Oct 1 fall in neither count |
-| Customer Service Team SLA: in / out / percent | same candidate fields | same | same | Widget: 1 campaign, 29 skills, all 9 media types, no team filter; 100% is a colour threshold | Not validated; media types differ from the phone-only widget |
+| ROMTech Service Level: contacts in SLA / out of SLA / percent | candidate: `/skills/summary` `contactsWithinSLA`, `contactsOutOfSLA`, `serviceLevel` (field names only) | Counts per skill per requested window; formula and short-abandon handling unverified | Dashboard live-only (30-minute trending); API window-aggregated; no October 1 dashboard value | Widget: 2 campaigns, 29 skills, Phone Call, no team filter, 24 intervals / 30 min; 30% is a colour target (above/below it changes the colour) | Not validated: the widget's skill list was not supplied; for the CS skills 7 of 780 offered on Oct 1 fall in neither count |
+| Customer Service Team SLA: in / out / percent | same candidate fields | same | same | Widget: 1 campaign, 29 skills, all 9 media types, no team filter; 100% is a colour target | Not validated; media types differ from the phone-only widget |
 | Customer Service Agent State Count: Available, Unavailable, Inbound, Outbound, Preview, Waiting | candidate: `/skills/summary` `agentsAvailable`, `agentsUnavailable`, `agentsWorking`, `agentsLoggedIn` (names only; per-state mapping unknown) | Live snapshot of agents | Live-only | Widget settings not supplied | Not validated |
 | Customer Service Team Agent Status: per-agent state, time, team, session time | Not identified. `/skills/summary` is per skill, not per agent | Live per-agent view | Live-only | Widget settings not supplied | Unsupported until an agent-level source is verified |
 
