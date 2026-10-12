@@ -3,7 +3,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const { logger } = require('@librechat/data-schemas');
 const { provisionCxoneAgent, validateManifest } = require('@librechat/api');
-const { Constants, ResourceType } = require('librechat-data-provider');
+const { Constants, ResourceType, PrincipalType } = require('librechat-data-provider');
 
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const connect = require('./connect');
@@ -11,8 +11,8 @@ const connect = require('./connect');
 const { grantPermission } = require('~/server/services/PermissionService');
 const initializeMCPs = require('~/server/services/initializeMCPs');
 const { getMCPManager } = require('~/config');
-const { Agent, AclEntry, AccessRole } = require('~/db/models');
-const { createAgent, updateAgent } = require('~/models');
+const { Agent, AclEntry, AccessRole, User, Group, Role } = require('~/db/models');
+const { createAgent, updateAgent, revokePermission } = require('~/models');
 
 /**
  * Operator-only: creates/updates the CXOne agent without the agent builder.
@@ -40,9 +40,13 @@ async function discoverTools(serverName) {
   await initializeMCPs();
   const suffix = `${Constants.mcp_delimiter}${serverName}`;
   const functions = (await getMCPManager().getAppToolFunctions()) || {};
-  return Object.keys(functions)
-    .filter((key) => key.endsWith(suffix))
-    .map((key) => key.slice(0, -suffix.length));
+  return Object.entries(functions)
+    .filter(([key]) => key.endsWith(suffix))
+    .map(([key, tool]) => ({
+      name: key.slice(0, -suffix.length),
+      description: tool.function.description,
+      inputSchema: tool.function.parameters,
+    }));
 }
 
 async function getAgentObjectId(id) {
@@ -67,6 +71,15 @@ function createDeps() {
         accessRoleId: roleById.get(String(e.roleId)) ?? 'unknown',
       }));
     },
+    principalExists: async (principalType, principalId) => {
+      if (principalType === PrincipalType.ROLE) return Boolean(await Role.exists({ name: principalId }));
+      if (!mongoose.Types.ObjectId.isValid(principalId)) return false;
+      const model = principalType === PrincipalType.GROUP ? Group : User;
+      return Boolean(await model.exists({ _id: principalId }));
+    },
+    revoke: async ({ agentId, principalType, principalId }) => {
+      await revokePermission(principalType, principalId, ResourceType.AGENT, await getAgentObjectId(agentId));
+    },
     grant: async ({ agentId, principalType, principalId, accessRoleId, grantedBy }) =>
       grantPermission({
         principalType,
@@ -82,13 +95,13 @@ function createDeps() {
 async function main() {
   const args = parseArgs(process.argv);
   const manifest = validateManifest(readJson(args.manifest));
-  const contract = readJson(args.contract);
+  const contractText = fs.readFileSync(args.contract, 'utf8');
   const instructionsMarkdown = fs.readFileSync(args.instructions, 'utf8');
 
   await connect();
   const discoveredTools = await discoverTools(manifest.mcpServerName);
   const result = await provisionCxoneAgent(
-    { manifest, contract, discoveredTools, instructionsMarkdown, apply: args.apply },
+    { manifest, contractText, discoveredTools, instructionsMarkdown, apply: args.apply },
     createDeps(),
   );
   console.log(JSON.stringify({ mode: args.apply ? 'apply' : 'dry-run', ...result }, null, 2));

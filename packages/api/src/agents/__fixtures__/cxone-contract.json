@@ -1,0 +1,531 @@
+{
+  "content_sha256": "b641cd4adaee6c9bb98b4db229c2cc182ff143c184b6c9faa6170db3abdb48e8",
+  "contract_name": "cxone-mcp-tools",
+  "contract_version": "1.1.0",
+  "envelope_examples_fixture_only": {
+    "compare_periods": {
+      "invalid_arguments": {
+        "envelope_shape": {
+          "claim_limits": {
+            "business_reconciliation": "str",
+            "causes_established": "bool",
+            "schedule_data_available": "bool"
+          },
+          "data_source": "str",
+          "error": {
+            "code": "str",
+            "message": "str",
+            "retryable": "bool"
+          },
+          "metadata": {
+            "cache_hit": "bool",
+            "generated_at": "str"
+          },
+          "quality": {
+            "availability": "str",
+            "completeness": "str",
+            "completeness_basis": "str",
+            "freshness": {
+              "state": "str"
+            },
+            "reason_codes": [
+              "str"
+            ]
+          },
+          "status": "str",
+          "temporal": {
+            "bounds": "null",
+            "covered_end": "null",
+            "covered_start": "null",
+            "kind": "str",
+            "reason": "str",
+            "reporting_timezone": "null",
+            "requested_end": "null",
+            "requested_start": "null",
+            "retrieved_at_utc": "null"
+          }
+        },
+        "is_error": true
+      },
+      "ok": {
+        "envelope_shape": {
+          "claim_limits": {
+            "business_reconciliation": "str",
+            "causes_established": "bool",
+            "schedule_data_available": "bool"
+          },
+          "data": {
+            "baseline": {
+              "available_periods": "int",
+              "definition": "str",
+              "excluded_periods": [
+                "object"
+              ],
+              "normal_range_definition": "str",
+              "outlier_rule": "str",
+              "requested_periods": "int",
+              "unavailable_periods": "int",
+              "used_periods": "int"
+            },
+            "largest_movers": [
+              "object"
+            ],
+            "metrics": [
+              "object"
+            ],
+            "period": {
+              "boundaries": "str",
+              "end": "str",
+              "start": "str",
+              "timezone": "str"
+            },
+            "skill_scope": {
+              "mode": "str",
+              "simulated": "bool",
+              "skill_ids": [
+                "int"
+              ]
+            }
+          },
+          "data_source": "str",
+          "metadata": {
+            "cache_hit": "bool",
+            "generated_at": "str"
+          },
+          "quality": {
+            "availability": "str",
+            "completeness": "str",
+            "completeness_basis": "str",
+            "freshness": {
+              "state": "str"
+            }
+          },
+          "status": "str",
+          "temporal": {
+            "bounds": "str",
+            "covered_end": "str",
+            "covered_start": "str",
+            "kind": "str",
+            "reporting_timezone": "str",
+            "requested_end": "str",
+            "requested_start": "str",
+            "retrieved_at_utc": "str"
+          }
+        },
+        "is_error": false
+      }
+    },
+    "current_state": {
+      "ok": {
+        "envelope_shape": {
+          "claim_limits": {
+            "business_reconciliation": "str",
+            "causes_established": "bool",
+            "schedule_data_available": "bool"
+          },
+          "data": {
+            "skill_scope": {
+              "mode": "str",
+              "simulated": "bool",
+              "skill_ids": [
+                "int"
+              ]
+            },
+            "skills": [
+              "object"
+            ]
+          },
+          "data_source": "str",
+          "metadata": {
+            "cache_hit": "bool",
+            "generated_at": "str"
+          },
+          "quality": {
+            "availability": "str",
+            "completeness": "str",
+            "completeness_basis": "str",
+            "freshness": {
+              "age_seconds": "int",
+              "basis": "str",
+              "policy_max_age_seconds": "float",
+              "state": "str"
+            }
+          },
+          "status": "str",
+          "temporal": {
+            "kind": "str",
+            "observed_at_known": "bool",
+            "observed_at_utc": "str",
+            "reporting_timezone": "null",
+            "retrieved_at_utc": "str"
+          }
+        },
+        "is_error": false
+      }
+    },
+    "drill_down": {
+      "ok": {
+        "envelope_shape": {
+          "claim_limits": {
+            "business_reconciliation": "str",
+            "causes_established": "bool",
+            "schedule_data_available": "bool"
+          },
+          "data": {
+            "period": {
+              "boundaries": "str",
+              "end": "str",
+              "start": "str",
+              "timezone": "str"
+            },
+            "simulated": "bool",
+            "skill_id": "int",
+            "summary": {
+              "abandon_rate": "object"
+            }
+          },
+          "data_source": "str",
+          "metadata": {
+            "cache_hit": "bool",
+            "generated_at": "str"
+          },
+          "quality": {
+            "availability": "str",
+            "completeness": "str",
+            "completeness_basis": "str",
+            "freshness": {
+              "state": "str"
+            }
+          },
+          "status": "str",
+          "temporal": {
+            "bounds": "str",
+            "covered_end": "str",
+            "covered_start": "str",
+            "kind": "str",
+            "reporting_timezone": "str",
+            "requested_end": "str",
+            "requested_start": "str",
+            "retrieved_at_utc": "str"
+          }
+        },
+        "is_error": false
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "INVALID_ARGUMENT",
+      "retryable": false
+    },
+    {
+      "code": "UNSUPPORTED_METRIC",
+      "retryable": false
+    },
+    {
+      "code": "UPSTREAM_UNAVAILABLE",
+      "retryable": true
+    },
+    {
+      "code": "UPSTREAM_TIMEOUT",
+      "retryable": true
+    },
+    {
+      "code": "RESPONSE_TOO_LARGE",
+      "retryable": false
+    },
+    {
+      "code": "CONFIGURATION_ERROR",
+      "retryable": false
+    },
+    {
+      "code": "UNSUPPORTED_CAPABILITY",
+      "retryable": false
+    },
+    {
+      "code": "COMPLETENESS_UNVERIFIED",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL_ERROR",
+      "retryable": false
+    }
+  ],
+  "identity": {
+    "carried_by": "HTTP request headers added by ROMChat; never a tool argument and never the MCP session id",
+    "headers": {
+      "conversation": "x-romchat-conversation-id",
+      "shared_secret": "x-romchat-context-secret",
+      "tenant": "x-romchat-tenant-id",
+      "user": "x-romchat-user-id"
+    },
+    "shared_secret": "when configured on the server, a missing or wrong secret is treated as no identity",
+    "without_trusted_identity": "the tool still runs but its result is never cached"
+  },
+  "limits": {
+    "cache_ttl_seconds": {
+      "historical": 300.0,
+      "live": 15.0
+    },
+    "per_request": {
+      "default_baseline_weeks": 8,
+      "max_baseline_weeks": 26,
+      "max_interval_minutes": 60,
+      "max_metrics": 16,
+      "max_movers": 5,
+      "max_series_points": 31,
+      "max_skills": 50
+    },
+    "response_token_budget": {
+      "counters": [
+        "tiktoken:cl100k_base",
+        "utf8-bytes"
+      ],
+      "default": 3000,
+      "default_counter": "tiktoken:cl100k_base",
+      "max": 3000,
+      "min": 400
+    },
+    "service_timeout_seconds": 20.0
+  },
+  "supported_metrics_fixture_only": [
+    "abandon_rate",
+    "abandoned_contacts",
+    "average_handle_time",
+    "average_speed_of_answer",
+    "contacts_handled",
+    "contacts_offered",
+    "service_level",
+    "voicemails"
+  ],
+  "tools": [
+    {
+      "description": "Compare CXOne metrics for a target historical period (one local day, or part of one) against a baseline of the same window on prior weeks. Returns target and baseline values, deltas, the normal range, baseline coverage (requested/available/excluded/used) and the largest-moving skills. Historical only; live queue state is in current_state. Every response carries `temporal` (requested vs covered period, timezone), `quality` (availability, completeness, freshness, basis) and `claim_limits`; describe what changed, never why - no cause, schedule or staffing explanation is established by these data.",
+      "input_schema": {
+        "properties": {
+          "baseline_weeks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Number of prior weekly baseline periods (1-26). Default 8 (accepted by the business; the wider baseline policy is still being confirmed).",
+            "title": "Baseline Weeks"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exclusive period end, ISO-8601 WITH a UTC offset. Must be after start, not in the future, and on the same local day as start or exactly local midnight of the next day. Multi-day periods are rejected.",
+            "title": "End"
+          },
+          "latest_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "If true, report the LATEST interval that is verified complete instead of an explicit start/end (mutually exclusive with start/end). Use it for 'right now' KPI questions. The response states the interval end, its age and the completeness basis; reporting lag was about 16 minutes in one measurement and may vary. If no interval can be verified complete the call returns COMPLETENESS_UNVERIFIED rather than a guess.",
+            "title": "Latest Complete"
+          },
+          "metrics": {
+            "description": "Metric names to report (at least one). Supported: abandon_rate, abandoned_contacts, average_handle_time, average_speed_of_answer, contacts_handled, contacts_offered, service_level, voicemails. Duplicates are removed and names are lower-cased.",
+            "items": {
+              "maxLength": 64,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Metrics",
+            "type": "array"
+          },
+          "reporting_timezone": {
+            "description": "REQUIRED reporting timezone as an IANA name (e.g. 'America/New_York') used to interpret day boundaries. It is never defaulted to UTC and must match the configured business timezone.",
+            "maxLength": 64,
+            "title": "Reporting Timezone",
+            "type": "string"
+          },
+          "skill_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional skill IDs. Sorted and de-duplicated. Omit to use the configured skill scope. IDs outside the configured scope are rejected. An empty list is rejected.",
+            "title": "Skill Ids"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Inclusive period start, ISO-8601 WITH a UTC offset, e.g. '2026-09-01T00:00:00-04:00' or '...Z'. Periods are half-open: [start, end). The period must lie within ONE local calendar day of reporting_timezone. Required together with end unless latest_complete is true.",
+            "title": "Start"
+          }
+        },
+        "required": [
+          "metrics",
+          "reporting_timezone"
+        ],
+        "title": "compare_periodsArguments",
+        "type": "object"
+      },
+      "name": "compare_periods",
+      "required_arguments": [
+        "metrics",
+        "reporting_timezone"
+      ]
+    },
+    {
+      "description": "Live snapshot of queue depth and observed agent counts per skill, with the observation timestamp. Live data only: a timestamped observation, never a current-by-default figure, a historical staffing estimate or a schedule. Per-skill agent counts are not a distinct headcount. Every response carries `temporal` (requested vs covered period, timezone), `quality` (availability, completeness, freshness, basis) and `claim_limits`; describe what changed, never why - no cause, schedule or staffing explanation is established by these data.",
+      "input_schema": {
+        "properties": {
+          "skill_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional skill IDs. Sorted and de-duplicated. Omit to use the configured skill scope. IDs outside the configured scope are rejected. An empty list is rejected.",
+            "title": "Skill Ids"
+          }
+        },
+        "title": "current_stateArguments",
+        "type": "object"
+      },
+      "name": "current_state",
+      "required_arguments": []
+    },
+    {
+      "description": "Metric summary for ONE skill over a historical period (one local day, or part of one), with an optional bounded, computed series (equal-width buckets, evenly sampled to at most 31 points; raw interval rows are never returned). Reuses data already fetched by a preceding compare_periods in the same conversation. Every response carries `temporal` (requested vs covered period, timezone), `quality` (availability, completeness, freshness, basis) and `claim_limits`; describe what changed, never why - no cause, schedule or staffing explanation is established by these data.",
+      "input_schema": {
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exclusive period end, ISO-8601 WITH a UTC offset. Must be after start, not in the future, and on the same local day as start or exactly local midnight of the next day. Multi-day periods are rejected.",
+            "title": "End"
+          },
+          "include_series": {
+            "default": false,
+            "description": "If true, include the bounded computed series. Default false.",
+            "title": "Include Series",
+            "type": "boolean"
+          },
+          "latest_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "If true, report the LATEST interval that is verified complete instead of an explicit start/end (mutually exclusive with start/end). Use it for 'right now' KPI questions. The response states the interval end, its age and the completeness basis; reporting lag was about 16 minutes in one measurement and may vary. If no interval can be verified complete the call returns COMPLETENESS_UNVERIFIED rather than a guess.",
+            "title": "Latest Complete"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional metric names; defaults to all supported: abandon_rate, abandoned_contacts, average_handle_time, average_speed_of_answer, contacts_handled, contacts_offered, service_level, voicemails.",
+            "title": "Metrics"
+          },
+          "reporting_timezone": {
+            "description": "REQUIRED reporting timezone as an IANA name (e.g. 'America/New_York') used to interpret day boundaries. It is never defaulted to UTC and must match the configured business timezone.",
+            "maxLength": 64,
+            "title": "Reporting Timezone",
+            "type": "string"
+          },
+          "skill_id": {
+            "description": "Exactly one skill ID (positive integer).",
+            "title": "Skill Id",
+            "type": "integer"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Inclusive period start, ISO-8601 WITH a UTC offset, e.g. '2026-09-01T00:00:00-04:00' or '...Z'. Periods are half-open: [start, end). The period must lie within ONE local calendar day of reporting_timezone. Required together with end unless latest_complete is true.",
+            "title": "Start"
+          }
+        },
+        "required": [
+          "skill_id",
+          "reporting_timezone"
+        ],
+        "title": "drill_downArguments",
+        "type": "object"
+      },
+      "name": "drill_down",
+      "required_arguments": [
+        "reporting_timezone",
+        "skill_id"
+      ]
+    }
+  ],
+  "transport": "streamable-http (stateless; one text content block holding one JSON envelope per result)"
+}

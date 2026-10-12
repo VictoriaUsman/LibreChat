@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { createHash } from 'crypto';
 import { Constants, EToolResources, PrincipalType, AccessRoleIds } from 'librechat-data-provider';
+import type { ToolContract, DiscoveredTool } from './contract';
+import { computeContractHash, compareToolSchemas, parseContract } from './contract';
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const PROVISIONING_KEY = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -36,12 +38,6 @@ export const manifestSchema = z.object({
 export type CxoneAgentManifest = z.infer<typeof manifestSchema>;
 export type ManifestPrincipal = z.infer<typeof principalSchema>;
 
-export interface ToolContract {
-  contract_version: string;
-  content_sha256: string;
-  tools: Array<{ name: string }>;
-}
-
 export interface AgentAclEntry {
   principalType: string;
   principalId: string;
@@ -51,6 +47,7 @@ export interface AgentAclEntry {
 export interface ProvisionedAgent {
   id: string;
   name?: string;
+  description?: string;
   instructions?: string;
   provider: string;
   model: string;
@@ -75,12 +72,15 @@ export interface ProvisionDeps {
   updateAgent: (id: string, data: Omit<DesiredAgent, 'id'>) => Promise<ProvisionedAgent | null>;
   getAcl: (agentId: string) => Promise<AgentAclEntry[]>;
   grant: (entry: AgentAclEntry & { agentId: string; grantedBy: string }) => Promise<void>;
+  revoke: (entry: AgentAclEntry & { agentId: string }) => Promise<void>;
+  principalExists: (principalType: string, principalId: string) => Promise<boolean>;
 }
 
 export interface ProvisionInput {
   manifest: CxoneAgentManifest;
-  contract: ToolContract;
-  discoveredTools: string[];
+  /** Raw contract file text; the hash is recomputed from it, never trusted from the file or manifest. */
+  contractText: string;
+  discoveredTools: DiscoveredTool[];
   instructionsMarkdown: string;
   apply: boolean;
 }
@@ -139,20 +139,27 @@ export function extractInstructionText(markdown: string): string {
 
 export function verifyContract(
   manifest: CxoneAgentManifest,
-  contract: ToolContract,
-  discoveredTools: string[],
+  contractText: string,
+  discoveredTools: DiscoveredTool[],
 ): string[] {
+  const contract = parseContract(contractText);
   const problems: string[] = [];
+  const computedHash = computeContractHash(contractText);
   if (contract.contract_version !== manifest.contract.version) {
     problems.push(
       `contract version ${contract.contract_version} does not match manifest ${manifest.contract.version}`,
     );
   }
-  if (contract.content_sha256 !== manifest.contract.sha256) {
-    problems.push('contract content hash does not match manifest');
+  if (computedHash !== contract.content_sha256) {
+    problems.push(
+      'contract file content does not match its own content_sha256 (edited or corrupt)',
+    );
+  }
+  if (computedHash !== manifest.contract.sha256) {
+    problems.push('recomputed contract hash does not match manifest');
   }
   const expected = contract.tools.map((t) => t.name).sort();
-  const actual = [...discoveredTools].sort();
+  const actual = discoveredTools.map((t) => t.name).sort();
   const missing = expected.filter((t) => !actual.includes(t));
   const extra = actual.filter((t) => !expected.includes(t));
   if (missing.length > 0) {
@@ -161,7 +168,7 @@ export function verifyContract(
   if (extra.length > 0) {
     problems.push(`server exposes tools outside the contract: ${extra.join(', ')}`);
   }
-  return problems;
+  return [...problems, ...compareToolSchemas(contract, discoveredTools)];
 }
 
 export function buildDesiredAgent(
@@ -232,6 +239,14 @@ export function fingerprintAgent(desired: DesiredAgent, acl: AgentAclEntry[]): s
   );
 }
 
+function chooseAction(
+  existing: ProvisionedAgent | undefined,
+  changedFields: string[],
+): ProvisionAction {
+  if (!existing) return 'create';
+  return changedFields.length > 0 ? 'update' : 'no-change';
+}
+
 /**
  * Creates or updates the CXOne agent and its ACLs without the agent builder.
  * Fails closed on contract mismatch, ambiguous matches and ACL drift; safe to re-run.
@@ -240,12 +255,13 @@ export async function provisionCxoneAgent(
   input: ProvisionInput,
   deps: ProvisionDeps,
 ): Promise<ProvisionResult> {
-  const { manifest, contract, discoveredTools, instructionsMarkdown, apply } = input;
+  const { manifest, contractText, discoveredTools, instructionsMarkdown, apply } = input;
 
-  const problems = verifyContract(manifest, contract, discoveredTools);
+  const problems = verifyContract(manifest, contractText, discoveredTools);
   if (problems.length > 0) {
     throw new Error(`Contract verification failed: ${problems.join('; ')}`);
   }
+  const contract = parseContract(contractText);
 
   const instructions = extractInstructionText(instructionsMarkdown);
   if (sha256(instructions) !== manifest.instructions.sha256) {
@@ -263,6 +279,14 @@ export async function provisionCxoneAgent(
 
   const existing = matches[0];
   const wantedAcl = desiredAcl(manifest);
+  const checks = await Promise.all(
+    wantedAcl.map((e) => deps.principalExists(e.principalType, e.principalId)),
+  );
+  const unknownPrincipals = wantedAcl.filter((_, i) => !checks[i]);
+  if (unknownPrincipals.length > 0) {
+    const labels = unknownPrincipals.map((e) => aclKey(e));
+    throw new Error(`Unknown owner/audience principal(s), nothing written: ${labels.join(', ')}`);
+  }
   const currentAcl = existing ? await deps.getAcl(existing.id) : [];
   const aclDiff = diffAcl(currentAcl, wantedAcl);
   if (aclDiff.unexpected.length > 0) {
@@ -272,11 +296,7 @@ export async function provisionCxoneAgent(
   }
 
   const changedFields = existing ? diffAgent(existing, desired) : ['(new agent)'];
-  const action: ProvisionAction = !existing
-    ? 'create'
-    : changedFields.length > 0
-      ? 'update'
-      : 'no-change';
+  const action = chooseAction(existing, changedFields);
   const fingerprint = fingerprintAgent(desired, wantedAcl);
   const result: ProvisionResult = {
     action,
@@ -290,17 +310,39 @@ export async function provisionCxoneAgent(
     return result;
   }
 
-  if (action === 'create') {
-    await deps.createAgent({ ...desired, author: manifest.owner.id });
+  /** Owner first, audience last: until the final grant lands, ordinary users have no access. */
+  const grants = [...aclDiff.missing].sort(
+    (a, b) =>
+      Number(b.accessRoleId === AccessRoleIds.AGENT_OWNER) -
+      Number(a.accessRoleId === AccessRoleIds.AGENT_OWNER),
+  );
+  const granted: AgentAclEntry[] = [];
+  try {
+    if (action === 'create') {
+      await deps.createAgent({ ...desired, author: manifest.owner.id });
+    }
+    if (action === 'update') {
+      const { id: _id, ...update } = desired;
+      await deps.updateAgent(desired.id, update);
+    }
+    for (const entry of grants) {
+      await deps.grant({ ...entry, agentId: desired.id, grantedBy: manifest.owner.id });
+      granted.push(entry);
+    }
+    await verifyReadBack(deps, desired, wantedAcl);
+  } catch (error) {
+    const rollback = await rollbackRun(deps, desired, existing, granted);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${reason}. Rollback: ${rollback}`);
   }
-  if (action === 'update') {
-    const { id: _id, ...update } = desired;
-    await deps.updateAgent(desired.id, update);
-  }
-  for (const entry of aclDiff.missing) {
-    await deps.grant({ ...entry, agentId: desired.id, grantedBy: manifest.owner.id });
-  }
+  return { ...result, applied: true };
+}
 
+async function verifyReadBack(
+  deps: ProvisionDeps,
+  desired: DesiredAgent,
+  wantedAcl: AgentAclEntry[],
+): Promise<void> {
   const readBack = (await deps.findAgentsByIdOrName(desired.id, desired.name)).find(
     (a) => a.id === desired.id,
   );
@@ -311,5 +353,55 @@ export async function provisionCxoneAgent(
       `Read-back verification failed: fields=[${remaining.join(', ')}] missingAcl=${aclAfter.missing.length} unexpectedAcl=${aclAfter.unexpected.length}`,
     );
   }
-  return { ...result, applied: true };
+}
+
+/**
+ * Undoes this run's grants (audience first) and restores a pre-existing agent's prior fields. A newly
+ * created agent is left with at most owner access, so it stays unavailable to the audience.
+ */
+async function rollbackRun(
+  deps: ProvisionDeps,
+  desired: DesiredAgent,
+  existing: ProvisionedAgent | undefined,
+  granted: AgentAclEntry[],
+): Promise<string> {
+  const failures: string[] = [];
+  const attempt = async (label: string, step: () => Promise<unknown>): Promise<void> => {
+    try {
+      await step();
+    } catch {
+      failures.push(label);
+    }
+  };
+
+  const audienceFirst = [...granted].reverse();
+  for (const entry of audienceFirst) {
+    await attempt(`revoke ${aclKey(entry)}`, () => deps.revoke({ ...entry, agentId: desired.id }));
+  }
+  if (existing != null) {
+    await attempt('restore previous agent fields', () =>
+      deps.updateAgent(desired.id, {
+        name: existing.name ?? desired.name,
+        description: existing.description ?? desired.description,
+        instructions: existing.instructions ?? '',
+        provider: existing.provider,
+        model: existing.model,
+        model_parameters: {
+          model: existing.model,
+          maxContextTokens:
+            existing.model_parameters?.maxContextTokens ??
+            desired.model_parameters.maxContextTokens,
+        },
+        tools: existing.tools ?? [],
+      }),
+    );
+  }
+  const scope =
+    existing == null
+      ? 'new agent left with no access grants, unavailable'
+      : 'previous version restored';
+  if (failures.length > 0) {
+    return `incomplete, manual review needed for: ${failures.join(', ')}`;
+  }
+  return `completed (${scope})`;
 }
