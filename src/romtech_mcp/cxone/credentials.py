@@ -25,6 +25,40 @@ class CredentialProvider(Protocol):
     async def aclose(self) -> None: ...
 
 
+class EnvFileCredentialProvider:
+    """DEVELOPMENT/DISCOVERY ONLY. Reads the four CXone credentials from an explicitly named local env file
+    (the gitignored discovery `.env`), in memory, for offline tooling such as the PBI-04 `--live` reconciliation
+    run from a workstation. It is never constructed by the server or any deployed entry point (those use
+    AzureKeyVaultCredentialProvider). Values are never logged, returned in errors or written anywhere; a missing
+    or empty value raises CredentialLoadError carrying only the logical name and the variable NAME."""
+
+    _VARIABLES = {
+        "client_id": "CXONE_CLIENT_ID", "client_secret": "CXONE_CLIENT_SECRET",
+        "access_key_id": "CXONE_ACCESS_KEY_ID", "access_key_secret": "CXONE_ACCESS_KEY_SECRET",
+    }
+
+    def __init__(self, env_file) -> None:
+        self._values: dict[str, str] = {}
+        try:
+            text = env_file.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        for line in text.splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                self._values[key.strip()] = value.strip().strip("\"'")
+
+    async def get_secret(self, secret_name: str, *, logical_name: str) -> str:
+        variable = self._VARIABLES.get(logical_name, "")
+        value = self._values.get(variable, "")
+        if not value:
+            raise CredentialLoadError(logical_name=logical_name, secret_name=variable or secret_name, reason_code="empty")
+        return value
+
+    async def aclose(self) -> None:
+        self._values.clear()
+
+
 class AzureKeyVaultCredentialProvider:
     """Reads secrets through azure.identity's ManagedIdentityCredential and
     azure.keyvault.secrets' SecretClient — both async. Always fetches the

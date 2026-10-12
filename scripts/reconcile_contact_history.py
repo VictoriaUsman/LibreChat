@@ -89,6 +89,38 @@ def _load_api_fixture(path: Path) -> ApiContactFetch:
         raise ContactHistoryError(f"{path.name}: not a valid API fixture ({type(exc).__name__})") from None
 
 
+def fetch_live(args: argparse.Namespace) -> ApiContactFetch:
+    """Live read-only fetch through the existing CXoneClient. Raises ContactHistoryError for setup problems
+    (missing credentials source); fetch failures come back as an incomplete ApiContactFetch, never an exception
+    that could be mistaken for 'no data'."""
+    import asyncio
+
+    from romtech_mcp.cxone.client import CXoneClient
+    from romtech_mcp.cxone.config import CXoneConfig
+    from romtech_mcp.cxone.credentials import EnvFileCredentialProvider
+    from romtech_mcp.mapping.contact_history_source import fetch_contacts
+
+    if args.credentials_env_file is not None:
+        if not args.credentials_env_file.is_file():
+            raise ContactHistoryError(f"{args.credentials_env_file.name}: credentials env file not found")
+        provider = EnvFileCredentialProvider(args.credentials_env_file)
+        config = CXoneConfig(vault_url="https://dev-env-file-credentials.invalid")  # unused by this provider
+    else:
+        from romtech_mcp.cxone.bootstrap import BootstrapError, build_credential_provider, build_cxone_config
+
+        try:
+            config = build_cxone_config()
+            provider = build_credential_provider(config)
+        except BootstrapError as exc:
+            raise ContactHistoryError(f"live mode needs credentials: {exc}") from None
+
+    async def run_fetch() -> ApiContactFetch:
+        async with CXoneClient(config, provider) as client:
+            return await fetch_contacts(client, args.window_start, args.window_end)
+
+    return asyncio.run(run_fetch())
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--report", action="append", type=Path, required=True, help="report CSV (repeatable)")
@@ -98,8 +130,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--window-end", type=_parse_utc, required=True)
     p.add_argument("--skills", type=Path, required=True, help="skill inventory CSV ('Skill ID', 'Skill Name')")
     p.add_argument("--source-confirmation", required=True, help="who confirmed the files are complete, as stated")
-    p.add_argument("--api-fixture", type=Path, help="captured/synthetic API contact records (JSON)")
-    p.add_argument("--import-only", action="store_true", help="import and summarize; no comparison attempted")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--api-fixture", type=Path, help="captured/synthetic API contact records (JSON)")
+    mode.add_argument("--import-only", action="store_true", help="import and summarize; no comparison attempted")
+    mode.add_argument("--live", action="store_true",
+                      help="fetch the window from the live CXone /contacts API (read-only) and compare")
+    p.add_argument("--credentials-env-file", type=Path,
+                   help="DEV ONLY with --live: local env file holding the four CXONE_* credentials, read in memory; "
+                        "without it the Key Vault provider is used (needs CXONE_VAULT_URI and managed identity)")
     p.add_argument("--grain", help="established comparison grain (e.g. contact); omitted -> comparison is UNRESOLVED")
     p.add_argument("--timestamp-tolerance-seconds", type=float, help="declared up front; 0 = exact")
     p.add_argument("--id-marker-rule", choices=MARKER_RULES,
@@ -117,6 +155,8 @@ def run(args: argparse.Namespace) -> int:
         imported = load_contact_history(args.report, source_timezone=args.source_timezone)
         inventory = load_skill_inventory(args.skills)
         api = _load_api_fixture(args.api_fixture) if args.api_fixture else None
+        if args.live:
+            api = fetch_live(args)
     except (ContactHistoryError, OSError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -155,8 +195,11 @@ def run(args: argparse.Namespace) -> int:
         "grain": args.grain,
         "rules": {"id_marker_rule": args.id_marker_rule, "repeat_rule": args.repeat_rule},
         "api_input": None if api is None else {
-            "basename": args.api_fixture.name, "endpoint_path": api.endpoint_path, "api_version": api.api_version,
+            "source": "live" if args.live else "fixture",
+            "basename": None if args.api_fixture is None else args.api_fixture.name,
+            "endpoint_path": api.endpoint_path, "api_version": api.api_version,
             "real_capture": api.captured, "coverage": api.coverage.value,
+            "provenance": None if api.provenance is None else dataclasses.asdict(api.provenance),
         },
         "comparison_status": status,
         "acceptance_grade": False,

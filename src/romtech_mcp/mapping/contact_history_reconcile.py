@@ -53,12 +53,30 @@ class ApiContact:
 
 
 @dataclass(frozen=True)
+class FetchProvenance:
+    """What a live fetch actually did (set by contact_history_source.fetch_contacts). Coverage COMPLETE is derived
+    from this, not asserted by a caller. Counts and bounds only: no raw rows, headers or credentials."""
+
+    contract_version: str
+    requested_start_utc: str
+    requested_end_utc: str
+    captured_at_utc: str
+    pages: tuple  # one {"skip", "rows", "reported_total"} dict per page fetched
+    reported_total: int | None
+    rows_fetched: int
+    issues: tuple[str, ...]
+    filter_scope: str
+    date_filter_semantics: str
+
+
+@dataclass(frozen=True)
 class ApiContactFetch:
     records: tuple[ApiContact, ...]
     coverage: CoverageState
     endpoint_path: str
     api_version: str
     captured: bool  # True = a real captured response; False = synthetic fixture (validates code, not the day)
+    provenance: FetchProvenance | None = None  # present for a live fetch; None for an offline fixture
 
 
 @dataclass(frozen=True)
@@ -148,6 +166,14 @@ def compare_contacts(
     elif api.coverage is not CoverageState.COMPLETE:
         reasons.append("API fetch coverage is not verified complete (pagination/partial fetch)")
     api_repeats_removed = 0
+    if api is not None and api.provenance is not None:
+        prov = api.provenance
+        if (_parse_iso(prov.requested_start_utc), _parse_iso(prov.requested_end_utc)) != (window_start_utc, window_end_utc):
+            reasons.append(
+                "the API fetch window recorded in its provenance differs from the comparison window "
+                f"({prov.requested_start_utc} to {prov.requested_end_utc})")
+        if prov.issues and api.coverage is CoverageState.COMPLETE:
+            reasons.append("API fetch claims complete coverage but its provenance lists issues")
     if api is not None:
         # Checked over ALL returned records, in or out of the window, so a conflicting copy cannot hide.
         seen_api: dict[str, set[tuple]] = {}
@@ -276,6 +302,13 @@ def _check_child_leg_rule(summary, reasons: list[str]) -> None:
         reasons.append(
             f"{summary.base_ids_seen_both_marked_and_unmarked} contact ID(s) appear both with and without '*'; "
             "the own ID is not unique")
+
+
+def _parse_iso(text: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _iso(dt: datetime) -> str:
