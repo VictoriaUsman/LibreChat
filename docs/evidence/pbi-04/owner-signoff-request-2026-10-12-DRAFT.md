@@ -25,19 +25,30 @@ configuration (90 s, 90%, short abandons of 15 s or less excluded) for all 29.
 | Date-filter semantics of `/contacts` (start vs completion) | Unverified | Exact match supports start time for this day only |
 | Inventory count discrepancy (83/85 vs live 80 active) | Not explained | |
 
-## Decisions requested from the PBI owner (tick only when actually decided)
+## Recommended decisions (analyst recommendation, **not an approval**)
 
-1. **Reduced scope for closure:** accept October 1 contact-level reconciliation of the CS scope as the reconciled
-   historical period, with SLA, remaining metrics and baseline deferred. Decision: [ ] accept  [ ] reject  [ ] other: ______
-2. **Historical SLA deferral.** Required if SLA cannot be reconciled. Proposed route: a paired live observation (dashboard
-   widget and API summary captured at the same moment for the 29 CS skills, phone only, same window), plus a short-abandon
-   count, to verify the SLA calculation going forward. Owner: ______  Follow-up ticket: ______  Target date: ______
-   Decision: [ ] approve deferral  [ ] do not defer
-3. **Baseline rules:** [ ] in scope for PBI-04 (state the rules)  [ ] moved to follow-up (owner/ticket: ______)
-4. **ROMTech Service Level widget and team attribution:** accept as documented limitations [ ] / other: ______
-5. **Timezone:** accept `America/New_York` as the production reporting zone [ ]
-6. **Name inferences to accept:** 4 skill names matched by word order, and "Biling General Spanish" matched by correcting one
-   letter (both listed in the evidence).
+Each item has a recommended answer and the reason. The boxes stay unticked: only the PBI owner can approve, and nothing
+here is recorded as approved. Owner names, ticket numbers and dates are blank on purpose.
+
+| # | Item | Recommendation | Reason |
+|---|---|---|---|
+| 1 | Reduced scope for closure | **Accept** October 1 contact-level reconciliation of the CS scope as the reconciled historical period | It is real, reproducible and complete for what it covers (2,021 of 2,021, production source, derived coverage). The original wording (every dashboard metric, SLA, baseline) cannot be met with the data that exists, so closing on the original wording is not possible; the choice is reduced scope with named follow-ups, or leave the PBI open indefinitely |
+| 2 | Historical SLA | **Approve a documented deferral**, with a paired live observation as the follow-up | The reference does not exist: the dashboard has no October 1 SLA (subscription), and the API's SLA counts have unverified semantics (completion vs answer time, refusals, short abandons). The only way to verify the calculation is a paired same-moment capture of widget and API for the 29 CS skills, phone only, plus a short-abandon count. Passing the criterion on contact matches would be wrong, so it stays "not met", deferred |
+| 3 | Baseline rules | **Move to a tracked follow-up** | One day cannot validate baseline; eight weeks was accepted on 2026-10-01 but weighting, holiday and missing-data rules were never given. Those belong with the baseline/compare work, not this PBI |
+| 4 | ROMTech Service Level widget; team attribution | **Accept as documented limitations** | Asked for in the final message and not supplied. Out of the CS scope that was reconciled; neither blocks the contact comparison. Do not make non-CS or team-level claims in ROMChat until supplied |
+| 5 | Reporting timezone | **Accept `America/New_York`** | Eastern is stated by Ziven; the exact October 1 match (2026-10-06 and 2026-10-12) supports it; only the IANA name was inferred |
+| 6 | Name inferences | **Accept** the 4 word-order matches and "Biling General Spanish" = `Billing General Spanish` | Every name resolves to exactly one skill ID and no two names share an ID; the billing near-match differs by one letter and the other candidate (`Billing General VM`) is voicemail, which is excluded |
+
+### What the follow-up item needs (fill in when created; not invented here)
+
+- Title: SLA verification by paired observation (PBI-04 follow-up). Owner: ______  Ticket: ______  Target: ______
+- Done when: dashboard widget and API summary captured at the same moment for the 29 CS skills (phone only, same window),
+  the within/out-of-SLA counts compared, and short-abandon exclusion confirmed with a short-abandon count.
+
+### Owner decisions (tick only when actually decided)
+
+[ ] 1 accept  [ ] 2 approve deferral  [ ] 3 follow-up  [ ] 4 accept limitations  [ ] 5 accept zone  [ ] 6 accept names
+Approved by: ______  Date: ______  Reference: ______
 
 ## Closure statement (use only once the above are decided)
 
