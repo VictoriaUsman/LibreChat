@@ -13,7 +13,7 @@ from romtech_mcp.mapping.contact_history import (
     resolve_skills, summarize,
 )
 from romtech_mcp.mapping.contact_history_reconcile import (
-    MARKER_RULE_CHILD_LEG, REPEAT_RULE_TEAM_OR_AGENT_ONLY, ApiContact, ApiContactFetch, compare_contacts,
+    SUPPORTED_GRAINS, MARKER_RULE_CHILD_LEG, REPEAT_RULE_TEAM_OR_AGENT_ONLY, ApiContact, ApiContactFetch, compare_contacts,
 )
 from romtech_mcp.mapping.models import ComparisonOutcome, CoverageState
 
@@ -519,3 +519,55 @@ def test_free_text_rule_acknowledgements_are_rejected(tmp_path, exports, script)
         with pytest.raises(SystemExit) as e:
             script.main(cli_args(tmp_path, exports, flag, "free text"))
         assert e.value.code == 2
+
+
+# ------------------------------------- review: dropped records, unsupported grains, capture provenance
+def test_out_of_window_export_records_make_the_comparison_unresolved_not_a_match(tmp_path):
+    """Regression: one export record outside the window was filtered away and an empty API result returned MATCH."""
+    recs = _one(tmp_path, [line("1", "1", "Alpha", "9/30/2026 11:00:00 PM")])  # before the window
+    res = resolve_skills({"Alpha"}, {"Alpha": ["11"]})
+    c = run_compare(recs, res, api([]))
+    assert c.outcome is ComparisonOutcome.UNRESOLVED and c.export_rows_outside_window == 1
+    assert any("outside the window" in r for r in c.unresolved_reasons)
+
+
+def test_out_of_window_api_records_are_not_silently_dropped_either(clean):
+    recs, res, good = clean
+    c = run_compare(recs, res, api(list(good) + [ApiContact("9", "11", datetime(2026, 10, 3, tzinfo=timezone.utc))]))
+    assert c.outcome is ComparisonOutcome.UNRESOLVED and c.api_records_outside_window == 1
+    assert any("API record" in r and "outside the window" in r for r in c.unresolved_reasons)
+
+
+def test_an_explicitly_labelled_subset_may_compare_but_is_never_full_day_validation(clean):
+    recs, res, good = clean
+    c = run_compare(recs, res, api(good), window_start_utc=t(0, 1), window_end_utc=t(23, 59), subset_label="09:00 only")
+    assert c.subset_label == "09:00 only" and c.full_day_validation is False
+    assert run_compare(recs, res, api(good)).full_day_validation is True
+
+
+@pytest.mark.parametrize("grain", ["master interaction", "routed leg", "transfer", "", "Contact "])
+def test_only_implemented_grains_are_accepted(clean, grain):
+    recs, res, good = clean
+    assert SUPPORTED_GRAINS == ("contact",)
+    c = run_compare(recs, res, api(good), grain=grain)
+    assert c.outcome is ComparisonOutcome.UNRESOLVED and any("grain" in r for r in c.unresolved_reasons)
+
+
+@pytest.mark.parametrize("captured", ["false", "true", "False", 0, 1, None, "yes"])
+def test_captured_must_be_a_real_json_boolean(tmp_path, script, captured):
+    p = write_csv(tmp_path / "m.csv", [line("1", "1", "Alpha", "10/1/2026 1:00:00 AM")])
+    fixture = tmp_path / "api.json"
+    fixture.write_text(json.dumps({"coverage": "complete", "endpoint_path": "/synthetic", "api_version": "v0",
+                                   "captured": captured, "records": []}), encoding="utf-8")
+    assert script.main(cli_args(tmp_path, [p], "--grain", "contact", "--timestamp-tolerance-seconds", "0",
+                                fixture=fixture)) == 2  # rejected as invalid input, never coerced
+
+
+def test_a_real_json_boolean_is_accepted_for_captured(tmp_path, script):
+    p = write_csv(tmp_path / "m.csv", [line("1", "1", "Alpha", "10/1/2026 1:00:00 AM")])
+    fixture = tmp_path / "api.json"
+    fixture.write_text(json.dumps({"coverage": "complete", "endpoint_path": "/synthetic", "api_version": "v0",
+                                   "captured": False, "records": [{"contactId": "1", "skillId": "11",
+                                                                   "startUtc": "2026-10-01T01:00:00Z"}]}), encoding="utf-8")
+    assert script.main(cli_args(tmp_path, [p], "--grain", "contact", "--timestamp-tolerance-seconds", "0",
+                                fixture=fixture)) == 0

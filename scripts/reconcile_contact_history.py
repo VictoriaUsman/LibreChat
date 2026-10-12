@@ -67,6 +67,13 @@ def _parse_utc(text: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _strict_bool(value: object) -> bool:
+    """A real JSON boolean only: bool("false") is True, which would mark a synthetic fixture as a real capture."""
+    if not isinstance(value, bool):
+        raise ValueError("captured must be a JSON boolean")
+    return value
+
+
 def _load_api_fixture(path: Path) -> ApiContactFetch:
     raw = json.loads(path.read_text(encoding="utf-8"))
     try:
@@ -76,7 +83,7 @@ def _load_api_fixture(path: Path) -> ApiContactFetch:
         )
         return ApiContactFetch(
             records=records, coverage=coverage, endpoint_path=raw["endpoint_path"], api_version=raw["api_version"],
-            captured=bool(raw["captured"]),
+            captured=_strict_bool(raw["captured"]),
         )
     except (KeyError, ValueError, TypeError) as exc:
         raise ContactHistoryError(f"{path.name}: not a valid API fixture ({type(exc).__name__})") from None
@@ -99,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="named rule for a trailing '*' on contact IDs; the export must satisfy it or the run is UNRESOLVED")
     p.add_argument("--repeat-rule", choices=REPEAT_RULES,
                    help="named rule explaining repeated IDs that differ in team/agent only; covers nothing else")
+    p.add_argument("--subset-label", help="label an INTENTIONAL subset comparison (rows outside the window are then "
+                   "allowed); the result is never full-day validation")
     p.add_argument("--output-dir", type=Path, required=True)
     return p
 
@@ -122,7 +131,7 @@ def run(args: argparse.Namespace) -> int:
         comparison = compare_contacts(
             imported.records, resolution, api, window_start_utc=args.window_start, window_end_utc=args.window_end,
             grain=args.grain, timestamp_tolerance_seconds=args.timestamp_tolerance_seconds,
-            conflict_rule=args.repeat_rule, id_marker_rule=args.id_marker_rule,
+            conflict_rule=args.repeat_rule, id_marker_rule=args.id_marker_rule, subset_label=args.subset_label,
         )
         status = comparison.outcome.value
         exit_code = {ComparisonOutcome.MATCH: 0, ComparisonOutcome.MISMATCH: 1}.get(comparison.outcome, 2)

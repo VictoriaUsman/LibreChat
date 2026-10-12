@@ -38,6 +38,9 @@ REPEAT_RULE_TEAM_OR_AGENT_ONLY = "repeat-differs-in-team-or-agent-only"
 MARKER_RULE_CHILD_LEG = "child-leg-master-contact"
 REPEAT_RULES = (REPEAT_RULE_TEAM_OR_AGENT_ONLY,)
 MARKER_RULES = (MARKER_RULE_CHILD_LEG,)
+# Grains the code can truthfully compare: records are keyed by the contact's own ID, so a master interaction,
+# routed leg or transfer comparison would be a mislabelled contact comparison.
+SUPPORTED_GRAINS = ("contact",)
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,9 @@ class ContactComparison:
     repeated_ids_explained_by_rule: int = 0
     child_leg_rows: int = 0  # rows marked '*' (counted, not collapsed: each keeps its own ID and master)
     api_exact_repeats_removed: int = 0  # API records identical to an earlier one in ID, skill and start
+    api_records_outside_window: int = 0
+    subset_label: str | None = None  # set only for an intentional subset comparison
+    full_day_validation: bool = True  # False for a labelled subset: it can never validate the full day
 
 
 def compare_contacts(
@@ -99,6 +105,7 @@ def compare_contacts(
     timestamp_tolerance_seconds: float | None,
     conflict_rule: str | None = None,
     id_marker_rule: str | None = None,
+    subset_label: str | None = None,
 ) -> ContactComparison:
     if conflict_rule is not None and conflict_rule not in REPEAT_RULES:
         raise ValueError(f"unknown repeat rule {conflict_rule!r}; supported: {', '.join(REPEAT_RULES)}")
@@ -109,6 +116,10 @@ def compare_contacts(
         raise ValueError("window end must be after window start")
     if grain is None:
         reasons.append("the report/API grain (contact, routed leg, transfer or master interaction) is not established")
+    elif grain not in SUPPORTED_GRAINS:
+        reasons.append(
+            f"grain {grain!r} is not supported: this comparison keys records by the contact's own ID, so only "
+            f"{', '.join(SUPPORTED_GRAINS)} can be compared")
     if timestamp_tolerance_seconds is None:
         reasons.append("no timestamp tolerance was declared up front (use 0 for exact)")
     if timestamp_tolerance_seconds is not None and timestamp_tolerance_seconds < 0:
@@ -147,6 +158,19 @@ def compare_contacts(
                 "time; the API grain is not one record per contact ID")
 
     in_window = [r for r in export_records if window_start_utc <= r.start_utc < window_end_utc]
+    outside_export = len(export_records) - len(in_window)
+    outside_api = 0 if api is None else sum(
+        1 for a in api.records if not (window_start_utc <= a.start_utc < window_end_utc))
+    if subset_label is None:
+        # A full-day comparison cannot silently drop records; an intended subset must say so.
+        if outside_export:
+            reasons.append(
+                f"{outside_export} export row(s) are outside the window and were not compared; use subset_label "
+                "for an intentional subset (never full-day validation)")
+        if outside_api:
+            reasons.append(
+                f"{outside_api} API record(s) are outside the window and were not compared; use subset_label "
+                "for an intentional subset (never full-day validation)")
     deduped, removed = dedupe_exact(in_window)
     # Every surviving row stays in its ID's variant list; none is dropped for being second.
     variants_by_id: dict[str, list[ContactRecord]] = {}
@@ -162,6 +186,8 @@ def compare_contacts(
         api_fetch_is_real_capture=None if api is None else api.captured,
         conflict_rule=conflict_rule, id_marker_rule=id_marker_rule, repeated_ids_explained_by_rule=explained,
         child_leg_rows=marked, api_exact_repeats_removed=api_repeats_removed,
+        api_records_outside_window=outside_api, subset_label=subset_label,
+        full_day_validation=subset_label is None,
     )
     if api is None or api.coverage is not CoverageState.COMPLETE or reasons:
         # Counts that need both sides are meaningless without them; report what is known.
