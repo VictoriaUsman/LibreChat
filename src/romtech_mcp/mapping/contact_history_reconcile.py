@@ -41,6 +41,8 @@ MARKER_RULES = (MARKER_RULE_CHILD_LEG,)
 # Grains the code can truthfully compare: records are keyed by the contact's own ID, so a master interaction,
 # routed leg or transfer comparison would be a mislabelled contact comparison.
 SUPPORTED_GRAINS = ("contact",)
+SCOPE_WINDOW_AS_STATED = "window_as_stated"  # the stated window is not assumed to be a full day
+SCOPE_LABELLED_SUBSET = "labelled_subset"
 
 
 @dataclass(frozen=True)
@@ -91,7 +93,10 @@ class ContactComparison:
     api_exact_repeats_removed: int = 0  # API records identical to an earlier one in ID, skill and start
     api_records_outside_window: int = 0
     subset_label: str | None = None  # set only for an intentional subset comparison
-    full_day_validation: bool = True  # False for a labelled subset: it can never validate the full day
+    # What was compared, NOT whether anything was validated: the window exactly as the caller stated it, or an
+    # intentional labelled subset. Validation is a separate acceptance status (needs outcome MATCH, a real
+    # capture, established grain/timezone and owner acceptance); this field never implies it.
+    comparison_scope: str = SCOPE_WINDOW_AS_STATED
 
 
 def compare_contacts(
@@ -187,7 +192,7 @@ def compare_contacts(
         conflict_rule=conflict_rule, id_marker_rule=id_marker_rule, repeated_ids_explained_by_rule=explained,
         child_leg_rows=marked, api_exact_repeats_removed=api_repeats_removed,
         api_records_outside_window=outside_api, subset_label=subset_label,
-        full_day_validation=subset_label is None,
+        comparison_scope=SCOPE_WINDOW_AS_STATED if subset_label is None else SCOPE_LABELLED_SUBSET,
     )
     if api is None or api.coverage is not CoverageState.COMPLETE or reasons:
         # Counts that need both sides are meaningless without them; report what is known.

@@ -538,11 +538,15 @@ def test_out_of_window_api_records_are_not_silently_dropped_either(clean):
     assert any("API record" in r and "outside the window" in r for r in c.unresolved_reasons)
 
 
-def test_an_explicitly_labelled_subset_may_compare_but_is_never_full_day_validation(clean):
+def test_comparison_scope_describes_what_was_compared_and_never_implies_validation(clean):
     recs, res, good = clean
     c = run_compare(recs, res, api(good), window_start_utc=t(0, 1), window_end_utc=t(23, 59), subset_label="09:00 only")
-    assert c.subset_label == "09:00 only" and c.full_day_validation is False
-    assert run_compare(recs, res, api(good)).full_day_validation is True
+    assert c.subset_label == "09:00 only" and c.comparison_scope == "labelled_subset"
+    whole = run_compare(recs, res, api(good))
+    assert whole.comparison_scope == "window_as_stated" and not hasattr(whole, "full_day_validation")
+    # a one-minute window with no API data is UNRESOLVED and claims nothing about validation or a full day
+    tiny = run_compare(recs, res, None, window_start_utc=t(0), window_end_utc=t(0, 1))
+    assert tiny.outcome is ComparisonOutcome.UNRESOLVED and tiny.comparison_scope == "window_as_stated"
 
 
 @pytest.mark.parametrize("grain", ["master interaction", "routed leg", "transfer", "", "Contact "])
