@@ -1,0 +1,367 @@
+{
+  "run_id": "9a2f97ddaacb",
+  "import": {
+    "raw_rows": 2030,
+    "distinct_contact_ids": 2021,
+    "distinct_master_contact_ids": 1661,
+    "exact_repeat_rows": 6,
+    "exact_repeats_within_a_file": 2,
+    "exact_repeats_across_files": 4,
+    "repeated_ids_total": 9,
+    "conflicting_repeated_ids": 3,
+    "conflict_fields": {
+      "team": 2,
+      "agent": 3
+    },
+    "masters_with_multiple_contacts": 259,
+    "contacts_under_multiple_skills": 0,
+    "media_types": {
+      "Phone": 2030
+    },
+    "per_skill": [
+      {
+        "skill_name": "CS - Outbound",
+        "rows": 459,
+        "distinct_contacts": 458
+      },
+      {
+        "skill_name": "Cardiac Appointments",
+        "rows": 25,
+        "distinct_contacts": 25
+      },
+      {
+        "skill_name": "Cardiac Billing",
+        "rows": 127,
+        "distinct_contacts": 126
+      },
+      {
+        "skill_name": "Cardiac Delivery Pickup",
+        "rows": 17,
+        "distinct_contacts": 17
+      },
+      {
+        "skill_name": "Cardiac General",
+        "rows": 26,
+        "distinct_contacts": 26
+      },
+      {
+        "skill_name": "Cardiac General Spanish",
+        "rows": 2,
+        "distinct_contacts": 2
+      },
+      {
+        "skill_name": "Cardiac Order Status",
+        "rows": 7,
+        "distinct_contacts": 7
+      },
+      {
+        "skill_name": "Cardiac Tech Support",
+        "rows": 12,
+        "distinct_contacts": 12
+      },
+      {
+        "skill_name": "Customer Service General",
+        "rows": 52,
+        "distinct_contacts": 50
+      },
+      {
+        "skill_name": "Default NO-Agent Inbound",
+        "rows": 250,
+        "distinct_contacts": 250
+      },
+      {
+        "skill_name": "Logistics Outbound",
+        "rows": 52,
+        "distinct_contacts": 52
+      },
+      {
+        "skill_name": "Logistics Scheduler",
+        "rows": 221,
+        "distinct_contacts": 219
+      },
+      {
+        "skill_name": "Logistics Scheduler Spanish",
+        "rows": 6,
+        "distinct_contacts": 6
+      },
+      {
+        "skill_name": "Ortho Billing",
+        "rows": 63,
+        "distinct_contacts": 63
+      },
+      {
+        "skill_name": "Ortho Billing Spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Ortho Delivery Pickup",
+        "rows": 147,
+        "distinct_contacts": 146
+      },
+      {
+        "skill_name": "Ortho Delivery Pickup Spanish",
+        "rows": 3,
+        "distinct_contacts": 3
+      },
+      {
+        "skill_name": "Ortho General",
+        "rows": 104,
+        "distinct_contacts": 104
+      },
+      {
+        "skill_name": "Ortho General Spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Ortho Order Status",
+        "rows": 57,
+        "distinct_contacts": 57
+      },
+      {
+        "skill_name": "Ortho Tech Support",
+        "rows": 131,
+        "distinct_contacts": 131
+      },
+      {
+        "skill_name": "Ortho Tech Support spanish",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Outbound",
+        "rows": 13,
+        "distinct_contacts": 13
+      },
+      {
+        "skill_name": "Patient Collections Bill Spani",
+        "rows": 1,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Patient Collections Billing",
+        "rows": 2,
+        "distinct_contacts": 1
+      },
+      {
+        "skill_name": "Patient Support",
+        "rows": 15,
+        "distinct_contacts": 15
+      },
+      {
+        "skill_name": "Remote Onboarding",
+        "rows": 8,
+        "distinct_contacts": 8
+      },
+      {
+        "skill_name": "Test IB",
+        "rows": 2,
+        "distinct_contacts": 2
+      },
+      {
+        "skill_name": "VM Remove From Queue",
+        "rows": 225,
+        "distinct_contacts": 224
+      }
+    ],
+    "earliest_start_utc": "2026-10-01T05:35:48Z",
+    "latest_start_utc": "2026-10-02T03:46:14Z",
+    "sum_of_per_skill_distinct_contacts": 2021,
+    "marked_id_rows": 374,
+    "distinct_base_contact_ids": 2021,
+    "base_ids_seen_both_marked_and_unmarked": 0,
+    "shared_contact_ids_between_files": {
+      "ContactHistory (20).csv|ContactHistory (21).csv": 4
+    },
+    "repeats_differing_only_in_agent": 1,
+    "repeated_ids_differing_only_in_team_or_agent": 3,
+    "marked_rows_whose_master_is_not_a_different_contact": 0,
+    "unmarked_rows_whose_master_is_a_different_contact": 0,
+    "rows_with_agent_token": 1373
+  },
+  "exact_repeats_removed_by_overlap_rule": 6,
+  "records_after_exact_dedupe": 2024,
+  "skill_resolution": {
+    "resolved": {
+      "CS - Outbound": "35588833",
+      "Cardiac Appointments": "35588248",
+      "Cardiac Billing": "20954831",
+      "Cardiac Delivery Pickup": "20954834",
+      "Cardiac General": "20954836",
+      "Cardiac General Spanish": "20954837",
+      "Cardiac Order Status": "35588243",
+      "Cardiac Tech Support": "20954838",
+      "Customer Service General": "35588202",
+      "Default NO-Agent Inbound": "18492667",
+      "Logistics Outbound": "18499108",
+      "Logistics Scheduler": "29277623",
+      "Logistics Scheduler Spanish": "35588224",
+      "Ortho Billing": "18499102",
+      "Ortho Billing Spanish": "18499103",
+      "Ortho Delivery Pickup": "18499100",
+      "Ortho Delivery Pickup Spanish": "18499101",
+      "Ortho General": "18499104",
+      "Ortho General Spanish": "18499105",
+      "Ortho Order Status": "35588246",
+      "Ortho Tech Support": "18499098",
+      "Ortho Tech Support spanish": "18499099",
+      "Outbound": "18499109",
+      "Patient Collections Bill Spani": "36302048",
+      "Patient Collections Billing": "36302043",
+      "Patient Support": "36301865",
+      "Remote Onboarding": "36302025",
+      "Test IB": "20954688",
+      "VM Remove From Queue": "21036611"
+    },
+    "unmatched": [],
+    "ambiguous": []
+  },
+  "comparison": {
+    "outcome": "match",
+    "unresolved_reasons": [],
+    "grain": "contact",
+    "window_start_utc": "2026-10-01T04:00:00Z",
+    "window_end_utc": "2026-10-02T04:00:00Z",
+    "export_rows": 2030,
+    "export_rows_in_window": 2030,
+    "export_rows_outside_window": 0,
+    "export_exact_repeats_removed": 6,
+    "export_unique_contacts": 2021,
+    "api_unique_contacts": 2021,
+    "matched": 2021,
+    "export_only": 0,
+    "api_only": 0,
+    "skill_mismatches": 0,
+    "start_time_mismatches": 0,
+    "timestamp_tolerance_seconds": 1.0,
+    "per_skill": {
+      "18492667": {
+        "export": 250,
+        "api": 250
+      },
+      "18499098": {
+        "export": 131,
+        "api": 131
+      },
+      "18499099": {
+        "export": 1,
+        "api": 1
+      },
+      "18499100": {
+        "export": 146,
+        "api": 146
+      },
+      "18499101": {
+        "export": 3,
+        "api": 3
+      },
+      "18499102": {
+        "export": 63,
+        "api": 63
+      },
+      "18499103": {
+        "export": 1,
+        "api": 1
+      },
+      "18499104": {
+        "export": 104,
+        "api": 104
+      },
+      "18499105": {
+        "export": 1,
+        "api": 1
+      },
+      "18499108": {
+        "export": 52,
+        "api": 52
+      },
+      "18499109": {
+        "export": 13,
+        "api": 13
+      },
+      "20954688": {
+        "export": 2,
+        "api": 2
+      },
+      "20954831": {
+        "export": 126,
+        "api": 126
+      },
+      "20954834": {
+        "export": 17,
+        "api": 17
+      },
+      "20954836": {
+        "export": 26,
+        "api": 26
+      },
+      "20954837": {
+        "export": 2,
+        "api": 2
+      },
+      "20954838": {
+        "export": 12,
+        "api": 12
+      },
+      "21036611": {
+        "export": 224,
+        "api": 224
+      },
+      "29277623": {
+        "export": 219,
+        "api": 219
+      },
+      "35588202": {
+        "export": 50,
+        "api": 50
+      },
+      "35588224": {
+        "export": 6,
+        "api": 6
+      },
+      "35588243": {
+        "export": 7,
+        "api": 7
+      },
+      "35588246": {
+        "export": 57,
+        "api": 57
+      },
+      "35588248": {
+        "export": 25,
+        "api": 25
+      },
+      "35588833": {
+        "export": 458,
+        "api": 458
+      },
+      "36301865": {
+        "export": 15,
+        "api": 15
+      },
+      "36302025": {
+        "export": 8,
+        "api": 8
+      },
+      "36302043": {
+        "export": 1,
+        "api": 1
+      },
+      "36302048": {
+        "export": 1,
+        "api": 1
+      }
+    },
+    "duration": "not compared: units and lifecycle meaning are not established",
+    "api_fetch_is_real_capture": true,
+    "conflict_rule": "repeat-differs-in-team-or-agent-only",
+    "id_marker_rule": "child-leg-master-contact",
+    "repeated_ids_explained_by_rule": 3,
+    "child_leg_rows": 374,
+    "api_exact_repeats_removed": 0,
+    "api_records_outside_window": 0,
+    "subset_label": null,
+    "comparison_scope": "window_as_stated"
+  }
+}

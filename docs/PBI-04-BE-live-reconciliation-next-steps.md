@@ -47,6 +47,10 @@ For a confirmed UTC calendar day the window is
 `[2026-10-01T00:00:00Z, 2026-10-02T00:00:00Z)`. Otherwise convert the confirmed
 local-day boundaries. Until established, permit only labelled exploratory runs.
 
+> **Status 2026-10-12:** sections 2 and 4 are implemented (`contact_history_source.py`, `--live`); a production-path run
+> is recorded in `evidence/pbi-04/live-reconciliation-2026-10-12.md`. Date-filter semantics (start vs completion) and the
+> skill-inventory fetch for the final CS allowlist remain open.
+
 ## 2. Add the real source without changing the importer
 
 Add `src/romtech_mcp/mapping/contact_history_source.py`. Reuse

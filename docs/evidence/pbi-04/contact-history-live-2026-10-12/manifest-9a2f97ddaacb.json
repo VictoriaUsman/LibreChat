@@ -1,0 +1,87 @@
+{
+  "run_id": "9a2f97ddaacb",
+  "generated_at_utc": "2026-10-12T04:54:54.868115+00:00",
+  "code_revision": "fba46b7",
+  "code_dirty": true,
+  "inputs": [
+    {
+      "basename": "ContactHistory (20).csv",
+      "sha256": "f06d9f5c7c0607e5cf0c69a7345a9a3bf3384eaeadeb9320554d03158ba5a93f",
+      "rows": 1000,
+      "distinct_contact_ids": 996
+    },
+    {
+      "basename": "ContactHistory (21).csv",
+      "sha256": "68f47b646498831a2a15bc1547af40690ee1496b581ae5bce5855a9e1ff9b9a0",
+      "rows": 1000,
+      "distinct_contact_ids": 999
+    },
+    {
+      "basename": "ContactHistory (22).csv",
+      "sha256": "35bfe3dc59ba384a984e4ef158d8481ac3b9dd58121888e33d0095bedbca7a69",
+      "rows": 30,
+      "distinct_contact_ids": 30
+    }
+  ],
+  "skill_inventory": {
+    "basename": "skill-inventory-export-population-2026-10-12.csv",
+    "sha256": "06d0bfe6c5a03a5734e2024a62228879425849d520e8d69eb07fd3a6142ae1ee",
+    "entries": 29
+  },
+  "source_confirmation": "Ian 2026-10-03: the three files together are the full day and all reporting available",
+  "source_timezone": "America/New_York",
+  "timezone_basis": "evidence: Oct 6 exact ID/start agreement on the Eastern day; Ziven 2026-10-12: exports use her Eastern timezone",
+  "window_utc": [
+    "2026-10-01T04:00:00+00:00",
+    "2026-10-02T04:00:00+00:00"
+  ],
+  "grain": "contact",
+  "rules": {
+    "id_marker_rule": "child-leg-master-contact",
+    "repeat_rule": "repeat-differs-in-team-or-agent-only"
+  },
+  "api_input": {
+    "source": "live",
+    "basename": null,
+    "endpoint_path": "/incontactapi/services/v27.0/contacts",
+    "api_version": "v27.0",
+    "real_capture": true,
+    "coverage": "complete",
+    "provenance": {
+      "contract_version": "contacts-v27.0-observed-2026-10-06",
+      "requested_start_utc": "2026-10-01T04:00:00Z",
+      "requested_end_utc": "2026-10-02T04:00:00Z",
+      "captured_at_utc": "2026-10-12T04:54:48.298784Z",
+      "pages": [
+        {
+          "skip": 0,
+          "rows": 1000,
+          "reported_total": 2021
+        },
+        {
+          "skip": 1000,
+          "rows": 1000,
+          "reported_total": 2021
+        },
+        {
+          "skip": 2000,
+          "rows": 21,
+          "reported_total": 2021
+        }
+      ],
+      "reported_total": 2021,
+      "rows_fetched": 2021,
+      "issues": [],
+      "filter_scope": "none: all contacts in the window; skill scope is applied client-side",
+      "date_filter_semantics": "unverified: start time vs completion time not established"
+    }
+  },
+  "comparison_status": "match",
+  "acceptance_grade": false,
+  "acceptance_note": "Never implied by this script. Requires an established grain, a real captured API response, a timezone evidence statement, owner acceptance, and unchanged production confirmation flags.",
+  "not_recorded": [
+    "report generation time",
+    "report filters",
+    "source email date"
+  ]
+}
